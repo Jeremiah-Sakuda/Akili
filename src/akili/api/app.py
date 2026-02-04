@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -19,6 +20,14 @@ app = FastAPI(
     title="Akili",
     description="The Reasoning Control Plane for Mission-Critical Engineering — deterministic verification for technical documentation",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Default store (SQLite in cwd); override via dependency if needed

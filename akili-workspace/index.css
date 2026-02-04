@@ -1,0 +1,8 @@
+/* Base styles; Tailwind is loaded via CDN in index.html */
+:root {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}

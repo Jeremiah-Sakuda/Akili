@@ -101,12 +101,22 @@ akili/
 
 ## Getting Started
 
+### Backend (API)
+
 1. **Environment**: `python -m venv .venv`, activate it, set `GOOGLE_API_KEY` for Gemini.
 2. **Install**: `pip install -e .`
 3. **Run API**: `akili-serve` or `uvicorn akili.api.app:app --reload --host 0.0.0.0 --port 8000`
 4. **Ingest a doc**: `POST /ingest` with PDF (multipart form `file`) → canonical store populated; returns `doc_id`.
 5. **Query**: `POST /query` with body `{"doc_id": "<from ingest>", "question": "What is pin 5?"}` → coordinate-grounded answer + proof or REFUSE.
 6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`.
+
+### UI (akili-workspace)
+
+The React + TypeScript UI in `akili-workspace/` is wired to the API via a Vite proxy.
+
+1. **Start the API** (from repo root): `akili-serve` (or `uvicorn akili.api.app:app --reload --port 8000`).
+2. **Start the UI**: `cd akili-workspace && npm install && npm run dev`.
+3. Open **http://localhost:3000**. Upload a PDF, then select a document and ask a question; the right panel shows VERIFIED (answer + proof) or REFUSED.
 
 ---
 
