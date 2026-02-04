@@ -28,7 +28,6 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
 }) => {
   const [question, setQuestion] = useState('');
   const isUpload = currentState === AppState.UPLOAD;
-  const isVerified = currentState === AppState.VERIFIED;
 
   const handleVerify = async () => {
     if (!selectedDocId?.trim() || !question.trim()) return;
@@ -187,3 +186,5 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
     </aside>
   );
 };
+
+export default SidebarRight;

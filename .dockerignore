@@ -1,0 +1,32 @@
+# Git and env
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Python
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+.eggs
+dist
+build
+.pytest_cache
+.coverage
+htmlcov
+
+# Frontend (backend image does not need it)
+frontend
+
+# Docs and tests (not needed in runtime image)
+docs
+tests
+*.md
+
+# IDE and OS
+.idea
+.vscode
+.DS_Store

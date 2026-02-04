@@ -4,6 +4,7 @@ FastAPI app: ingest documents, submit queries, return coordinate-grounded answer
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -37,7 +38,8 @@ _store: Store | None = None
 def get_store() -> Store:
     global _store
     if _store is None:
-        _store = Store(Path("akili.db"))
+        db_path = os.environ.get("AKILI_DB_PATH", "akili.db")
+        _store = Store(Path(db_path))
     return _store
 
 

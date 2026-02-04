@@ -77,21 +77,34 @@ Akili doesn't just ask Gemini for an answer; it **forces Gemini to show its work
 
 ---
 
-## Project Structure (Scaffold)
+## Project Structure
 
 ```
 akili/
-├── README.md                 # This file
+├── README.md
 ├── docs/
-│   └── ARCHITECTURE.md       # Deeper design notes
+│   ├── ARCHITECTURE.md
+│   ├── UX-DESIGN-BRIEF.md
+│   └── UI-SPEC.md
+├── frontend/                 # React + TypeScript + Vite UI
+│   ├── public/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   ├── api.ts
+│   │   └── types.ts
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── tsconfig.json
 ├── src/
 │   └── akili/
-│       ├── __init__.py
-│       ├── canonical/        # Typed models: Unit, Bijection, Grid
-│       ├── ingest/           # PDF → chunks → Gemini → canonicalize
-│       ├── store/            # Persistence for canonical objects
-│       ├── verify/           # Proof check + deterministic refusal
-│       └── api/              # FastAPI app: ingest + query
+│       ├── canonical/        # Unit, Bijection, Grid
+│       ├── ingest/           # PDF → Gemini → canonicalize
+│       ├── store/            # SQLite persistence
+│       ├── verify/           # Proof + REFUSE
+│       └── api/              # FastAPI app
 ├── tests/
 ├── pyproject.toml
 └── requirements.txt
@@ -99,24 +112,65 @@ akili/
 
 ---
 
+## Running with Docker
+
+One-command run for API + frontend with a persistent SQLite store.
+
+1. **Create `.env`** from the example and set your Gemini key:
+   ```bash
+   cp .env.example .env
+   # Edit .env and set GOOGLE_API_KEY=your_key
+   ```
+2. **Build and start** (from repo root):
+   ```bash
+   docker compose up --build
+   ```
+3. Open **http://localhost:3000**. The API is at **http://localhost:8000**; the UI proxies `/api` to it.
+
+**Notes:**
+- The SQLite DB is stored in a Docker volume `akili-data` (path `/data/akili.db` in the API container).
+- To stop: `Ctrl+C` then `docker compose down`. Add `-v` to remove the volume and reset the DB.
+
+---
+
 ## Getting Started
 
 ### Backend (API)
 
-1. **Environment**: `python -m venv .venv`, activate it, set `GOOGLE_API_KEY` for Gemini.
+1. **Environment**: From repo root, create and activate a venv, then set `GOOGLE_API_KEY` for Gemini.
+   - **Windows (PowerShell):** `python -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
+   - **Windows (cmd):** `python -m venv .venv` then `.venv\Scripts\activate.bat`
+   - **macOS/Linux:** `python3 -m venv .venv` then `source .venv/bin/activate`
 2. **Install**: `pip install -e .`
-3. **Run API**: `akili-serve` or `uvicorn akili.api.app:app --reload --host 0.0.0.0 --port 8000`
+3. **Run API** (from repo root, with venv active):
+   ```bash
+   python -m uvicorn akili.api.app:app --reload --host 0.0.0.0 --port 8000
+   ```
+   Or, if the package is installed: `akili-serve`
 4. **Ingest a doc**: `POST /ingest` with PDF (multipart form `file`) → canonical store populated; returns `doc_id`.
 5. **Query**: `POST /query` with body `{"doc_id": "<from ingest>", "question": "What is pin 5?"}` → coordinate-grounded answer + proof or REFUSE.
 6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`.
 
-### UI (akili-workspace)
+### UI (frontend)
 
-The React + TypeScript UI in `akili-workspace/` is wired to the API via a Vite proxy.
+The React + TypeScript UI lives in `frontend/` and is wired to the API via a Vite proxy.
 
-1. **Start the API** (from repo root): `akili-serve` (or `uvicorn akili.api.app:app --reload --port 8000`).
-2. **Start the UI**: `cd akili-workspace && npm install && npm run dev`.
-3. Open **http://localhost:3000**. Upload a PDF, then select a document and ask a question; the right panel shows VERIFIED (answer + proof) or REFUSED.
+1. **Install Node.js** if you don’t have it: [nodejs.org](https://nodejs.org/) (LTS). Then `node` and `npm` should be in your PATH.
+2. **Start the API** (from repo root, in a first terminal, with venv active):
+   ```bash
+   python -m uvicorn akili.api.app:app --reload --port 8000
+   ```
+3. **Start the UI** (in a second terminal, from repo root):
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+4. Open **http://localhost:3000**. Upload a PDF, then select a document and ask a question; the right panel shows VERIFIED (answer + proof) or REFUSED.
+
+**If you get "command not found":**
+- **API:** Use `python -m uvicorn akili.api.app:app --reload --port 8000` (or `py -m uvicorn ...` on Windows). Run this from the **project root** after activating the venv and running `pip install -e .`.
+- **UI:** Run `npm install` and `npm run dev` from inside the `frontend/` folder. If `npm` is not found, install Node.js and ensure it’s on your PATH.
 
 ---
 

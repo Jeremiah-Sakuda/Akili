@@ -7,7 +7,6 @@ interface DocumentViewerProps {
 const DocumentViewer: React.FC<DocumentViewerProps> = ({ docId }) => {
   return (
     <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-[#525659]">
-      {/* Simulated PDF Page */}
       <div className="bg-white w-full max-w-[800px] min-h-[1100px] shadow-2xl relative">
         <div className="p-12 pb-4">
           <div className="flex justify-between items-end border-b-2 border-black pb-2 mb-8">
@@ -20,31 +19,21 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ docId }) => {
             The MCU-V2 series provides a comprehensive set of peripherals. The pin assignment is designed to minimize trace length for high-speed signals. Refer to Table 3-1 for detailed pin descriptions.
           </p>
 
-          {/* Diagram Placeholder */}
           <div className="w-full aspect-[2/1] bg-slate-50 border border-slate-200 mb-8 relative flex items-center justify-center overflow-hidden rounded">
-            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
             <div className="w-64 h-48 border-2 border-slate-800 bg-white relative shadow-sm">
-              <div className="absolute -left-3 top-4 w-3 h-2 bg-slate-400"></div>
-              <div className="absolute -left-3 top-8 w-3 h-2 bg-slate-400"></div>
-              <div className="absolute -left-3 top-12 w-3 h-2 bg-slate-400"></div>
-              <div className="absolute -right-3 top-4 w-3 h-2 bg-slate-400"></div>
-              <div className="absolute -right-3 top-8 w-3 h-2 bg-slate-400"></div>
-              <div className="absolute -right-3 top-12 w-3 h-2 bg-slate-400"></div>
-              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-2 h-3 bg-slate-400"></div>
               <div className="absolute inset-0 flex items-center justify-center font-mono font-bold text-slate-300 text-4xl select-none">MCU</div>
             </div>
           </div>
 
           <h3 className="font-bold text-sm mb-2 text-black">Table 3-1. Pin Descriptions</h3>
           <div className="w-full border border-black text-xs font-mono">
-            {/* Header */}
             <div className="grid grid-cols-4 bg-gray-200 border-b border-black font-bold">
               <div className="p-2 border-r border-black">Pin No.</div>
               <div className="p-2 border-r border-black">Name</div>
               <div className="p-2 border-r border-black">Type</div>
               <div className="p-2">Function</div>
             </div>
-            {/* Rows */}
             <div className="grid grid-cols-4 border-b border-gray-300">
               <div className="p-2 border-r border-gray-300">1</div>
               <div className="p-2 border-r border-gray-300">VDD</div>
