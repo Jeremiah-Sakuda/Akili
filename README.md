@@ -168,6 +168,24 @@ The React + TypeScript UI lives in `frontend/` and is wired to the API via a Vit
    ```
 4. Open **http://localhost:3000**. Upload a PDF, then select a document and ask a question; the right panel shows VERIFIED (answer + proof) or REFUSED.
 
+### Firebase hosting & sign-in
+
+The app can be hosted on Firebase with Google sign-in.
+
+1. **Create a Firebase project** at [console.firebase.google.com](https://console.firebase.google.com). Note your project ID.
+2. **Enable Authentication → Sign-in method → Google** in the Firebase Console.
+3. **Configure the project**: replace `your-firebase-project-id` in `.firebaserc` with your project ID.
+4. **Env**: copy `.env.example` to `.env` in the repo root and fill in `GOOGLE_API_KEY` and the Firebase vars (Project settings → General → Your apps → Web app). Vite loads from the repo root, so one `.env` covers both API and frontend.
+5. **Build and deploy** (from repo root):
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   cd ..
+   npx firebase deploy
+   ```
+   The hosted app will be at `https://<project-id>.web.app` (or your custom domain). Unauthenticated users see the login page; after signing in with Google they get the verification workspace.
+
 **If you get "command not found":**
 - **API:** Use `python -m uvicorn akili.api.app:app --reload --port 8000` (or `py -m uvicorn ...` on Windows). Run this from the **project root** after activating the venv and running `pip install -e .`.
 - **UI:** Run `npm install` and `npm run dev` from inside the `frontend/` folder. If `npm` is not found, install Node.js and ensure it’s on your PATH.

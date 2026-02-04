@@ -4,6 +4,8 @@ import SidebarLeft from './components/SidebarLeft';
 import SidebarRight from './components/SidebarRight';
 import DocumentViewer from './components/DocumentViewer';
 import FileUploader from './components/FileUploader';
+import LoginPage from './components/LoginPage';
+import { useAuth } from './contexts/AuthContext';
 import { AppState } from './types';
 import type { DocumentSummary, QueryResponse } from './api';
 import { getDocuments } from './api';
@@ -17,6 +19,7 @@ const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
 });
 
 const App: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [viewState, setViewState] = useState<AppState>(AppState.UPLOAD);
@@ -66,6 +69,18 @@ const App: React.FC = () => {
 
   const displayState = queryResult?.status === 'refuse' ? AppState.REFUSED : viewState;
   const files = documents.map((d) => documentToFile(d, selectedDocId));
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background-light">
+        <div className="text-slate-500 text-sm font-medium">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
 
   return (
     <div className="flex flex-col h-screen">
