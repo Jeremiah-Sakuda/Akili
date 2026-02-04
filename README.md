@@ -99,12 +99,14 @@ akili/
 
 ---
 
-## Getting Started (After Implementation)
+## Getting Started
 
-1. **Environment**: `python -m venv .venv`, set `GOOGLE_API_KEY` for Gemini.
+1. **Environment**: `python -m venv .venv`, activate it, set `GOOGLE_API_KEY` for Gemini.
 2. **Install**: `pip install -e .`
-3. **Ingest a doc**: `POST /ingest` with PDF → canonical store populated.
-4. **Query**: `POST /query` with question → coordinate-grounded answer or REFUSE.
+3. **Run API**: `akili-serve` or `uvicorn akili.api.app:app --reload --host 0.0.0.0 --port 8000`
+4. **Ingest a doc**: `POST /ingest` with PDF (multipart form `file`) → canonical store populated; returns `doc_id`.
+5. **Query**: `POST /query` with body `{"doc_id": "<from ingest>", "question": "What is pin 5?"}` → coordinate-grounded answer + proof or REFUSE.
+6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`.
 
 ---
 

@@ -2,4 +2,6 @@
 FastAPI app: ingest documents, submit queries, return coordinate-grounded answers or REFUSE.
 """
 
-__all__: list[str] = []
+from akili.api.app import app
+
+__all__ = ["app"]

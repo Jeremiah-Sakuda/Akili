@@ -1,0 +1,33 @@
+"""
+Verification result types: AnswerWithProof or Refuse.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class ProofPoint(BaseModel):
+    """Single coordinate proof: (x, y) and optional source id."""
+
+    x: float = Field(..., description="x coordinate")
+    y: float = Field(..., description="y coordinate")
+    source_id: str | None = Field(None, description="Canonical object id (unit, bijection, grid)")
+    source_type: str | None = Field(None, description="unit | bijection | grid")
+
+
+class AnswerWithProof(BaseModel):
+    """Answer that is provable from canonical facts; includes coordinate proof."""
+
+    status: str = Field(default="answer", description="Always 'answer'")
+    answer: str = Field(..., description="The proven answer")
+    proof: list[ProofPoint] = Field(default_factory=list, description="(x,y) coordinates that support the answer")
+    source_id: str | None = Field(None, description="Canonical object id")
+    source_type: str | None = Field(None, description="unit | bijection | grid")
+
+
+class Refuse(BaseModel):
+    """Deterministic refusal when the answer cannot be proven from canonical structure."""
+
+    status: str = Field(default="refuse", description="Always 'refuse'")
+    reason: str = Field(..., description="Short reason for refusal")
