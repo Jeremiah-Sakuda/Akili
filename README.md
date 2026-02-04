@@ -81,6 +81,10 @@ Akili doesn't just ask Gemini for an answer; it **forces Gemini to show its work
 
 ```
 akili/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml      # Lint, typecheck, test (backend + frontend)
+│       └── deploy.yml  # Deploy frontend to Firebase Hosting
 ├── README.md
 ├── docs/
 │   ├── ARCHITECTURE.md
@@ -125,7 +129,7 @@ One-command run for API + frontend with a persistent SQLite store.
    ```bash
    docker compose up --build
    ```
-3. Open **http://localhost:3000**. The API is at **http://localhost:8000**; the UI proxies `/api` to it.
+3. Open **http://localhost:3001** for the UI. The API docs are at **http://localhost:8001/docs**; the UI proxies `/api` to the API inside Docker.
 
 **Notes:**
 - The SQLite DB is stored in a Docker volume `akili-data` (path `/data/akili.db` in the API container).
@@ -230,6 +234,10 @@ Runs on **push to `main`/`master`** and on **workflow_dispatch** (manual run).
 | `VITE_FIREBASE_APP_ID` | From Firebase Console. |
 
 Optional: add an **environment** (e.g. `production`) in the repo and protect it; the deploy job uses `environment: production` so you can add approval rules.
+
+### Dependabot (`.github/dependabot.yml`)
+
+Weekly PRs to update **npm** (frontend), **pip** (backend), and **GitHub Actions**. Adjust or remove if you prefer manual updates.
 
 ---
 

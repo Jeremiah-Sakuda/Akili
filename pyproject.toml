@@ -23,6 +23,7 @@ dependencies = [
     "pydantic>=2.0",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.22",
+    "python-multipart>=0.0.6",
     "google-generativeai>=0.3",
     "pymupdf>=1.23",
     "pdf2image>=1.16",
