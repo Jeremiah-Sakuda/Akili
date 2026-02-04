@@ -192,6 +192,47 @@ The app can be hosted on Firebase with Google sign-in.
 
 ---
 
+## CI/CD
+
+GitHub Actions workflows in `.github/workflows/` provide CI and CD.
+
+### CI (`.github/workflows/ci.yml`)
+
+Runs on every **push** and **pull_request** to `main`, `master`, and `develop`.
+
+| Job | What it does |
+|-----|----------------|
+| **Backend (Python)** | Matrix: Python 3.11 and 3.12. Installs `.[dev]`, runs **Ruff** (lint + format check), **pytest** with coverage. Optional: uploads coverage to Codecov (Python 3.11 only). |
+| **Frontend (Node)** | Node 20. `npm ci` → **ESLint** → **TypeScript** (`tsc --noEmit`) → **Vite build**. Build uses empty Firebase env vars so it works without secrets. |
+
+**Local equivalents:**
+
+- Backend: `pip install -e ".[dev]"` then `ruff check src tests`, `ruff format --check src tests`, `pytest tests -v`
+- Frontend: `cd frontend && npm ci && npm run lint && npm run typecheck && npm run build`
+
+### CD (`.github/workflows/deploy.yml`)
+
+Runs on **push to `main`/`master`** and on **workflow_dispatch** (manual run).
+
+1. **Build**: Installs frontend deps, builds with Vite using Firebase env from **secrets**.
+2. **Deploy**: Installs Firebase CLI, runs `firebase deploy --only hosting` using `FIREBASE_TOKEN`.
+
+**Required repository secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Purpose |
+|--------|--------|
+| `FIREBASE_TOKEN` | CI deploy token from `firebase login:ci`. |
+| `VITE_FIREBASE_API_KEY` | Firebase Web app config (same as in `.env` for local). |
+| `VITE_FIREBASE_AUTH_DOMAIN` | e.g. `your-project.firebaseapp.com`. |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID (must match `.firebaserc`). |
+| `VITE_FIREBASE_STORAGE_BUCKET` | e.g. `your-project.appspot.com`. |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | From Firebase Console. |
+| `VITE_FIREBASE_APP_ID` | From Firebase Console. |
+
+Optional: add an **environment** (e.g. `production`) in the repo and protect it; the deploy job uses `environment: production` so you can add approval rules.
+
+---
+
 ## License
 
 TBD.

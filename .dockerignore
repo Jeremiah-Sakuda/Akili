@@ -24,7 +24,6 @@ frontend
 # Docs and tests (not needed in runtime image)
 docs
 tests
-*.md
 
 # IDE and OS
 .idea
