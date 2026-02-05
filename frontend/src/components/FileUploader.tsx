@@ -11,6 +11,18 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IngestResponse | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const copyDocId = async () => {
+    if (!result?.doc_id) return;
+    try {
+      await navigator.clipboard.writeText(result.doc_id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   const handleFile = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -131,9 +143,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
         {result && !loading && (
           <div className="mt-6 p-4 rounded-lg border border-emerald-200 bg-emerald-50/50">
             <p className="text-sm font-semibold text-emerald-800 mb-2">Document canonicalized</p>
-            <p className="text-xs font-mono text-slate-600 mb-1">
-              <span className="text-slate-400">doc_id:</span> {result.doc_id}
-            </p>
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-xs font-mono text-slate-600">
+                <span className="text-slate-400">doc_id:</span> {result.doc_id}
+              </p>
+              <button
+                type="button"
+                onClick={copyDocId}
+                className="p-1 rounded hover:bg-emerald-100 text-slate-500 hover:text-emerald-700 transition-colors"
+                title="Copy doc_id"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {copied ? 'check' : 'content_copy'}
+                </span>
+              </button>
+            </div>
             <p className="text-xs text-slate-600">
               {result.units_count} units · {result.bijections_count} bijections · {result.grids_count} grids
             </p>

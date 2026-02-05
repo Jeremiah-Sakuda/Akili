@@ -1,9 +1,26 @@
 /**
  * API client for Akili FastAPI backend.
  * In dev, Vite proxy forwards /api/* to the backend (see vite.config.ts).
+ * When Firebase auth is configured and user is signed in, sends Bearer token for API auth.
  */
 
+import { getFirebaseAuth } from './firebase';
+
 const API_BASE = '/api';
+
+async function authHeaders(init?: HeadersInit): Promise<HeadersInit> {
+  const headers = new Headers(init);
+  const auth = getFirebaseAuth();
+  if (auth?.currentUser) {
+    try {
+      const token = await auth.currentUser.getIdToken();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+    } catch {
+      // ignore token errors
+    }
+  }
+  return headers;
+}
 
 export interface DocumentSummary {
   doc_id: string;
@@ -27,6 +44,7 @@ export interface IngestResponse {
 export interface ProofPoint {
   x: number;
   y: number;
+  page?: number;
   source_id?: string | null;
   source_type?: string | null;
 }
@@ -47,7 +65,7 @@ export interface Refuse {
 export type QueryResponse = AnswerWithProof | Refuse;
 
 export async function getDocuments(): Promise<DocumentSummary[]> {
-  const res = await fetch(`${API_BASE}/documents`);
+  const res = await fetch(`${API_BASE}/documents`, { headers: await authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch documents');
   const data = await res.json();
   return data.documents ?? [];
@@ -58,6 +76,7 @@ export async function ingest(file: File): Promise<IngestResponse> {
   form.append('file', file);
   const res = await fetch(`${API_BASE}/ingest`, {
     method: 'POST',
+    headers: await authHeaders(),
     body: form,
   });
   if (!res.ok) {
@@ -71,9 +90,10 @@ export async function ingest(file: File): Promise<IngestResponse> {
 }
 
 export async function query(docId: string, question: string): Promise<QueryResponse> {
+  const headers = await authHeaders({ 'Content-Type': 'application/json' });
   const res = await fetch(`${API_BASE}/query`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ doc_id: docId, question }),
   });
   if (!res.ok) throw new Error('Query failed');
@@ -86,4 +106,57 @@ export function isRefuse(r: QueryResponse): r is Refuse {
 
 export function isAnswer(r: QueryResponse): r is AnswerWithProof {
   return r.status === 'answer';
+}
+
+export interface CanonicalUnit {
+  type: 'unit';
+  id: string | null;
+  label: string | null;
+  value: unknown;
+  unit_of_measure: string | null;
+  origin: { x: number; y: number };
+  page: number;
+}
+
+export interface CanonicalBijection {
+  type: 'bijection';
+  id: string | null;
+  mapping: Record<string, string>;
+  origin: { x: number; y: number };
+  page: number;
+}
+
+export interface CanonicalGrid {
+  type: 'grid';
+  id: string | null;
+  rows: number;
+  cols: number;
+  cells_count: number;
+  origin: { x: number; y: number };
+  page: number;
+}
+
+export interface CanonicalResponse {
+  doc_id: string;
+  units: CanonicalUnit[];
+  bijections: CanonicalBijection[];
+  grids: CanonicalGrid[];
+}
+
+export async function getCanonical(docId: string): Promise<CanonicalResponse> {
+  const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/canonical`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch canonical');
+  return res.json();
+}
+
+/** Fetch PDF file for a document (for viewer / Show on document). Returns blob URL; caller must revoke when done. */
+export async function getDocumentFile(docId: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/file`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch document file');
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }

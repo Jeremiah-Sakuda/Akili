@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppState } from '../types';
-import type { DocumentSummary, QueryResponse } from '../api';
+import type { DocumentSummary, ProofPoint, QueryResponse } from '../api';
 import { query, isRefuse } from '../api';
 
 interface SidebarRightProps {
@@ -11,6 +11,7 @@ interface SidebarRightProps {
   queryResult: QueryResponse | null;
   onQueryResult: (result: QueryResponse) => void;
   onSelectDoc: (docId: string) => void;
+  onShowProof: (proof: ProofPoint[] | null) => void;
   queryLoading: boolean;
   setQueryLoading: (v: boolean) => void;
 }
@@ -23,6 +24,7 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
   queryResult,
   onQueryResult,
   onSelectDoc,
+  onShowProof,
   queryLoading,
   setQueryLoading,
 }) => {
@@ -167,6 +169,7 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
                   <div className="px-3 py-2 bg-emerald-100/30 flex justify-end gap-2">
                     <button
                       type="button"
+                      onClick={() => onShowProof(queryResult.proof ?? null)}
                       className="w-full flex items-center justify-center gap-2 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold py-2 px-3 rounded shadow-sm transition-all text-xs"
                     >
                       <span className="material-symbols-outlined text-[16px]">visibility</span>

@@ -2,7 +2,8 @@
 
 import pytest
 
-from akili.canonical import Bijection, Point, Unit
+from akili.canonical import Bijection, Grid, Point, Unit
+from akili.canonical.models import GridCell
 from akili.verify import Refuse, verify_and_answer
 
 
@@ -39,3 +40,29 @@ def test_max_voltage_from_units():
     assert not isinstance(result, Refuse)
     assert "5" in result.answer
     assert len(result.proof) == 1
+
+
+def test_pin_lookup_via_grid_returns_name():
+    """Grid pin lookup returns pin name (same row, adjacent column), not the pin number."""
+    g = Grid(
+        id="pinout",
+        rows=3,
+        cols=2,
+        cells=[
+            GridCell(row=0, col=0, value="Pin", origin=Point(0.1, 0.1)),
+            GridCell(row=0, col=1, value="Name", origin=Point(0.5, 0.1)),
+            GridCell(row=1, col=0, value="5", origin=Point(0.1, 0.2)),
+            GridCell(row=1, col=1, value="VCC", origin=Point(0.5, 0.2)),
+            GridCell(row=2, col=0, value="6", origin=Point(0.1, 0.3)),
+            GridCell(row=2, col=1, value="GND", origin=Point(0.5, 0.3)),
+        ],
+        origin=Point(0, 0),
+        doc_id="doc1",
+        page=0,
+    )
+    result = verify_and_answer("What is pin 5?", [], [], [g])
+    assert result is not None
+    assert not isinstance(result, Refuse)
+    assert result.answer == "VCC"
+    assert len(result.proof) == 1
+    assert result.proof[0].page == 0

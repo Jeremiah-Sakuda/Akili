@@ -11,8 +11,14 @@ from akili.canonical import Bijection, Grid, Unit
 from akili.verify.models import AnswerWithProof, ProofPoint, Refuse
 
 
-def _proof_point(x: float, y: float, source_id: str | None = None, source_type: str | None = None) -> ProofPoint:
-    return ProofPoint(x=x, y=y, source_id=source_id, source_type=source_type)
+def _proof_point(
+    x: float,
+    y: float,
+    page: int = 0,
+    source_id: str | None = None,
+    source_type: str | None = None,
+) -> ProofPoint:
+    return ProofPoint(x=x, y=y, page=page, source_id=source_id, source_type=source_type)
 
 
 def _try_pin_lookup(question: str, bijections: list[Bijection], grids: list[Grid]) -> AnswerWithProof | None:
@@ -27,7 +33,7 @@ def _try_pin_lookup(question: str, bijections: list[Bijection], grids: list[Grid
             if right is not None:
                 return AnswerWithProof(
                     answer=right,
-                    proof=[_proof_point(b.origin.x, b.origin.y, b.id, "bijection")],
+                    proof=[_proof_point(b.origin.x, b.origin.y, b.page, b.id, "bijection")],
                     source_id=b.id,
                     source_type="bijection",
                 )
@@ -35,21 +41,26 @@ def _try_pin_lookup(question: str, bijections: list[Bijection], grids: list[Grid
             if left is not None:
                 return AnswerWithProof(
                     answer=left,
-                    proof=[_proof_point(b.origin.x, b.origin.y, b.id, "bijection")],
+                    proof=[_proof_point(b.origin.x, b.origin.y, b.page, b.id, "bijection")],
                     source_id=b.id,
                     source_type="bijection",
                 )
         for g in grids:
-            # Try row 0 as header; row N as pin N
+            # Try row 0 as header; row N as pin N; col 0 = number, col 1 = name (typical pinout table)
             for row in range(g.rows):
                 for col in range(g.cols):
                     cell = g.get_cell(row, col)
                     if cell and str(cell.value) == n:
                         ox = cell.origin.x if cell.origin else g.origin.x
                         oy = cell.origin.y if cell.origin else g.origin.y
+                        # Prefer pin name from same row, next column (col+1); else same row col-1; else pin number
+                        name_cell = g.get_cell(row, col + 1) if col + 1 < g.cols else None
+                        if not name_cell and col > 0:
+                            name_cell = g.get_cell(row, col - 1)
+                        answer_val = str(name_cell.value) if name_cell else str(cell.value)
                         return AnswerWithProof(
-                            answer=str(cell.value),
-                            proof=[_proof_point(ox, oy, g.id, "grid")],
+                            answer=answer_val,
+                            proof=[_proof_point(ox, oy, g.page, g.id, "grid")],
                             source_id=g.id,
                             source_type="grid",
                         )
@@ -78,7 +89,7 @@ def _try_voltage_max(question: str, units: list[Unit]) -> AnswerWithProof | None
     max_u = max(numeric, key=lambda x: x[0])[1]
     return AnswerWithProof(
         answer=f"{max_u.value} {max_u.unit_of_measure or ''}".strip(),
-        proof=[_proof_point(max_u.origin.x, max_u.origin.y, max_u.id, "unit")],
+        proof=[_proof_point(max_u.origin.x, max_u.origin.y, max_u.page, max_u.id, "unit")],
         source_id=max_u.id,
         source_type="unit",
     )
@@ -91,14 +102,14 @@ def _try_unit_lookup(question: str, units: list[Unit]) -> AnswerWithProof | None
         if u.label and u.label.lower() in question_lower:
             return AnswerWithProof(
                 answer=f"{u.value} {u.unit_of_measure or ''}".strip(),
-                proof=[_proof_point(u.origin.x, u.origin.y, u.id, "unit")],
+                proof=[_proof_point(u.origin.x, u.origin.y, u.page, u.id, "unit")],
                 source_id=u.id,
                 source_type="unit",
             )
         if str(u.value).lower() in question_lower:
             return AnswerWithProof(
                 answer=f"{u.value} {u.unit_of_measure or ''}".strip(),
-                proof=[_proof_point(u.origin.x, u.origin.y, u.id, "unit")],
+                proof=[_proof_point(u.origin.x, u.origin.y, u.page, u.id, "unit")],
                 source_id=u.id,
                 source_type="unit",
             )

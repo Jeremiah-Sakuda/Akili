@@ -5,17 +5,36 @@ FastAPI app: ingest documents, submit queries, return coordinate-grounded answer
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import tempfile
 from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from akili.api.auth import get_current_user
 from akili.ingest.pipeline import ingest_document
 from akili.store import Store
 from akili.verify import Refuse, verify_and_answer
+
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+
+
+def _cors_origins() -> list[str]:
+    raw = os.environ.get("AKILI_CORS_ORIGINS", "").strip()
+    if not raw:
+        return _DEFAULT_CORS_ORIGINS
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
 
 app = FastAPI(
     title="Akili",
@@ -25,7 +44,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,6 +96,18 @@ def get_store() -> Store:
     return _store
 
 
+def _docs_dir() -> Path:
+    """Directory where ingested PDFs are stored (next to DB)."""
+    db_path = os.environ.get("AKILI_DB_PATH", "akili.db")
+    return Path(db_path).resolve().parent / "docs"
+
+
+def _validate_doc_id(doc_id: str) -> None:
+    """Raise 400 if doc_id is invalid (path traversal)."""
+    if not doc_id or not re.match(r"^[a-zA-Z0-9_-]+$", doc_id):
+        raise HTTPException(status_code=400, detail="Invalid doc_id")
+
+
 class QueryRequest(BaseModel):
     """Request body for POST /query."""
 
@@ -85,7 +116,10 @@ class QueryRequest(BaseModel):
 
 
 @app.post("/ingest")
-async def ingest(file: UploadFile = File(...)) -> JSONResponse:
+async def ingest(
+    _user: dict[str, Any] | None = Depends(get_current_user),
+    file: UploadFile = File(...),
+) -> JSONResponse:
     """
     Upload a PDF; run ingestion pipeline; persist canonical objects.
     Returns doc_id and counts of units, bijections, grids.
@@ -95,12 +129,25 @@ async def ingest(file: UploadFile = File(...)) -> JSONResponse:
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
+    max_bytes = int(os.environ.get("AKILI_MAX_UPLOAD_BYTES", "104857600"))  # default 100 MB
+    if max_bytes > 0 and len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override.",
+        )
     store = get_store()
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(content)
         tmp_path = Path(tmp.name)
     try:
         doc_id, canonical = ingest_document(tmp_path, store=store)
+        _validate_doc_id(doc_id)
+        docs_dir = _docs_dir()
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        dest = docs_dir / f"{doc_id}.pdf"
+        shutil.copy2(tmp_path, dest)
+    except HTTPException:
+        raise
     except Exception as e:
         err_msg = str(e)
         # Gemini/Vertex rate limit (429) — return 429 so the UI can show a clear message
@@ -129,7 +176,10 @@ async def ingest(file: UploadFile = File(...)) -> JSONResponse:
 
 
 @app.post("/query")
-async def query(req: QueryRequest) -> JSONResponse:
+async def query(
+    req: QueryRequest,
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
     """
     Submit a question for a document. Returns coordinate-grounded answer + proof, or REFUSE.
     """
@@ -144,15 +194,33 @@ async def query(req: QueryRequest) -> JSONResponse:
 
 
 @app.get("/documents")
-async def list_documents() -> JSONResponse:
+async def list_documents(
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
     """List ingested documents with canonical object counts."""
     store = get_store()
     docs = store.list_documents()
     return JSONResponse(content={"documents": docs})
 
 
+@app.get("/documents/{doc_id}/file")
+async def get_document_file(
+    doc_id: str,
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> FileResponse:
+    """Return the ingested PDF file for a document (for viewer / Show on document)."""
+    _validate_doc_id(doc_id)
+    dest = _docs_dir() / f"{doc_id}.pdf"
+    if not dest.is_file():
+        raise HTTPException(status_code=404, detail="Document file not found (ingested before PDF storage was added)")
+    return FileResponse(dest, media_type="application/pdf", filename=f"{doc_id}.pdf")
+
+
 @app.get("/documents/{doc_id}/canonical")
-async def get_canonical(doc_id: str) -> JSONResponse:
+async def get_canonical(
+    doc_id: str,
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
     """Return canonical objects (units, bijections, grids) for a document."""
     store = get_store()
     units = store.get_units_by_doc(doc_id)

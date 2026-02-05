@@ -52,10 +52,8 @@ export default defineConfig(({ mode }) => {
         },
       },
     ],
-    envPrefix: ['VITE_', 'GEMINI_'],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY),
-    },
+    envPrefix: ['VITE_'],
+    // Do not bake backend API keys (e.g. Gemini) into the frontend bundle; the API is the only consumer.
     resolve: {
       alias: {
         '@': path.resolve(__dirname, 'src'),

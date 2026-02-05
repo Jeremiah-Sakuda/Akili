@@ -1,72 +1,219 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import type { ProofPoint } from '../api';
+import { getDocumentFile } from '../api';
+
+// PDF.js worker for Vite
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+if (pdfjsWorker) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+}
 
 interface DocumentViewerProps {
   docId?: string | null;
+  overlayProof?: ProofPoint[] | null;
 }
 
-const DocumentViewer: React.FC<DocumentViewerProps> = ({ docId }) => {
-  return (
-    <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-[#525659]">
-      <div className="bg-white w-full max-w-[800px] min-h-[1100px] shadow-2xl relative">
-        <div className="p-12 pb-4">
-          <div className="flex justify-between items-end border-b-2 border-black pb-2 mb-8">
-            <h1 className="text-3xl font-bold font-serif text-black">Datasheet MCU-V2</h1>
-            <span className="text-sm font-mono">Rev 2.1 - 2023</span>
-          </div>
+const SCALE = 1.5;
 
-          <h2 className="text-xl font-bold mb-4 text-black">3. Pin Configuration</h2>
-          <p className="text-sm text-gray-700 mb-6 text-justify leading-relaxed">
-            The MCU-V2 series provides a comprehensive set of peripherals. The pin assignment is designed to minimize trace length for high-speed signals. Refer to Table 3-1 for detailed pin descriptions.
-          </p>
+const DocumentViewer: React.FC<DocumentViewerProps> = ({ docId, overlayProof }) => {
+  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [numPages, setNumPages] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+  const pageRefsRef = useRef<Map<number, HTMLDivElement | null>>(new Map());
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
-          <div className="w-full aspect-[2/1] bg-slate-50 border border-slate-200 mb-8 relative flex items-center justify-center overflow-hidden rounded">
-            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
-            <div className="w-64 h-48 border-2 border-slate-800 bg-white relative shadow-sm">
-              <div className="absolute inset-0 flex items-center justify-center font-mono font-bold text-slate-300 text-4xl select-none">MCU</div>
-            </div>
-          </div>
+  // Load PDF when docId changes
+  useEffect(() => {
+    if (!docId) {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+      setPdfDoc(null);
+      setNumPages(0);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getDocumentFile(docId)
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = url;
+        return pdfjsLib.getDocument({ url }).promise;
+      })
+      .then((doc) => {
+        if (cancelled || !doc) return;
+        setPdfDoc(doc);
+        setNumPages(doc.numPages);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load PDF');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [docId]);
 
-          <h3 className="font-bold text-sm mb-2 text-black">Table 3-1. Pin Descriptions</h3>
-          <div className="w-full border border-black text-xs font-mono">
-            <div className="grid grid-cols-4 bg-gray-200 border-b border-black font-bold">
-              <div className="p-2 border-r border-black">Pin No.</div>
-              <div className="p-2 border-r border-black">Name</div>
-              <div className="p-2 border-r border-black">Type</div>
-              <div className="p-2">Function</div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-gray-300">
-              <div className="p-2 border-r border-gray-300">1</div>
-              <div className="p-2 border-r border-gray-300">VDD</div>
-              <div className="p-2 border-r border-gray-300">Power</div>
-              <div className="p-2">Main Power Supply</div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-gray-300 bg-gray-50">
-              <div className="p-2 border-r border-gray-300">2</div>
-              <div className="p-2 border-r border-gray-300">GND</div>
-              <div className="p-2 border-r border-gray-300">Power</div>
-              <div className="p-2">Ground</div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-gray-300">
-              <div className="p-2 border-r border-gray-300">3</div>
-              <div className="p-2 border-r border-gray-300">GPIO_0</div>
-              <div className="p-2 border-r border-gray-300">I/O</div>
-              <div className="p-2">General Purpose I/O</div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-gray-300 bg-gray-50">
-              <div className="p-2 border-r border-gray-300">...</div>
-              <div className="p-2 border-r border-gray-300">...</div>
-              <div className="p-2 border-r border-gray-300">...</div>
-              <div className="p-2">...</div>
-            </div>
-            <div className="grid grid-cols-4 border-b border-gray-300">
-              <div className="p-2 border-r border-gray-300">48</div>
-              <div className="p-2 border-r border-gray-300">RESET</div>
-              <div className="p-2 border-r border-gray-300">Input</div>
-              <div className="p-2">System Reset</div>
-            </div>
-          </div>
-        </div>
+  // Revoke blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  // Scroll to first proof page when overlayProof is set
+  useEffect(() => {
+    if (!overlayProof?.length) return;
+    const first = overlayProof[0];
+    const page = first?.page ?? 0;
+    const el = pageRefsRef.current.get(page);
+    if (el && containerRef.current) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [overlayProof]);
+
+  const setPageRef = useCallback((pageIndex: number, el: HTMLDivElement | null) => {
+    if (el) pageRefsRef.current.set(pageIndex, el);
+  }, []);
+
+  if (!docId) {
+    return (
+      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-[#525659]">
+        <div className="text-slate-400 text-sm">Select a document to view</div>
       </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-[#525659]">
+        <div className="text-slate-300 text-sm">Loading PDF…</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-[#525659]">
+        <div className="text-amber-200 text-sm max-w-md text-center">{error}</div>
+      </div>
+    );
+  }
+
+  if (!pdfDoc) {
+    return (
+      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-[#525659]">
+        <div className="text-slate-400 text-sm">No document loaded</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-y-auto p-6 flex flex-col items-center gap-6 bg-[#525659]"
+    >
+      {Array.from({ length: numPages }, (_, i) => i).map((pageIndex) => (
+        <PageWithOverlay
+          key={pageIndex}
+          pdfDoc={pdfDoc}
+          pageIndex={pageIndex}
+          scale={SCALE}
+          proofPoints={overlayProof?.filter((p) => (p.page ?? 0) === pageIndex) ?? []}
+          setPageRef={setPageRef}
+        />
+      ))}
+    </div>
+  );
+};
+
+interface PageWithOverlayProps {
+  pdfDoc: pdfjsLib.PDFDocumentProxy;
+  pageIndex: number;
+  scale: number;
+  proofPoints: ProofPoint[];
+  setPageRef: (pageIndex: number, el: HTMLDivElement | null) => void;
+}
+
+const PageWithOverlay: React.FC<PageWithOverlayProps> = ({
+  pdfDoc,
+  pageIndex,
+  scale,
+  proofPoints,
+  setPageRef,
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    pdfDoc.getPage(pageIndex + 1).then((page) => {
+      if (cancelled) return;
+      const viewport = page.getViewport({ scale });
+      const w = viewport.width;
+      const h = viewport.height;
+      setPageSize({ width: w, height: h });
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      canvas.width = w;
+      canvas.height = h;
+      page.render({
+        canvasContext: ctx,
+        viewport,
+        canvas,
+      }).promise.catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfDoc, pageIndex, scale]);
+
+  return (
+    <div
+      ref={(el) => setPageRef(pageIndex, el)}
+      className="relative bg-white shadow-lg"
+      style={pageSize ? { width: pageSize.width, height: pageSize.height } : undefined}
+    >
+      <canvas ref={canvasRef} className="block" />
+      {pageSize && proofPoints.length > 0 && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ width: pageSize.width, height: pageSize.height }}
+        >
+          {proofPoints.map((p, i) => (
+            <div
+              key={i}
+              className="absolute border-2 border-emerald-500 bg-emerald-500/30 rounded"
+              style={{
+                left: `${(p.x - 0.02) * 100}%`,
+                top: `${(p.y - 0.02) * 100}%`,
+                width: '4%',
+                height: '4%',
+                minWidth: 12,
+                minHeight: 12,
+              }}
+              title={`Proof (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

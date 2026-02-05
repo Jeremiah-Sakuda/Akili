@@ -7,7 +7,7 @@ import FileUploader from './components/FileUploader';
 import LoginPage from './components/LoginPage';
 import { useAuth } from './contexts/AuthContext';
 import { AppState } from './types';
-import type { DocumentSummary, QueryResponse } from './api';
+import type { DocumentSummary, ProofPoint, QueryResponse } from './api';
 import { getDocuments } from './api';
 
 const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [viewState, setViewState] = useState<AppState>(AppState.UPLOAD);
   const [queryResult, setQueryResult] = useState<QueryResponse | null>(null);
+  const [overlayProof, setOverlayProof] = useState<ProofPoint[] | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [queryLoading, setQueryLoading] = useState(false);
 
@@ -60,6 +61,7 @@ const App: React.FC = () => {
     setSelectedDocId(docId);
     setViewState(AppState.VERIFIED);
     setQueryResult(null);
+    setOverlayProof(null);
   };
 
   const handleQueryResult = (result: QueryResponse) => {
@@ -91,6 +93,7 @@ const App: React.FC = () => {
           currentState={displayState}
           onStateChange={handleStateChange}
           files={files}
+          selectedDocId={selectedDocId}
           loading={loadingDocs}
           onSelectFile={handleSelectDoc}
         />
@@ -130,7 +133,10 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <DocumentViewer docId={selectedDocId} />
+              <DocumentViewer
+                docId={selectedDocId}
+                overlayProof={overlayProof}
+              />
             </>
           )}
         </main>
@@ -143,6 +149,7 @@ const App: React.FC = () => {
           queryResult={queryResult}
           onQueryResult={handleQueryResult}
           onSelectDoc={handleSelectDoc}
+          onShowProof={setOverlayProof}
           queryLoading={queryLoading}
           setQueryLoading={setQueryLoading}
         />

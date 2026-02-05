@@ -8,10 +8,11 @@ from pydantic import BaseModel, Field
 
 
 class ProofPoint(BaseModel):
-    """Single coordinate proof: (x, y) and optional source id."""
+    """Single coordinate proof: (x, y), page, and optional source id."""
 
     x: float = Field(..., description="x coordinate")
     y: float = Field(..., description="y coordinate")
+    page: int = Field(0, description="Page number (0-based) for overlay")
     source_id: str | None = Field(None, description="Canonical object id (unit, bijection, grid)")
     source_type: str | None = Field(None, description="unit | bijection | grid")
 
