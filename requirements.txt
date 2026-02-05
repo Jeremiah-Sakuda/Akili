@@ -6,7 +6,8 @@ python-multipart>=0.0.6
 google-generativeai>=0.3
 pymupdf>=1.23
 pdf2image>=1.16
-firebase-admin>=6.0
+# Optional: pip install firebase-admin (or pip install -e ".[auth]") for API auth
+# firebase-admin>=6.0
 
 # Optional: deterministic verification
 # z3-solver>=4.12

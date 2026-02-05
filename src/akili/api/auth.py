@@ -27,7 +27,9 @@ def _init_firebase() -> bool:
     try:
         import firebase_admin
         from firebase_admin import credentials
-
+    except ImportError:
+        return False
+    try:
         try:
             firebase_admin.get_app()
         except ValueError:
@@ -53,7 +55,12 @@ def verify_firebase_token(token: str) -> dict:
     """Verify Firebase ID token and return decoded claims. Raises HTTPException on failure."""
     try:
         from firebase_admin import auth as fb_auth
-
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth not available (firebase-admin not installed)",
+        )
+    try:
         return fb_auth.verify_id_token(token)
     except Exception as e:
         raise HTTPException(

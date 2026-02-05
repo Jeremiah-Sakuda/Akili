@@ -181,7 +181,7 @@ You only need to restart the API once after adding these; after that, run the sc
    - **Windows (PowerShell):** `python -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
    - **Windows (cmd):** `python -m venv .venv` then `.venv\Scripts\activate.bat`
    - **macOS/Linux:** `python3 -m venv .venv` then `source .venv/bin/activate`
-2. **Install**: `pip install -e .`
+2. **Install**: `pip install -e .` (for API auth with Firebase ID tokens, use `pip install -e ".[auth]"`).
 3. **Run API** (from repo root, with venv active):
    ```bash
    python -m uvicorn akili.api.app:app --reload --host 0.0.0.0 --port 8000
