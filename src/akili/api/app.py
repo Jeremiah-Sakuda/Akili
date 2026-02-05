@@ -57,6 +57,7 @@ app.add_middleware(
 @app.on_event("startup")
 def _log_env() -> None:
     import logging
+
     key = os.environ.get("GOOGLE_API_KEY")
     if key and key.strip():
         logging.getLogger("akili").info("GOOGLE_API_KEY is set (ingest will call Gemini)")
@@ -141,8 +142,7 @@ async def ingest(
         raise HTTPException(
             status_code=413,
             detail=(
-                f"File too large (max {max_bytes} bytes). "
-                "Set AKILI_MAX_UPLOAD_BYTES to override."
+                f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override."
             ),
         )
     store = get_store()

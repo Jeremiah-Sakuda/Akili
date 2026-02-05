@@ -35,7 +35,7 @@ EXTRACT_PROMPT = (
     "- For each fact, provide origin.x and origin.y. If you can infer a bounding box, provide bbox (x1,y1,x2,y2).\n"  # noqa: E501
     "- Output only: units (discrete values like pin labels, voltages with position), "
     "bijections (1:1 mappings e.g. pin name <-> pin number), grids (tables with row/col and optional cell origins).\n"  # noqa: E501
-    "- Use short, unique ids (e.g. \"u1\", \"b1\", \"g1\"). Leave arrays empty if nothing of that type is on the page.\n"  # noqa: E501
+    '- Use short, unique ids (e.g. "u1", "b1", "g1"). Leave arrays empty if nothing of that type is on the page.\n'  # noqa: E501
     "- Do not guess. If a coordinate or value is ambiguous, omit that fact.\n\n"
     "Respond with a single JSON object with keys: units (array), bijections (array), grids (array). No other text."  # noqa: E501
 )

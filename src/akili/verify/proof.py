@@ -80,7 +80,8 @@ def _try_voltage_max(question: str, units: list[Unit]) -> AnswerWithProof | None
     ):
         return None
     voltage_units = [
-        u for u in units
+        u
+        for u in units
         if u.unit_of_measure and u.unit_of_measure.upper() in ("V", "VOLT", "VOLTS")
     ]
     if not voltage_units:
