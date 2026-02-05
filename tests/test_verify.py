@@ -31,8 +31,12 @@ def test_pin_lookup_via_bijection():
 
 
 def test_max_voltage_from_units():
-    u1 = Unit(id="v1", value=3.3, unit_of_measure="V", origin=Point(x=0.1, y=0.1), doc_id="d", page=0)
-    u2 = Unit(id="v2", value=5.0, unit_of_measure="V", origin=Point(x=0.2, y=0.2), doc_id="d", page=0)
+    u1 = Unit(
+        id="v1", value=3.3, unit_of_measure="V", origin=Point(x=0.1, y=0.1), doc_id="d", page=0
+    )
+    u2 = Unit(
+        id="v2", value=5.0, unit_of_measure="V", origin=Point(x=0.2, y=0.2), doc_id="d", page=0
+    )
     result = verify_and_answer("What is the maximum voltage?", [u1, u2], [], [])
     assert result is not None
     assert not isinstance(result, Refuse)
