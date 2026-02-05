@@ -83,8 +83,7 @@ Akili doesn't just ask Gemini for an answer; it **forces Gemini to show its work
 akili/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml      # Lint, typecheck, test (backend + frontend)
-│       └── deploy.yml  # Deploy frontend to Firebase Hosting
+│       └── ci.yml      # Lint, typecheck, test (backend + frontend)
 ├── README.md
 ├── docs/
 │   ├── ARCHITECTURE.md
@@ -191,6 +190,13 @@ You only need to restart the API once after adding these; after that, run the sc
 5. **Query**: `POST /query` with body `{"doc_id": "<from ingest>", "question": "What is pin 5?"}` → coordinate-grounded answer + proof or REFUSE.
 6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`.
 
+**Gemini rate limits (429)**  
+Ingestion calls the Gemini API **once per PDF page**. Free-tier limits (e.g. 15 requests per minute for `gemini-2.0-flash`) can be hit with multi-page PDFs. The app retries on 429 with exponential backoff and waits a few seconds between pages to reduce bursts. If you still see 429 after waiting:
+
+- **Per-minute limit:** Wait 1–2 minutes and try again, or ingest fewer pages at a time.
+- **Daily or project quota:** Check [Google AI Studio](https://aistudio.google.com/) quotas and billing; you may need to wait until the quota resets or use a paid tier.
+- **Tuning:** Set `AKILI_GEMINI_PAGE_DELAY_SECONDS` (e.g. `4`) to slow down ingest, or `AKILI_GEMINI_MAX_RETRIES` / `AKILI_GEMINI_BACKOFF_BASE` to adjust retries (see `.env.example`).
+
 ### UI (frontend)
 
 The React + TypeScript UI lives in `frontend/` and is wired to the API via a Vite proxy.
@@ -250,26 +256,9 @@ Runs on every **push** and **pull_request** to `main`, `master`, and `develop`.
 - Backend: `pip install -e ".[dev]"` then `ruff check src tests`, `ruff format --check src tests`, `pytest tests -v`
 - Frontend: `cd frontend && npm ci && npm run lint && npm run typecheck && npm run build`
 
-### CD (`.github/workflows/deploy.yml`)
+### CD (Firebase deploy)
 
-Runs on **push to `main`/`master`** and on **workflow_dispatch** (manual run).
-
-1. **Build**: Installs frontend deps, builds with Vite using Firebase env from **secrets**.
-2. **Deploy**: Installs Firebase CLI, runs `firebase deploy --only hosting` using `FIREBASE_TOKEN`.
-
-**Required repository secrets** (Settings → Secrets and variables → Actions):
-
-| Secret | Purpose |
-|--------|--------|
-| `FIREBASE_TOKEN` | CI deploy token from `firebase login:ci`. |
-| `VITE_FIREBASE_API_KEY` | Firebase Web app config (same as in `.env` for local). |
-| `VITE_FIREBASE_AUTH_DOMAIN` | e.g. `your-project.firebaseapp.com`. |
-| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID (must match `.firebaserc`). |
-| `VITE_FIREBASE_STORAGE_BUCKET` | e.g. `your-project.appspot.com`. |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | From Firebase Console. |
-| `VITE_FIREBASE_APP_ID` | From Firebase Console. |
-
-Optional: add an **environment** (e.g. `production`) in the repo and protect it; the deploy job uses `environment: production` so you can add approval rules.
+**Deploy workflow is removed for now** so CI does not run Firebase deploy until you are ready. To deploy the frontend to Firebase Hosting when ready: add a workflow under `.github/workflows/` that builds the frontend and runs `firebase deploy --only hosting` (use repo secrets for `FIREBASE_TOKEN` and `VITE_FIREBASE_*`). See the Firebase hosting section above for manual `npx firebase deploy`.
 
 ### Dependabot (`.github/dependabot.yml`)
 

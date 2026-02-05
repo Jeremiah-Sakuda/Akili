@@ -2,6 +2,7 @@
 Call Gemini with a page image and get structured extraction (units, bijections, grids).
 
 Uses response_mime_type=application/json when supported; otherwise prompt-based JSON.
+Retries on 429 (Resource exhausted) with exponential backoff.
 """
 
 from __future__ import annotations
@@ -9,10 +10,20 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time
 
 import google.generativeai as genai
 
 from akili.ingest.extract_schema import PageExtraction
+
+# Retry 429 / resource exhausted: max attempts, backoff base seconds
+_GEMINI_MAX_RETRIES = int(os.environ.get("AKILI_GEMINI_MAX_RETRIES", "4"))
+_GEMINI_BACKOFF_BASE = float(os.environ.get("AKILI_GEMINI_BACKOFF_BASE", "4.0"))
+
+
+def _is_rate_limit_error(e: BaseException) -> bool:
+    msg = (getattr(e, "message", None) or str(e)).lower()
+    return "429" in msg or "resource exhausted" in msg or "resourceexhausted" in msg
 
 EXTRACT_PROMPT = """You are extracting structured, coordinate-grounded facts from a single page of technical documentation (datasheet, schematic, pinout table, etc.).
 
@@ -51,15 +62,27 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
     prompt = f"{EXTRACT_PROMPT}\n\nThis image is page {page_index} of document {doc_id}. Return JSON with keys: units, bijections, grids."
     contents = [prompt, image_part]
 
-    try:
-        generation_config = genai.types.GenerationConfig(
-            response_mime_type="application/json",
-            response_schema=PageExtraction.model_json_schema(),
-        )
-        response = model.generate_content(contents, generation_config=generation_config)
-    except (TypeError, AttributeError, ValueError):
-        # Gemini API does not accept JSON Schema with $defs (from Pydantic); use prompt-only and parse JSON
-        response = model.generate_content(contents)
+    last_error: BaseException | None = None
+    for attempt in range(_GEMINI_MAX_RETRIES):
+        try:
+            try:
+                generation_config = genai.types.GenerationConfig(
+                    response_mime_type="application/json",
+                    response_schema=PageExtraction.model_json_schema(),
+                )
+                response = model.generate_content(contents, generation_config=generation_config)
+            except (TypeError, AttributeError, ValueError):
+                # Gemini API does not accept JSON Schema with $defs (from Pydantic); use prompt-only and parse JSON
+                response = model.generate_content(contents)
+            last_error = None
+            break
+        except Exception as e:
+            last_error = e
+            if _is_rate_limit_error(e) and attempt < _GEMINI_MAX_RETRIES - 1:
+                wait = _GEMINI_BACKOFF_BASE * (2**attempt)
+                time.sleep(wait)
+                continue
+            raise
 
     text = getattr(response, "text", None) or (response.candidates[0].content.parts[0].text if response.candidates else "")
     if not text or not text.strip():
