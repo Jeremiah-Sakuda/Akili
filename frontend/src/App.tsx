@@ -44,7 +44,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     refreshDocuments();
-  }, []);
+  }, [refreshDocuments]);
 
   const handleStateChange = (state: AppState) => {
     setViewState(state);

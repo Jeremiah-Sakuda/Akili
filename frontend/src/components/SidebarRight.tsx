@@ -18,7 +18,7 @@ interface SidebarRightProps {
 
 const SidebarRight: React.FC<SidebarRightProps> = ({
   currentState,
-  onStateChange,
+  onStateChange: _onStateChange,
   selectedDocId,
   documents,
   queryResult,

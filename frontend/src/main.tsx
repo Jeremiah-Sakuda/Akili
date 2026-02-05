@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- entry point: no exports */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
