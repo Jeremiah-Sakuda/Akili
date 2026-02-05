@@ -129,7 +129,7 @@ One-command run for API + frontend with a persistent SQLite store.
    ```bash
    docker compose up --build
    ```
-3. Open **http://localhost:3001** for the UI. The API docs are at **http://localhost:8001/docs**; the UI proxies `/api` to the API inside Docker.
+3. Open **http://localhost:3001** for the UI (port 3001 to avoid conflict with other apps on 3000). API docs: **http://localhost:8000/docs**; the UI proxies `/api` to the API inside Docker.
 
 **Notes:**
 - The SQLite DB is stored in a Docker volume `akili-data` (path `/data/akili.db` in the API container).
@@ -170,7 +170,7 @@ The React + TypeScript UI lives in `frontend/` and is wired to the API via a Vit
    npm install
    npm run dev
    ```
-4. Open **http://localhost:3000**. Upload a PDF, then select a document and ask a question; the right panel shows VERIFIED (answer + proof) or REFUSED.
+4. Open **http://localhost:3000** (or **http://localhost:3001** if using Docker). Upload a PDF, then select a document and ask a question; the right panel shows VERIFIED (answer + proof) or REFUSED.
 
 ### Firebase hosting & sign-in
 
