@@ -88,7 +88,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
 
         <div
           className="group relative bg-white w-full rounded-xl border-2 border-dashed border-slate-300 hover:border-primary transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md hover:bg-slate-50/50"
-          onClick={() => inputRef.current?.click()}
           onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
           role="button"
           tabIndex={0}
@@ -97,6 +96,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
             ref={inputRef}
             className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
             type="file"
+            aria-label="Choose PDF file"
             accept=".pdf,application/pdf"
             multiple={false}
             onChange={handleChange}
