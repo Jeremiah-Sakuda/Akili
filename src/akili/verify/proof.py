@@ -20,7 +20,9 @@ def _proof_point(
     return ProofPoint(x=x, y=y, page=page, source_id=source_id, source_type=source_type)
 
 
-def _try_pin_lookup(question: str, bijections: list[Bijection], grids: list[Grid]) -> AnswerWithProof | None:
+def _try_pin_lookup(
+    question: str, bijections: list[Bijection], grids: list[Grid]
+) -> AnswerWithProof | None:
     """Look for 'pin N', 'pin number N', 'what is pin X' and resolve via bijection or grid."""
     question_lower = question.lower().strip()
     # Match "pin 5", "pin number 5", "what is pin 5"
@@ -45,14 +47,14 @@ def _try_pin_lookup(question: str, bijections: list[Bijection], grids: list[Grid
                     source_type="bijection",
                 )
         for g in grids:
-            # Try row 0 as header; row N as pin N; col 0 = number, col 1 = name (typical pinout table)
+            # Try row 0 as header; row N as pin N; col 0 = number, col 1 = name (pinout table)
             for row in range(g.rows):
                 for col in range(g.cols):
                     cell = g.get_cell(row, col)
                     if cell and str(cell.value) == n:
                         ox = cell.origin.x if cell.origin else g.origin.x
                         oy = cell.origin.y if cell.origin else g.origin.y
-                        # Prefer pin name from same row, next column (col+1); else same row col-1; else pin number
+                        # Prefer pin name from same row, next col (col+1); else col-1
                         name_cell = g.get_cell(row, col + 1) if col + 1 < g.cols else None
                         if not name_cell and col > 0:
                             name_cell = g.get_cell(row, col - 1)
@@ -71,9 +73,16 @@ def _try_voltage_max(question: str, units: list[Unit]) -> AnswerWithProof | None
     question_lower = question.lower()
     if "max" not in question_lower and "maximum" not in question_lower:
         return None
-    if "voltage" not in question_lower and "v " not in question_lower and " v" not in question_lower:
+    if (
+        "voltage" not in question_lower
+        and "v " not in question_lower
+        and " v" not in question_lower
+    ):
         return None
-    voltage_units = [u for u in units if u.unit_of_measure and u.unit_of_measure.upper() in ("V", "VOLT", "VOLTS")]
+    voltage_units = [
+        u for u in units
+        if u.unit_of_measure and u.unit_of_measure.upper() in ("V", "VOLT", "VOLTS")
+    ]
     if not voltage_units:
         return None
     numeric = []

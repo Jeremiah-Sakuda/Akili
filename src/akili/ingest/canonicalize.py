@@ -48,7 +48,9 @@ def canonicalize_units(extracts: list[UnitExtract], doc_id: str, page: int) -> l
     return out
 
 
-def canonicalize_bijections(extracts: list[BijectionExtract], doc_id: str, page: int) -> list[Bijection]:
+def canonicalize_bijections(
+    extracts: list[BijectionExtract], doc_id: str, page: int
+) -> list[Bijection]:
     """Convert extracted bijections to canonical Bijection; skip invalid."""
     out: list[Bijection] = []
     for e in extracts:
@@ -102,7 +104,9 @@ def canonicalize_grids(extracts: list[GridExtract], doc_id: str, page: int) -> l
     return out
 
 
-def canonicalize_page(extraction: PageExtraction, doc_id: str, page: int) -> list[Unit | Bijection | Grid]:
+def canonicalize_page(
+    extraction: PageExtraction, doc_id: str, page: int
+) -> list[Unit | Bijection | Grid]:
     """
     Convert one page's extraction into canonical objects.
 

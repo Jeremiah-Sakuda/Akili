@@ -116,8 +116,8 @@ class Store:
         with self._conn() as c:
             for u in units:
                 c.execute(
-                    """INSERT OR REPLACE INTO units (doc_id, page, unit_id, label, value, unit_of_measure, origin_json, bbox_json)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    """INSERT OR REPLACE INTO units (doc_id, page, unit_id, label, value,
+                       unit_of_measure, origin_json, bbox_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         u.doc_id,
                         u.page,
@@ -131,7 +131,8 @@ class Store:
                 )
             for b in bijections:
                 c.execute(
-                    """INSERT OR REPLACE INTO bijections (doc_id, page, bijection_id, left_set_json, right_set_json, mapping_json, origin_json, bbox_json)
+                    """INSERT OR REPLACE INTO bijections (doc_id, page, bijection_id,
+                       left_set_json, right_set_json, mapping_json, origin_json, bbox_json)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         b.doc_id,
@@ -157,8 +158,8 @@ class Store:
                     ]
                 )
                 c.execute(
-                    """INSERT OR REPLACE INTO grids (doc_id, page, grid_id, rows, cols, cells_json, origin_json, bbox_json)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    """INSERT OR REPLACE INTO grids (doc_id, page, grid_id, rows, cols,
+                       cells_json, origin_json, bbox_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         g.doc_id,
                         g.page,
@@ -174,7 +175,8 @@ class Store:
     def get_units_by_doc(self, doc_id: str) -> list[Unit]:
         with self._conn() as c:
             rows = c.execute(
-                "SELECT doc_id, page, unit_id, label, value, unit_of_measure, origin_json, bbox_json FROM units WHERE doc_id = ?",
+                "SELECT doc_id, page, unit_id, label, value, unit_of_measure, "
+                "origin_json, bbox_json FROM units WHERE doc_id = ?",
                 (doc_id,),
             ).fetchall()
         out: list[Unit] = []
@@ -204,7 +206,8 @@ class Store:
     def get_bijections_by_doc(self, doc_id: str) -> list[Bijection]:
         with self._conn() as c:
             rows = c.execute(
-                "SELECT doc_id, page, bijection_id, left_set_json, right_set_json, mapping_json, origin_json, bbox_json FROM bijections WHERE doc_id = ?",
+                "SELECT doc_id, page, bijection_id, left_set_json, right_set_json, "
+                "mapping_json, origin_json, bbox_json FROM bijections WHERE doc_id = ?",
                 (doc_id,),
             ).fetchall()
         out: list[Bijection] = []
@@ -226,7 +229,8 @@ class Store:
     def get_grids_by_doc(self, doc_id: str) -> list[Grid]:
         with self._conn() as c:
             rows = c.execute(
-                "SELECT doc_id, page, grid_id, rows, cols, cells_json, origin_json, bbox_json FROM grids WHERE doc_id = ?",
+                "SELECT doc_id, page, grid_id, rows, cols, cells_json, origin_json, bbox_json "
+                "FROM grids WHERE doc_id = ?",
                 (doc_id,),
             ).fetchall()
         out: list[Grid] = []
@@ -237,7 +241,11 @@ class Store:
                     row=cell["row"],
                     col=cell["col"],
                     value=cell["value"],
-                    origin=Point(x=cell["origin"]["x"], y=cell["origin"]["y"]) if cell.get("origin") else None,
+                    origin=(
+                        Point(x=cell["origin"]["x"], y=cell["origin"]["y"])
+                        if cell.get("origin")
+                        else None
+                    ),
                 )
                 for cell in cells_raw
             ]
@@ -270,8 +278,7 @@ class Store:
                 "SELECT d.doc_id, d.filename, d.page_count, d.created_at, "
                 "(SELECT COUNT(*) FROM units u WHERE u.doc_id = d.doc_id), "
                 "(SELECT COUNT(*) FROM bijections b WHERE b.doc_id = d.doc_id), "
-                "(SELECT COUNT(*) FROM grids g WHERE g.doc_id = d.doc_id) "
-                "FROM documents d"
+                "(SELECT COUNT(*) FROM grids g WHERE g.doc_id = d.doc_id) FROM documents d"
             ).fetchall()
         return [
             {

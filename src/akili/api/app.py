@@ -38,7 +38,10 @@ def _cors_origins() -> list[str]:
 
 app = FastAPI(
     title="Akili",
-    description="The Reasoning Control Plane for Mission-Critical Engineering — deterministic verification for technical documentation",
+    description=(
+        "The Reasoning Control Plane for Mission-Critical Engineering — "
+        "deterministic verification for technical documentation"
+    ),
     version="0.1.0",
 )
 
@@ -58,7 +61,9 @@ def _log_env() -> None:
     if key and key.strip():
         logging.getLogger("akili").info("GOOGLE_API_KEY is set (ingest will call Gemini)")
     else:
-        logging.getLogger("akili").warning("GOOGLE_API_KEY is missing or empty — ingest will return 500 until set in .env")
+        logging.getLogger("akili").warning(
+            "GOOGLE_API_KEY is missing or empty — ingest will return 500 until set in .env"
+        )
 
 
 @app.get("/status")
@@ -75,9 +80,11 @@ def status() -> JSONResponse:
         content={
             "ok": True,
             "GOOGLE_API_KEY_set": key_set,
-            "message": "GOOGLE_API_KEY is set; ingest can call Gemini."
-            if key_set
-            else "GOOGLE_API_KEY is missing or empty. Set it in .env and ensure the API container uses env_file: .env",
+            "message": (
+                "GOOGLE_API_KEY is set; ingest can call Gemini."
+                if key_set
+                else "GOOGLE_API_KEY is missing or empty. Set it in .env and ensure the API container uses env_file: .env"  # noqa: E501
+            ),
             "AKILI_DB_PATH": db_path,
             "db_dir_exists": db_exists,
         }
@@ -133,7 +140,10 @@ async def ingest(
     if max_bytes > 0 and len(content) > max_bytes:
         raise HTTPException(
             status_code=413,
-            detail=f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override.",
+            detail=(
+                f"File too large (max {max_bytes} bytes). "
+                "Set AKILI_MAX_UPLOAD_BYTES to override."
+            ),
         )
     store = get_store()
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -154,7 +164,10 @@ async def ingest(
         if "429" in err_msg or "Resource exhausted" in err_msg or "ResourceExhausted" in err_msg:
             raise HTTPException(
                 status_code=429,
-                detail="Gemini rate limit (429). Please wait a minute and try again. See https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429",
+                detail=(
+                    "Gemini rate limit (429). Please wait a minute and try again. "
+                    "See https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429"
+                ),
             ) from e
         raise HTTPException(status_code=500, detail=err_msg) from e
     finally:
@@ -162,7 +175,9 @@ async def ingest(
     units = [o for o in canonical if o.__class__.__name__ == "Unit"]
     bijections = [o for o in canonical if o.__class__.__name__ == "Bijection"]
     grids = [o for o in canonical if o.__class__.__name__ == "Grid"]
-    page_count = (max((getattr(o, "page", 0) for o in canonical), default=-1) + 1) if canonical else 0
+    page_count = (
+        (max((getattr(o, "page", 0) for o in canonical), default=-1) + 1) if canonical else 0
+    )
     return JSONResponse(
         content={
             "doc_id": doc_id,
@@ -212,7 +227,10 @@ async def get_document_file(
     _validate_doc_id(doc_id)
     dest = _docs_dir() / f"{doc_id}.pdf"
     if not dest.is_file():
-        raise HTTPException(status_code=404, detail="Document file not found (ingested before PDF storage was added)")
+        raise HTTPException(
+            status_code=404,
+            detail="Document file not found (ingested before PDF storage was added)",
+        )
     return FileResponse(dest, media_type="application/pdf", filename=f"{doc_id}.pdf")
 
 
@@ -235,7 +253,10 @@ async def get_canonical(
             "label": getattr(u, "label", None),
             "value": getattr(u, "value", None),
             "unit_of_measure": getattr(u, "unit_of_measure", None),
-            "origin": {"x": getattr(getattr(u, "origin", None), "x", 0), "y": getattr(getattr(u, "origin", None), "y", 0)},
+            "origin": {
+                "x": getattr(getattr(u, "origin", None), "x", 0),
+                "y": getattr(getattr(u, "origin", None), "y", 0),
+            },
             "page": getattr(u, "page", 0),
         }
 
@@ -244,7 +265,10 @@ async def get_canonical(
             "type": "bijection",
             "id": getattr(b, "id", None),
             "mapping": getattr(b, "mapping", {}),
-            "origin": {"x": getattr(getattr(b, "origin", None), "x", 0), "y": getattr(getattr(b, "origin", None), "y", 0)},
+            "origin": {
+                "x": getattr(getattr(b, "origin", None), "x", 0),
+                "y": getattr(getattr(b, "origin", None), "y", 0),
+            },
             "page": getattr(b, "page", 0),
         }
 
@@ -255,7 +279,10 @@ async def get_canonical(
             "rows": getattr(g, "rows", 0),
             "cols": getattr(g, "cols", 0),
             "cells_count": len(getattr(g, "cells", [])),
-            "origin": {"x": getattr(getattr(g, "origin", None), "x", 0), "y": getattr(getattr(g, "origin", None), "y", 0)},
+            "origin": {
+                "x": getattr(getattr(g, "origin", None), "x", 0),
+                "y": getattr(getattr(g, "origin", None), "y", 0),
+            },
             "page": getattr(g, "page", 0),
         }
 

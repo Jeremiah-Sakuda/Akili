@@ -22,7 +22,9 @@ class AnswerWithProof(BaseModel):
 
     status: str = Field(default="answer", description="Always 'answer'")
     answer: str = Field(..., description="The proven answer")
-    proof: list[ProofPoint] = Field(default_factory=list, description="(x,y) coordinates that support the answer")
+    proof: list[ProofPoint] = Field(
+        default_factory=list, description="(x,y) coordinates that support the answer"
+    )
     source_id: str | None = Field(None, description="Canonical object id")
     source_type: str | None = Field(None, description="unit | bijection | grid")
 

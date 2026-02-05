@@ -25,17 +25,20 @@ def _is_rate_limit_error(e: BaseException) -> bool:
     msg = (getattr(e, "message", None) or str(e)).lower()
     return "429" in msg or "resource exhausted" in msg or "resourceexhausted" in msg
 
-EXTRACT_PROMPT = """You are extracting structured, coordinate-grounded facts from a single page of technical documentation (datasheet, schematic, pinout table, etc.).
 
-Rules:
-- Extract ONLY facts you can tie to a specific (x, y) location on the page. Use normalized coordinates 0.0–1.0 (e.g. top-left = 0,0; bottom-right = 1,1) or estimate from layout.
-- For each fact, provide origin.x and origin.y. If you can infer a bounding box, provide bbox (x1,y1,x2,y2).
-- Output only: units (discrete values like pin labels, voltages with position), bijections (1:1 mappings e.g. pin name <-> pin number), grids (tables with row/col and optional cell origins).
-- Use short, unique ids (e.g. "u1", "b1", "g1"). Leave arrays empty if nothing of that type is on the page.
-- Do not guess. If a coordinate or value is ambiguous, omit that fact.
-
-Respond with a single JSON object with keys: units (array), bijections (array), grids (array). No other text.
-"""
+EXTRACT_PROMPT = (
+    "You are extracting structured, coordinate-grounded facts from a single page of "
+    "technical documentation (datasheet, schematic, pinout table, etc.).\n\n"
+    "Rules:\n"
+    "- Extract ONLY facts you can tie to a specific (x, y) location on the page. "
+    "Use normalized coordinates 0.0–1.0 (e.g. top-left = 0,0; bottom-right = 1,1) or estimate from layout.\n"  # noqa: E501
+    "- For each fact, provide origin.x and origin.y. If you can infer a bounding box, provide bbox (x1,y1,x2,y2).\n"  # noqa: E501
+    "- Output only: units (discrete values like pin labels, voltages with position), "
+    "bijections (1:1 mappings e.g. pin name <-> pin number), grids (tables with row/col and optional cell origins).\n"  # noqa: E501
+    "- Use short, unique ids (e.g. \"u1\", \"b1\", \"g1\"). Leave arrays empty if nothing of that type is on the page.\n"  # noqa: E501
+    "- Do not guess. If a coordinate or value is ambiguous, omit that fact.\n\n"
+    "Respond with a single JSON object with keys: units (array), bijections (array), grids (array). No other text."  # noqa: E501
+)
 
 
 def _ensure_configured() -> None:
@@ -59,10 +62,13 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
             "data": base64.standard_b64encode(image_png_bytes).decode("utf-8"),
         }
     }
-    prompt = f"{EXTRACT_PROMPT}\n\nThis image is page {page_index} of document {doc_id}. Return JSON with keys: units, bijections, grids."
+    prompt = (
+        f"{EXTRACT_PROMPT}\n\n"
+        f"This image is page {page_index} of document {doc_id}. "
+        "Return JSON with keys: units, bijections, grids."
+    )
     contents = [prompt, image_part]
 
-    last_error: BaseException | None = None
     for attempt in range(_GEMINI_MAX_RETRIES):
         try:
             try:
@@ -72,9 +78,9 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
                 )
                 response = model.generate_content(contents, generation_config=generation_config)
             except (TypeError, AttributeError, ValueError):
-                # Gemini API does not accept JSON Schema with $defs (from Pydantic); use prompt-only and parse JSON
+                # Gemini API does not accept JSON Schema with $defs (from Pydantic);
+                # use prompt-only and parse JSON
                 response = model.generate_content(contents)
-            last_error = None
             break
         except Exception as e:
             if _is_rate_limit_error(e) and attempt < _GEMINI_MAX_RETRIES - 1:
@@ -83,7 +89,9 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
                 continue
             raise
 
-    text = getattr(response, "text", None) or (response.candidates[0].content.parts[0].text if response.candidates else "")
+    text = getattr(response, "text", None) or (
+        response.candidates[0].content.parts[0].text if response.candidates else ""
+    )
     if not text or not text.strip():
         return PageExtraction(units=[], bijections=[], grids=[])
 

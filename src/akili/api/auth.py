@@ -18,10 +18,12 @@ _http_bearer = HTTPBearer(auto_error=False)
 
 
 def _init_firebase() -> bool:
-    """Initialize Firebase Admin if auth is required and project is set. Returns True if auth is active."""
+    """Initialize Firebase Admin if auth is required and project is set. Returns True if active."""
     if os.environ.get("AKILI_REQUIRE_AUTH", "").strip() not in ("1", "true", "yes"):
         return False
-    project_id = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("VITE_FIREBASE_PROJECT_ID")
+    project_id = (
+        os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("VITE_FIREBASE_PROJECT_ID")
+    )
     if not project_id or not project_id.strip():
         return False
     try:

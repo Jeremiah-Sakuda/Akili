@@ -39,6 +39,9 @@ jobs:
       - name: Ruff (lint)
         run: ruff check src tests
 
+      - name: Flake8
+        run: flake8 src tests
+
       - name: Ruff (format check)
         run: ruff format --check src tests
 

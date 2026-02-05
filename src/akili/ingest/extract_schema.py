@@ -71,6 +71,10 @@ class GridExtract(BaseModel):
 class PageExtraction(BaseModel):
     """Full extraction for one page: units, bijections, grids."""
 
-    units: list[UnitExtract] = Field(default_factory=list, description="Discrete facts with coordinates")
+    units: list[UnitExtract] = Field(
+        default_factory=list, description="Discrete facts with coordinates"
+    )
     bijections: list[BijectionExtract] = Field(default_factory=list, description="1:1 mappings")
-    grids: list[GridExtract] = Field(default_factory=list, description="Tables/grids with cell coordinates")
+    grids: list[GridExtract] = Field(
+        default_factory=list, description="Tables/grids with cell coordinates"
+    )
