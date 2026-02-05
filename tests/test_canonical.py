@@ -1,7 +1,5 @@
 """Tests for canonical models (Unit, Bijection, Grid)."""
 
-import pytest
-
 from akili.canonical import Bijection, Grid, Point, Unit
 
 

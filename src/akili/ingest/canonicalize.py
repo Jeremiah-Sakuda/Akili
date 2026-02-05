@@ -10,7 +10,6 @@ from akili.canonical import Bijection, Grid, Point, Unit
 from akili.canonical.models import BBox, GridCell
 from akili.ingest.extract_schema import (
     BijectionExtract,
-    GridCellExtract,
     GridExtract,
     PageExtraction,
     UnitExtract,

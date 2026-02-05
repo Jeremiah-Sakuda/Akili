@@ -1,7 +1,5 @@
 """Tests for verification layer (proof + REFUSE)."""
 
-import pytest
-
 from akili.canonical import Bijection, Grid, Point, Unit
 from akili.canonical.models import GridCell
 from akili.verify import Refuse, verify_and_answer

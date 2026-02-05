@@ -77,7 +77,6 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
             last_error = None
             break
         except Exception as e:
-            last_error = e
             if _is_rate_limit_error(e) and attempt < _GEMINI_MAX_RETRIES - 1:
                 wait = _GEMINI_BACKOFF_BASE * (2**attempt)
                 time.sleep(wait)

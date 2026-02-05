@@ -5,7 +5,6 @@ Proof rules: derive answer from canonical facts; deterministic REFUSE if not pro
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from akili.canonical import Bijection, Grid, Unit
 from akili.verify.models import AnswerWithProof, ProofPoint, Refuse
