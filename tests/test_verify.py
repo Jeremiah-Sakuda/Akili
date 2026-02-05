@@ -31,8 +31,8 @@ def test_pin_lookup_via_bijection():
 
 
 def test_max_voltage_from_units():
-    u1 = Unit(id="v1", value=3.3, unit_of_measure="V", origin=Point(0.1, 0.1), doc_id="d", page=0)
-    u2 = Unit(id="v2", value=5.0, unit_of_measure="V", origin=Point(0.2, 0.2), doc_id="d", page=0)
+    u1 = Unit(id="v1", value=3.3, unit_of_measure="V", origin=Point(x=0.1, y=0.1), doc_id="d", page=0)
+    u2 = Unit(id="v2", value=5.0, unit_of_measure="V", origin=Point(x=0.2, y=0.2), doc_id="d", page=0)
     result = verify_and_answer("What is the maximum voltage?", [u1, u2], [], [])
     assert result is not None
     assert not isinstance(result, Refuse)
@@ -47,14 +47,14 @@ def test_pin_lookup_via_grid_returns_name():
         rows=3,
         cols=2,
         cells=[
-            GridCell(row=0, col=0, value="Pin", origin=Point(0.1, 0.1)),
-            GridCell(row=0, col=1, value="Name", origin=Point(0.5, 0.1)),
-            GridCell(row=1, col=0, value="5", origin=Point(0.1, 0.2)),
-            GridCell(row=1, col=1, value="VCC", origin=Point(0.5, 0.2)),
-            GridCell(row=2, col=0, value="6", origin=Point(0.1, 0.3)),
-            GridCell(row=2, col=1, value="GND", origin=Point(0.5, 0.3)),
+            GridCell(row=0, col=0, value="Pin", origin=Point(x=0.1, y=0.1)),
+            GridCell(row=0, col=1, value="Name", origin=Point(x=0.5, y=0.1)),
+            GridCell(row=1, col=0, value="5", origin=Point(x=0.1, y=0.2)),
+            GridCell(row=1, col=1, value="VCC", origin=Point(x=0.5, y=0.2)),
+            GridCell(row=2, col=0, value="6", origin=Point(x=0.1, y=0.3)),
+            GridCell(row=2, col=1, value="GND", origin=Point(x=0.5, y=0.3)),
         ],
-        origin=Point(0, 0),
+        origin=Point(x=0, y=0),
         doc_id="doc1",
         page=0,
     )
