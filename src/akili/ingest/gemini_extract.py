@@ -57,7 +57,8 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
             response_schema=PageExtraction.model_json_schema(),
         )
         response = model.generate_content(contents, generation_config=generation_config)
-    except (TypeError, AttributeError):
+    except (TypeError, AttributeError, ValueError):
+        # Gemini API does not accept JSON Schema with $defs (from Pydantic); use prompt-only and parse JSON
         response = model.generate_content(contents)
 
     text = getattr(response, "text", None) or (response.candidates[0].content.parts[0].text if response.candidates else "")

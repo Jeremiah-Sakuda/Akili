@@ -62,7 +62,10 @@ export async function ingest(file: File): Promise<IngestResponse> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? 'Ingest failed');
+    const detail = err.detail;
+    const message = Array.isArray(detail) ? detail.join(' ') : detail ?? 'Ingest failed';
+    console.error('[Akili ingest]', res.status, message);
+    throw new Error(message);
   }
   return res.json();
 }

@@ -137,6 +137,42 @@ One-command run for API + frontend with a persistent SQLite store.
 
 ---
 
+## Testing the API (no UI, no restart)
+
+Check each part of the API in isolation from the host (no Docker restart after the first time).
+
+1. **Status (env + DB)**  
+   In a browser or with curl (use the port your API is on — e.g. 8001 if that’s how you run it):
+   ```text
+   http://localhost:8001/status
+   ```
+   Response includes `GOOGLE_API_KEY_set: true|false` and DB path. If the key is missing, set it in `.env` and ensure the API container uses `env_file: .env`.
+
+2. **Documents**  
+   ```text
+   http://localhost:8001/documents
+   ```
+
+3. **Script (PowerShell, from repo root)**  
+   ```powershell
+   .\scripts\test-api.ps1
+   ```
+   Prints status and documents. To test ingest with a PDF:
+   ```powershell
+   .\scripts\test-api.ps1 -PdfPath .\path\to\your.pdf
+   ```
+   The script prints the **exact API error body** if ingest returns 500 (e.g. missing key, Gemini error).
+
+You only need to restart the API once after adding these; after that, run the script or hit `/status` anytime to verify.
+
+**If the test script says "Could not reach API":**  
+- The **backend does not connect to another project**. The frontend (port 3001) proxies `/api` to the API container (`api:8000`). The script runs on your machine and hits the API’s published port (8000).  
+- Run `docker compose logs api` — if the API process crashed, you’ll see the error.  
+- Run `docker compose ps` — confirm the API container shows port 8000.  
+- Then run: `.\scripts\test-api.ps1 -BaseUrl 'http://localhost:8000'` (use the port that matches `docker compose ps`).
+
+---
+
 ## Getting Started
 
 ### Backend (API)

@@ -1,4 +1,16 @@
-/* Base styles; Tailwind is loaded via CDN in index.html */
+@import "tailwindcss";
+
+/* Tailwind v4 theme (CSS-first); extend defaults */
+@theme {
+  --color-primary: #0066cc;
+  --color-background-light: #f5f7f8;
+  --color-background-dark: #0f1923;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --shadow-soft: 0 0 20px rgba(0, 0, 0, 0.05);
+}
+
 :root {
   font-family: Inter, system-ui, sans-serif;
 }

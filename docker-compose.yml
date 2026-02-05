@@ -29,8 +29,8 @@ services:
     environment:
       - VITE_PROXY_TARGET=http://api:8000
     volumes:
-      # Mount .env so Vite can load VITE_* vars (dev server reads from file)
-      - ./.env:/app/.env:ro
+      # Mount .env at container root so Vite (envDir = projectRoot = /) can load VITE_* vars
+      - ./.env:/.env:ro
     depends_on:
       api:
         condition: service_healthy

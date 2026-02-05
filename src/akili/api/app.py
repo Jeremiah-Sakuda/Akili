@@ -31,6 +31,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.on_event("startup")
+def _log_env() -> None:
+    import logging
+    key = os.environ.get("GOOGLE_API_KEY")
+    if key and key.strip():
+        logging.getLogger("akili").info("GOOGLE_API_KEY is set (ingest will call Gemini)")
+    else:
+        logging.getLogger("akili").warning("GOOGLE_API_KEY is missing or empty — ingest will return 500 until set in .env")
+
+
+@app.get("/status")
+def status() -> JSONResponse:
+    """
+    Check API and env without running ingest. Call this to verify GOOGLE_API_KEY and DB.
+    No restart needed — hit GET http://localhost:8000/status (or via proxy /api/status).
+    """
+    key = os.environ.get("GOOGLE_API_KEY")
+    key_set = bool(key and key.strip())
+    db_path = os.environ.get("AKILI_DB_PATH", "akili.db")
+    db_exists = Path(db_path).parent.exists() if db_path else False
+    return JSONResponse(
+        content={
+            "ok": True,
+            "GOOGLE_API_KEY_set": key_set,
+            "message": "GOOGLE_API_KEY is set; ingest can call Gemini."
+            if key_set
+            else "GOOGLE_API_KEY is missing or empty. Set it in .env and ensure the API container uses env_file: .env",
+            "AKILI_DB_PATH": db_path,
+            "db_dir_exists": db_exists,
+        }
+    )
+
+
 # Default store (SQLite in cwd); override via dependency if needed
 _store: Store | None = None
 
@@ -67,6 +101,15 @@ async def ingest(file: UploadFile = File(...)) -> JSONResponse:
         tmp_path = Path(tmp.name)
     try:
         doc_id, canonical = ingest_document(tmp_path, store=store)
+    except Exception as e:
+        err_msg = str(e)
+        # Gemini/Vertex rate limit (429) — return 429 so the UI can show a clear message
+        if "429" in err_msg or "Resource exhausted" in err_msg or "ResourceExhausted" in err_msg:
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini rate limit (429). Please wait a minute and try again. See https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429",
+            ) from e
+        raise HTTPException(status_code=500, detail=err_msg) from e
     finally:
         tmp_path.unlink(missing_ok=True)
     units = [o for o in canonical if o.__class__.__name__ == "Unit"]

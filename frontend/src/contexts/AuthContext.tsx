@@ -1,7 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { getFirebaseAuth } from '../firebase';
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+import {
+  GoogleAuthProvider,
+  getRedirectResult,
+  onAuthStateChanged,
+  signInWithRedirect,
+  signOut as firebaseSignOut,
+} from 'firebase/auth';
 
 interface AuthContextValue {
   user: User | null;
@@ -28,13 +34,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u);
       setLoading(false);
     });
+    getRedirectResult(auth).catch(() => {});
     return () => unsubscribe();
   }, [auth]);
 
   const signInWithGoogle = useCallback(async () => {
     if (!auth) return;
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    await signInWithRedirect(auth, provider);
   }, [auth]);
 
   const signOut = useCallback(async () => {
