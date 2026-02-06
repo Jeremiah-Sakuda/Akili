@@ -41,10 +41,18 @@ export interface IngestResponse {
   grids_count: number;
 }
 
+export interface ProofPointBBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
 export interface ProofPoint {
   x: number;
   y: number;
   page?: number;
+  bbox?: ProofPointBBox | null;
   source_id?: string | null;
   source_type?: string | null;
 }

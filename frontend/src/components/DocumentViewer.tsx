@@ -197,21 +197,45 @@ const PageWithOverlay: React.FC<PageWithOverlayProps> = ({
           className="absolute inset-0 pointer-events-none"
           style={{ width: pageSize.width, height: pageSize.height }}
         >
-          {proofPoints.map((p, i) => (
-            <div
-              key={i}
-              className="absolute border-2 border-emerald-500 bg-emerald-500/30 rounded"
-              style={{
-                left: `${(p.x - 0.02) * 100}%`,
-                top: `${(p.y - 0.02) * 100}%`,
-                width: '4%',
-                height: '4%',
-                minWidth: 12,
-                minHeight: 12,
-              }}
-              title={`Proof (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`}
-            />
-          ))}
+          {proofPoints.map((p, i) => {
+            // Normalized 0–1: prompt says top-left origin, y down. If overlay still looks
+            // vertically off, the model may use y-up; flip point for display.
+            const flipY = (y: number) => 1 - y;
+            if (p.bbox) {
+              const { x1, y1, x2, y2 } = p.bbox;
+              return (
+                <div
+                  key={i}
+                  className="absolute border-2 border-emerald-500 bg-emerald-500/30 rounded"
+                  style={{
+                    left: `${x1 * 100}%`,
+                    top: `${y1 * 100}%`,
+                    width: `${(x2 - x1) * 100}%`,
+                    height: `${(y2 - y1) * 100}%`,
+                    minWidth: 8,
+                    minHeight: 8,
+                  }}
+                  title={`Proof (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`}
+                />
+              );
+            }
+            const top = flipY(p.y);
+            return (
+              <div
+                key={i}
+                className="absolute border-2 border-emerald-500 bg-emerald-500/30 rounded"
+                style={{
+                  left: `${(p.x - 0.02) * 100}%`,
+                  top: `${(top - 0.02) * 100}%`,
+                  width: '4%',
+                  height: '4%',
+                  minWidth: 12,
+                  minHeight: 12,
+                }}
+                title={`Proof (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`}
+              />
+            );
+          })}
         </div>
       )}
     </div>

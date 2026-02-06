@@ -133,7 +133,7 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
                     <li className="text-slate-400">No units</li>
                   ) : (
                     canonical.units.map((u, i) => (
-                      <li key={u.id ?? i} className="p-2 rounded bg-slate-50 border border-slate-100">
+                      <li key={`unit-${i}`} className="p-2 rounded bg-slate-50 border border-slate-100">
                         <span className="text-slate-500">{u.id}</span> {u.label ?? ''} {String(u.value)}{u.unit_of_measure ? ` ${u.unit_of_measure}` : ''}
                         <br />
                         <span className="text-slate-400">p{u.page} (x:{u.origin.x.toFixed(2)}, y:{u.origin.y.toFixed(2)})</span>
@@ -147,7 +147,7 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
                     <li className="text-slate-400">No bijections</li>
                   ) : (
                     canonical.bijections.map((b, i) => (
-                      <li key={b.id ?? i} className="p-2 rounded bg-slate-50 border border-slate-100">
+                      <li key={`bijection-${i}`} className="p-2 rounded bg-slate-50 border border-slate-100">
                         <span className="text-slate-500">{b.id}</span> {Object.entries(b.mapping).slice(0, 3).map(([k, v]) => `${k}→${v}`).join(', ')}
                         {Object.keys(b.mapping).length > 3 ? '…' : ''}
                         <br />
@@ -162,7 +162,7 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
                     <li className="text-slate-400">No grids</li>
                   ) : (
                     canonical.grids.map((g, i) => (
-                      <li key={g.id ?? i} className="p-2 rounded bg-slate-50 border border-slate-100">
+                      <li key={`grid-${i}`} className="p-2 rounded bg-slate-50 border border-slate-100">
                         <span className="text-slate-500">{g.id}</span> {g.rows}×{g.cols} ({g.cells_count} cells)
                         <br />
                         <span className="text-slate-400">p{g.page} (x:{g.origin.x.toFixed(2)}, y:{g.origin.y.toFixed(2)})</span>

@@ -42,9 +42,12 @@ def ingest_document(
     for i, (page_index, image_bytes) in enumerate(pages):
         if i > 0 and _PAGE_DELAY > 0:
             time.sleep(_PAGE_DELAY)
-        extraction = gemini_extract_page(page_index, image_bytes, doc_id)
-        canonical = canonicalize_page(extraction, doc_id, page_index)
-        all_canonical.extend(canonical)
+        try:
+            extraction = gemini_extract_page(page_index, image_bytes, doc_id)
+            canonical = canonicalize_page(extraction, doc_id, page_index)
+            all_canonical.extend(canonical)
+        except Exception:
+            continue
 
     if store is not None:
         units = [o for o in all_canonical if isinstance(o, Unit)]

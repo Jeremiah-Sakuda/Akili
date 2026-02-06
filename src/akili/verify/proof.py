@@ -7,17 +7,20 @@ from __future__ import annotations
 import re
 
 from akili.canonical import Bijection, Grid, Unit
-from akili.verify.models import AnswerWithProof, ProofPoint, Refuse
+from akili.verify.models import AnswerWithProof, ProofPoint, ProofPointBBox, Refuse
 
 
 def _proof_point(
     x: float,
     y: float,
     page: int = 0,
+    bbox: ProofPointBBox | None = None,
     source_id: str | None = None,
     source_type: str | None = None,
 ) -> ProofPoint:
-    return ProofPoint(x=x, y=y, page=page, source_id=source_id, source_type=source_type)
+    return ProofPoint(
+        x=x, y=y, page=page, bbox=bbox, source_id=source_id, source_type=source_type
+    )
 
 
 def _try_pin_lookup(
@@ -32,17 +35,25 @@ def _try_pin_lookup(
         for b in bijections:
             right = b.get_right(n)
             if right is not None:
+                bbox = (
+                    ProofPointBBox(x1=b.bbox.x1, y1=b.bbox.y1, x2=b.bbox.x2, y2=b.bbox.y2)
+                    if b.bbox else None
+                )
                 return AnswerWithProof(
                     answer=right,
-                    proof=[_proof_point(b.origin.x, b.origin.y, b.page, b.id, "bijection")],
+                    proof=[_proof_point(b.origin.x, b.origin.y, b.page, bbox, b.id, "bijection")],
                     source_id=b.id,
                     source_type="bijection",
                 )
             left = b.get_left(n)
             if left is not None:
+                bbox = (
+                    ProofPointBBox(x1=b.bbox.x1, y1=b.bbox.y1, x2=b.bbox.x2, y2=b.bbox.y2)
+                    if b.bbox else None
+                )
                 return AnswerWithProof(
                     answer=left,
-                    proof=[_proof_point(b.origin.x, b.origin.y, b.page, b.id, "bijection")],
+                    proof=[_proof_point(b.origin.x, b.origin.y, b.page, bbox, b.id, "bijection")],
                     source_id=b.id,
                     source_type="bijection",
                 )
@@ -59,9 +70,13 @@ def _try_pin_lookup(
                         if not name_cell and col > 0:
                             name_cell = g.get_cell(row, col - 1)
                         answer_val = str(name_cell.value) if name_cell else str(cell.value)
+                        bbox = (
+                            ProofPointBBox(x1=g.bbox.x1, y1=g.bbox.y1, x2=g.bbox.x2, y2=g.bbox.y2)
+                            if g.bbox else None
+                        )
                         return AnswerWithProof(
                             answer=answer_val,
-                            proof=[_proof_point(ox, oy, g.page, g.id, "grid")],
+                            proof=[_proof_point(ox, oy, g.page, bbox, g.id, "grid")],
                             source_id=g.id,
                             source_type="grid",
                         )
@@ -96,9 +111,13 @@ def _try_voltage_max(question: str, units: list[Unit]) -> AnswerWithProof | None
     if not numeric:
         return None
     max_u = max(numeric, key=lambda x: x[0])[1]
+    bbox = (
+        ProofPointBBox(x1=max_u.bbox.x1, y1=max_u.bbox.y1, x2=max_u.bbox.x2, y2=max_u.bbox.y2)
+        if max_u.bbox else None
+    )
     return AnswerWithProof(
         answer=f"{max_u.value} {max_u.unit_of_measure or ''}".strip(),
-        proof=[_proof_point(max_u.origin.x, max_u.origin.y, max_u.page, max_u.id, "unit")],
+        proof=[_proof_point(max_u.origin.x, max_u.origin.y, max_u.page, bbox, max_u.id, "unit")],
         source_id=max_u.id,
         source_type="unit",
     )
@@ -108,17 +127,21 @@ def _try_unit_lookup(question: str, units: list[Unit]) -> AnswerWithProof | None
     """Look for label or value mention in question and match a unit."""
     question_lower = question.lower()
     for u in units:
+        bbox = (
+            ProofPointBBox(x1=u.bbox.x1, y1=u.bbox.y1, x2=u.bbox.x2, y2=u.bbox.y2)
+            if u.bbox else None
+        )
         if u.label and u.label.lower() in question_lower:
             return AnswerWithProof(
                 answer=f"{u.value} {u.unit_of_measure or ''}".strip(),
-                proof=[_proof_point(u.origin.x, u.origin.y, u.page, u.id, "unit")],
+                proof=[_proof_point(u.origin.x, u.origin.y, u.page, bbox, u.id, "unit")],
                 source_id=u.id,
                 source_type="unit",
             )
         if str(u.value).lower() in question_lower:
             return AnswerWithProof(
                 answer=f"{u.value} {u.unit_of_measure or ''}".strip(),
-                proof=[_proof_point(u.origin.x, u.origin.y, u.page, u.id, "unit")],
+                proof=[_proof_point(u.origin.x, u.origin.y, u.page, bbox, u.id, "unit")],
                 source_id=u.id,
                 source_type="unit",
             )

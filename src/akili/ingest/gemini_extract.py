@@ -9,16 +9,22 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import time
 
 import google.generativeai as genai
+from pydantic import ValidationError
 
 from akili.ingest.extract_schema import PageExtraction
+
+logger = logging.getLogger(__name__)
 
 # Retry 429 / resource exhausted: max attempts, backoff base seconds
 _GEMINI_MAX_RETRIES = int(os.environ.get("AKILI_GEMINI_MAX_RETRIES", "4"))
 _GEMINI_BACKOFF_BASE = float(os.environ.get("AKILI_GEMINI_BACKOFF_BASE", "4.0"))
+# Model: e.g. gemini-2.0-flash (default), gemini-3-flash-preview, gemini-3-pro-preview
+_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-2.0-flash")
 
 
 def _is_rate_limit_error(e: BaseException) -> bool:
@@ -41,6 +47,111 @@ EXTRACT_PROMPT = (
 )
 
 
+def _normalize_origin(origin: object) -> dict | None:
+    """Return {x, y} dict with numeric x,y; accept dict or [x,y] list."""
+    if isinstance(origin, dict):
+        x, y = origin.get("x"), origin.get("y")
+        if (
+            x is not None
+            and y is not None
+            and isinstance(x, (int, float))
+            and isinstance(y, (int, float))
+        ):
+            return {"x": float(x), "y": float(y)}
+        return None
+    if isinstance(origin, (list, tuple)) and len(origin) >= 2:
+        try:
+            return {"x": float(origin[0]), "y": float(origin[1])}
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _normalize_bbox(bbox: object) -> dict | None:
+    """Return {x1, y1, x2, y2} dict; accept dict or [x1,y1,x2,y2] list."""
+    if isinstance(bbox, dict):
+        x1, y1 = bbox.get("x1"), bbox.get("y1")
+        x2, y2 = bbox.get("x2"), bbox.get("y2")
+        if (
+            x1 is not None
+            and y1 is not None
+            and x2 is not None
+            and y2 is not None
+            and all(isinstance(v, (int, float)) for v in (x1, y1, x2, y2))
+        ):
+            return {"x1": float(x1), "y1": float(y1), "x2": float(x2), "y2": float(y2)}
+        return None
+    if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+        try:
+            return {
+                "x1": float(bbox[0]),
+                "y1": float(bbox[1]),
+                "x2": float(bbox[2]),
+                "y2": float(bbox[3]),
+            }
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _normalize_extraction(data: dict, page_index: int = 0) -> dict:
+    """
+    Normalize Gemini response to match PageExtraction schema.
+    Units: ensure id and value (from value/text/label/content); normalize origin; drop invalid.
+    Ids are namespaced by page_index (e.g. p0_u0, p1_u0) so they are unique across pages.
+    Bijections/grids: ensure list and fill missing id with same namespacing.
+    """
+    if not isinstance(data, dict):
+        return {"units": [], "bijections": [], "grids": []}
+
+    page_prefix = f"p{page_index}_"
+    units_raw = data.get("units")
+    if not isinstance(units_raw, list):
+        data["units"] = []
+    else:
+        kept = []
+        for i, u in enumerate(units_raw):
+            if not isinstance(u, dict):
+                continue
+            origin = _normalize_origin(u.get("origin"))
+            if origin is None:
+                continue
+            # Value: prefer value, then text/label/content; fallback "" so schema validates
+            val = u.get("value")
+            if val is None:
+                val = u.get("text") or u.get("label") or u.get("content")
+            if val is None:
+                val = ""
+            # Id: must be string; use existing if non-empty else p{page}_u{i} for global uniqueness
+            uid = u.get("id")
+            if not isinstance(uid, str) or not uid.strip():
+                uid = f"{page_prefix}u{i}"
+            uom = u.get("unit_of_measure")
+            bbox = _normalize_bbox(u.get("bbox"))
+            kept.append({
+                "id": uid,
+                "label": u.get("label") if isinstance(u.get("label"), str) else None,
+                "value": val,
+                "unit_of_measure": uom if isinstance(uom, str) else None,
+                "origin": origin,
+                "bbox": bbox,
+            })
+        data["units"] = kept
+
+    for key, prefix in (("bijections", "b"), ("grids", "g")):
+        items = data.get(key)
+        if not isinstance(items, list):
+            data[key] = []
+        else:
+            for i, item in enumerate(items):
+                if isinstance(item, dict):
+                    if item.get("id") is None or item.get("id") == "":
+                        item["id"] = f"{page_prefix}{prefix}{i}"
+                    if not isinstance(item.get("bbox"), dict) and item.get("bbox") is not None:
+                        item["bbox"] = _normalize_bbox(item["bbox"])
+    return data
+
+
 def _ensure_configured() -> None:
     if not os.environ.get("GOOGLE_API_KEY"):
         raise ValueError("GOOGLE_API_KEY environment variable is required for Gemini extraction")
@@ -55,7 +166,7 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
     _ensure_configured()
     genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel(_GEMINI_MODEL)
     image_part = {
         "inline_data": {
             "mime_type": "image/png",
@@ -89,13 +200,23 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
                 continue
             raise
 
-    text = getattr(response, "text", None) or (
-        response.candidates[0].content.parts[0].text if response.candidates else ""
-    )
-    if not text or not text.strip():
+    text = ""
+    if hasattr(response, "text") and response.text:
+        text = response.text
+    else:
+        candidates = getattr(response, "candidates", None) or []
+        if candidates:
+            c = candidates[0]
+            content = getattr(c, "content", None)
+            parts = getattr(content, "parts", None) if content else None
+            if content and parts:
+                part = parts[0]
+                if hasattr(part, "text") and part.text:
+                    text = part.text
+    text = (text or "").strip()
+    if not text:
         return PageExtraction(units=[], bijections=[], grids=[])
 
-    text = text.strip()
     if text.startswith("```"):
         lines = text.split("\n")
         if lines[0].startswith("```"):
@@ -108,4 +229,15 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
     except json.JSONDecodeError:
         return PageExtraction(units=[], bijections=[], grids=[])
 
-    return PageExtraction.model_validate(data)
+    data = _normalize_extraction(data, page_index)
+    try:
+        return PageExtraction.model_validate(data)
+    except ValidationError as e:
+        logger.exception(
+            "PageExtraction validation failed (returning empty extraction). Full error: %s",
+            e,
+        )
+        if hasattr(e, "errors") and e.errors:
+            for err in e.errors:
+                logger.error("Validation error detail: %s", err)
+        return PageExtraction(units=[], bijections=[], grids=[])
