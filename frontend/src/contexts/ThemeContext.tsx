@@ -1,0 +1,53 @@
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+
+const STORAGE_KEY = 'akili-theme';
+
+export type Theme = 'light' | 'dark' | 'very-dark';
+
+const THEMES: Theme[] = ['light', 'dark', 'very-dark'];
+
+function getInitialTheme(): Theme {
+  if (typeof window === 'undefined') return 'light';
+  const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
+  if (stored === 'dark' || stored === 'light' || stored === 'very-dark') return stored;
+  if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
+}
+
+interface ThemeContextValue {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  themes: Theme[];
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark', 'very-dark');
+    if (theme === 'dark') root.classList.add('dark');
+    else if (theme === 'very-dark') {
+      root.classList.add('dark', 'very-dark');
+    }
+    localStorage.setItem(STORAGE_KEY, theme);
+  }, [theme]);
+
+  const setTheme = useCallback((value: Theme) => {
+    setThemeState(value);
+  }, []);
+
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme, themes: THEMES }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme(): ThemeContextValue {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useTheme must be used within ThemeProvider');
+  return ctx;
+}

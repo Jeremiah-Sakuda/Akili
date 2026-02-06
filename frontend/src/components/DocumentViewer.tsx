@@ -76,15 +76,18 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ docId, overlayProof }) 
     };
   }, []);
 
-  // Scroll to first proof page when overlayProof is set
+  // Scroll to first proof page when overlayProof is set (delay so refs are populated)
   useEffect(() => {
     if (!overlayProof?.length) return;
     const first = overlayProof[0];
     const page = first?.page ?? 0;
-    const el = pageRefsRef.current.get(page);
-    if (el && containerRef.current) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    const t = setTimeout(() => {
+      const el = pageRefsRef.current.get(page);
+      if (el && containerRef.current) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
+    return () => clearTimeout(t);
   }, [overlayProof]);
 
   const setPageRef = useCallback((pageIndex: number, el: HTMLDivElement | null) => {
@@ -93,32 +96,32 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ docId, overlayProof }) 
 
   if (!docId) {
     return (
-      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-[#525659]">
-        <div className="text-slate-400 text-sm">Select a document to view</div>
+      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-gray-100 dark:bg-[#0d1117]">
+        <div className="text-gray-500 dark:text-gray-400 text-sm">Select a document to view</div>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-[#525659]">
-        <div className="text-slate-300 text-sm">Loading PDF…</div>
+      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-gray-100 dark:bg-[#0d1117]">
+        <div className="text-gray-600 dark:text-gray-400 text-sm">Loading PDF…</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-[#525659]">
-        <div className="text-amber-200 text-sm max-w-md text-center">{error}</div>
+      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-gray-100 dark:bg-[#0d1117]">
+        <div className="text-amber-700 dark:text-amber-400 text-sm max-w-md text-center">{error}</div>
       </div>
     );
   }
 
   if (!pdfDoc) {
     return (
-      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-[#525659]">
-        <div className="text-slate-400 text-sm">No document loaded</div>
+      <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center bg-gray-100 dark:bg-[#0d1117]">
+        <div className="text-gray-500 dark:text-gray-400 text-sm">No document loaded</div>
       </div>
     );
   }
@@ -126,7 +129,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ docId, overlayProof }) 
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto p-6 flex flex-col items-center gap-6 bg-[#525659]"
+      className="flex-1 overflow-y-auto p-6 flex flex-col items-center gap-6 bg-gray-200 dark:bg-[#161b22]"
     >
       {Array.from({ length: numPages }, (_, i) => i).map((pageIndex) => (
         <PageWithOverlay
@@ -188,7 +191,7 @@ const PageWithOverlay: React.FC<PageWithOverlayProps> = ({
   return (
     <div
       ref={(el) => setPageRef(pageIndex, el)}
-      className="relative bg-white shadow-lg"
+      className="relative bg-white border border-gray-300 dark:border-[#30363d]"
       style={pageSize ? { width: pageSize.width, height: pageSize.height } : undefined}
     >
       <canvas ref={canvasRef} className="block" />
@@ -198,39 +201,22 @@ const PageWithOverlay: React.FC<PageWithOverlayProps> = ({
           style={{ width: pageSize.width, height: pageSize.height }}
         >
           {proofPoints.map((p, i) => {
-            // Normalized 0–1: prompt says top-left origin, y down. If overlay still looks
-            // vertically off, the model may use y-up; flip point for display.
-            const flipY = (y: number) => 1 - y;
-            if (p.bbox) {
-              const { x1, y1, x2, y2 } = p.bbox;
-              return (
-                <div
-                  key={i}
-                  className="absolute border-2 border-emerald-500 bg-emerald-500/30 rounded"
-                  style={{
-                    left: `${x1 * 100}%`,
-                    top: `${y1 * 100}%`,
-                    width: `${(x2 - x1) * 100}%`,
-                    height: `${(y2 - y1) * 100}%`,
-                    minWidth: 8,
-                    minHeight: 8,
-                  }}
-                  title={`Proof (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`}
-                />
-              );
-            }
-            const top = flipY(p.y);
+            // Full-width horizontal band: 18% of page height, centered on proof y (normalized 0–1, top-left origin).
+            const bandHeight = 0.18;
+            const half = bandHeight / 2;
+            const centerY = p.bbox
+              ? (p.bbox.y1 + p.bbox.y2) / 2
+              : p.y;
+            const top = Math.max(0, Math.min(1 - bandHeight, centerY - half));
             return (
               <div
                 key={i}
-                className="absolute border-2 border-emerald-500 bg-emerald-500/30 rounded"
+                className="absolute border-2 border-emerald-500 dark:border-emerald-400 bg-emerald-500/20 dark:bg-emerald-400/20"
                 style={{
-                  left: `${(p.x - 0.02) * 100}%`,
-                  top: `${(top - 0.02) * 100}%`,
-                  width: '4%',
-                  height: '4%',
-                  minWidth: 12,
-                  minHeight: 12,
+                  left: 0,
+                  top: `${top * 100}%`,
+                  width: '100%',
+                  height: `${bandHeight * 100}%`,
                 }}
                 title={`Proof (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`}
               />

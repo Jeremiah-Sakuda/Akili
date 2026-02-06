@@ -64,6 +64,11 @@ const App: React.FC = () => {
     setOverlayProof(null);
   };
 
+  const handleShowProof = useCallback((proof: ProofPoint[] | null) => {
+    setOverlayProof(proof);
+    setViewState(AppState.VERIFIED);
+  }, []);
+
   const handleQueryResult = (result: QueryResponse) => {
     setQueryResult(result);
     setViewState(result.status === 'refuse' ? AppState.REFUSED : AppState.VERIFIED);
@@ -74,8 +79,8 @@ const App: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background-light">
-        <div className="text-slate-500 text-sm font-medium">Loading…</div>
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#0d1117]">
+        <div className="text-gray-600 dark:text-gray-400 text-sm font-medium">Loading…</div>
       </div>
     );
   }
@@ -85,7 +90,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-white dark:bg-[#0d1117]">
       <Header />
 
       <div className="flex flex-1 overflow-hidden">
@@ -98,37 +103,37 @@ const App: React.FC = () => {
           onSelectFile={handleSelectDoc}
         />
 
-        <main className="flex-1 bg-slate-100/80 relative flex flex-col overflow-hidden">
+        <main className="flex-1 bg-gray-50 dark:bg-[#0d1117] relative flex flex-col overflow-hidden">
           {viewState === AppState.UPLOAD ? (
             <FileUploader onSuccess={handleIngestSuccess} onBack={() => handleStateChange(AppState.VERIFIED)} />
           ) : (
             <>
-              <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shadow-sm z-10">
+              <div className="h-10 bg-white dark:bg-[#161b22] border-b border-gray-200 dark:border-[#30363d] flex items-center justify-between px-4 z-10">
                 <div className="flex items-center gap-2">
-                  <button className="p-1.5 hover:bg-gray-100 rounded text-slate-500" type="button">
-                    <span className="material-symbols-outlined text-[20px]">menu</span>
+                  <button className="p-1 hover:bg-gray-100 dark:hover:bg-[#0d1117] text-gray-600 dark:text-gray-400" type="button">
+                    <span className="material-symbols-outlined text-[18px]">menu</span>
                   </button>
-                  <span className="text-sm font-medium text-slate-700">
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     {selectedDocId
                       ? documents.find((d) => d.doc_id === selectedDocId)?.filename ?? selectedDocId
                       : 'Select a document'}
                   </span>
                 </div>
-                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-                  <button className="p-1 hover:bg-white rounded shadow-sm transition-all text-slate-600" type="button">
-                    <span className="material-symbols-outlined text-[18px]">remove</span>
+                <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#0d1117] border border-gray-200 dark:border-[#30363d] p-0.5">
+                  <button className="p-1 hover:bg-white dark:hover:bg-[#161b22] transition-colors text-gray-700 dark:text-gray-300" type="button">
+                    <span className="material-symbols-outlined text-[16px]">remove</span>
                   </button>
-                  <span className="text-xs font-semibold px-2 text-slate-600">100%</span>
-                  <button className="p-1 hover:bg-white rounded shadow-sm transition-all text-slate-600" type="button">
-                    <span className="material-symbols-outlined text-[18px]">add</span>
+                  <span className="text-xs font-medium px-2 text-gray-700 dark:text-gray-300 font-mono">100%</span>
+                  <button className="p-1 hover:bg-white dark:hover:bg-[#161b22] transition-colors text-gray-700 dark:text-gray-300" type="button">
+                    <span className="material-symbols-outlined text-[16px]">add</span>
                   </button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button className="p-1.5 hover:bg-gray-100 rounded text-slate-500" type="button">
-                    <span className="material-symbols-outlined text-[20px]">download</span>
+                <div className="flex items-center gap-1">
+                  <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-[#0d1117] text-gray-600 dark:text-gray-400" type="button">
+                    <span className="material-symbols-outlined text-[18px]">download</span>
                   </button>
-                  <button className="p-1.5 hover:bg-gray-100 rounded text-slate-500" type="button">
-                    <span className="material-symbols-outlined text-[20px]">print</span>
+                  <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-[#0d1117] text-gray-600 dark:text-gray-400" type="button">
+                    <span className="material-symbols-outlined text-[18px]">print</span>
                   </button>
                 </div>
               </div>
@@ -149,7 +154,7 @@ const App: React.FC = () => {
           queryResult={queryResult}
           onQueryResult={handleQueryResult}
           onSelectDoc={handleSelectDoc}
-          onShowProof={setOverlayProof}
+          onShowProof={handleShowProof}
           queryLoading={queryLoading}
           setQueryLoading={setQueryLoading}
         />

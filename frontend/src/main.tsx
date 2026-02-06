@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import './index.css';
 
 const rootElement = document.getElementById('root');
@@ -12,14 +13,11 @@ if (!rootElement) {
 
 function ErrorFallback({ error }: { error: Error }) {
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center p-6 bg-background-light text-slate-800 font-sans"
-      style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-    >
-      <div className="max-w-lg w-full rounded-lg border border-red-200 bg-red-50/50 p-6">
-        <h1 className="text-lg font-semibold text-red-800 mb-2">Something went wrong</h1>
-        <p className="text-sm text-red-700 mb-3 font-mono break-all">{error.message}</p>
-        <p className="text-xs text-slate-500">Check the browser console for details.</p>
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background-light dark:bg-gray-900 text-slate-800 dark:text-slate-200 font-sans">
+      <div className="max-w-lg w-full rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/20 p-6">
+        <h1 className="text-lg font-semibold text-red-800 dark:text-red-300 mb-2">Something went wrong</h1>
+        <p className="text-sm text-red-700 dark:text-red-400 mb-3 font-mono break-all">{error.message}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Check the browser console for details.</p>
       </div>
     </div>
   );
@@ -50,9 +48,11 @@ function AppWithErrorBoundary() {
   return (
     <React.StrictMode>
       <ErrorBoundary>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </ThemeProvider>
       </ErrorBoundary>
     </React.StrictMode>
   );

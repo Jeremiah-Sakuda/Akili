@@ -52,26 +52,26 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
   };
 
   return (
-    <aside className="w-[280px] bg-white border-r border-gray-200 flex flex-col z-20 shrink-0 h-full">
-      <div className="p-4 border-b border-gray-100">
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Documents</h2>
+    <aside className="w-[280px] bg-white dark:bg-[#0d1117] border-r border-gray-200 dark:border-[#30363d] flex flex-col z-20 shrink-0 h-full">
+      <div className="p-3 border-b border-gray-200 dark:border-[#30363d]">
+        <h2 className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Documents</h2>
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-slate-700">Project Files</span>
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Project Files</span>
           <button
             type="button"
             onClick={() => onStateChange(AppState.UPLOAD)}
-            className={`p-1 rounded transition-colors ${currentState === AppState.UPLOAD ? 'bg-primary text-white' : 'text-primary hover:bg-primary/10'}`}
+            className={`p-1.5 transition-colors ${currentState === AppState.UPLOAD ? 'bg-primary text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#161b22]'}`}
           >
-            <span className="material-symbols-outlined text-[18px]">add</span>
+            <span className="material-symbols-outlined text-[16px]">add</span>
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-1 min-h-0">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-slate-400 text-sm">Loading…</div>
+          <div className="flex items-center justify-center py-8 text-gray-500 dark:text-gray-400 text-sm">Loading…</div>
         ) : files.length === 0 ? (
-          <div className="text-center py-8 text-slate-400 text-sm">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
             <p>No documents yet.</p>
             <p className="mt-1">Upload a PDF to get started.</p>
           </div>
@@ -84,25 +84,24 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
               onClick={() => handleFileClick(file)}
               onKeyDown={(e) => e.key === 'Enter' && handleFileClick(file)}
               className={`
-                group flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all border
+                group flex items-start gap-2.5 p-2.5 cursor-pointer transition-colors border
                 ${file.active
-                  ? 'bg-primary/5 border-primary/20 relative overflow-hidden'
-                  : 'hover:bg-gray-50 border-transparent hover:border-gray-200'}
+                  ? 'bg-primary/5 dark:bg-primary/10 border-l-2 border-primary relative'
+                  : 'hover:bg-gray-50 dark:hover:bg-[#161b22] border-transparent hover:border-gray-200 dark:hover:border-[#30363d]'}
               `}
             >
-              {file.active && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />}
               <span
-                className={`material-symbols-outlined mt-0.5 shrink-0 ${file.active ? 'text-primary' : 'text-slate-400 group-hover:text-slate-500'}`}
+                className={`material-symbols-outlined mt-0.5 shrink-0 text-[18px] ${file.active ? 'text-primary' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300'}`}
               >
                 {file.icon}
               </span>
               <div className="flex flex-col min-w-0 flex-1">
                 <p
-                  className={`text-sm font-medium truncate leading-tight ${file.active ? 'text-primary font-semibold' : 'text-slate-600 group-hover:text-slate-900'}`}
+                  className={`text-sm font-medium truncate leading-tight ${file.active ? 'text-primary font-semibold' : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100'}`}
                 >
                   {file.name}
                 </p>
-                <p className={`text-xs mt-1 ${file.active ? 'text-primary/70' : 'text-slate-400'}`}>{file.meta}</p>
+                <p className={`text-xs mt-0.5 font-mono ${file.active ? 'text-primary/80 dark:text-primary/70' : 'text-gray-500 dark:text-gray-500'}`}>{file.meta}</p>
               </div>
             </div>
           ))
@@ -110,14 +109,14 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
       </div>
 
       {selectedDocId && (
-        <div className="border-t border-gray-200 flex flex-col min-h-0 shrink-0" style={{ maxHeight: '40%' }}>
-          <div className="p-2 border-b border-gray-100 flex gap-1 bg-gray-50/80">
+        <div className="border-t border-gray-200 dark:border-[#30363d] flex flex-col min-h-0 shrink-0" style={{ maxHeight: '40%' }}>
+          <div className="p-1.5 border-b border-gray-200 dark:border-[#30363d] flex gap-1 bg-gray-50 dark:bg-[#161b22]">
             {(['units', 'bijections', 'grids'] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setCanonicalTab(tab)}
-                className={`px-2.5 py-1.5 rounded text-xs font-semibold capitalize transition-colors ${canonicalTab === tab ? 'bg-primary text-white' : 'text-slate-600 hover:bg-gray-200'}`}
+                className={`px-2 py-1 text-xs font-medium capitalize transition-colors ${canonicalTab === tab ? 'bg-primary text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#0d1117]'}`}
               >
                 {tab}
               </button>
@@ -125,63 +124,63 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
           </div>
           <div className="flex-1 overflow-y-auto p-2 text-xs font-mono min-h-0">
             {canonicalLoading ? (
-              <div className="py-4 text-center text-slate-400">Loading…</div>
+              <div className="py-4 text-center text-gray-500 dark:text-gray-400">Loading…</div>
             ) : canonical ? (
               canonicalTab === 'units' ? (
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {canonical.units.length === 0 ? (
-                    <li className="text-slate-400">No units</li>
+                    <li className="text-gray-500 dark:text-gray-400">No units</li>
                   ) : (
                     canonical.units.map((u, i) => (
-                      <li key={`unit-${i}`} className="p-2 rounded bg-slate-50 border border-slate-100">
-                        <span className="text-slate-500">{u.id}</span> {u.label ?? ''} {String(u.value)}{u.unit_of_measure ? ` ${u.unit_of_measure}` : ''}
+                      <li key={`unit-${i}`} className="p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]">
+                        <span className="text-gray-600 dark:text-gray-400">{u.id}</span> {u.label ?? ''} {String(u.value)}{u.unit_of_measure ? ` ${u.unit_of_measure}` : ''}
                         <br />
-                        <span className="text-slate-400">p{u.page} (x:{u.origin.x.toFixed(2)}, y:{u.origin.y.toFixed(2)})</span>
+                        <span className="text-gray-500 dark:text-gray-500">p{u.page} (x:{u.origin.x.toFixed(2)}, y:{u.origin.y.toFixed(2)})</span>
                       </li>
                     ))
                   )}
                 </ul>
               ) : canonicalTab === 'bijections' ? (
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {canonical.bijections.length === 0 ? (
-                    <li className="text-slate-400">No bijections</li>
+                    <li className="text-gray-500 dark:text-gray-400">No bijections</li>
                   ) : (
                     canonical.bijections.map((b, i) => (
-                      <li key={`bijection-${i}`} className="p-2 rounded bg-slate-50 border border-slate-100">
-                        <span className="text-slate-500">{b.id}</span> {Object.entries(b.mapping).slice(0, 3).map(([k, v]) => `${k}→${v}`).join(', ')}
+                      <li key={`bijection-${i}`} className="p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]">
+                        <span className="text-gray-600 dark:text-gray-400">{b.id}</span> {Object.entries(b.mapping).slice(0, 3).map(([k, v]) => `${k}→${v}`).join(', ')}
                         {Object.keys(b.mapping).length > 3 ? '…' : ''}
                         <br />
-                        <span className="text-slate-400">p{b.page} (x:{b.origin.x.toFixed(2)}, y:{b.origin.y.toFixed(2)})</span>
+                        <span className="text-gray-500 dark:text-gray-500">p{b.page} (x:{b.origin.x.toFixed(2)}, y:{b.origin.y.toFixed(2)})</span>
                       </li>
                     ))
                   )}
                 </ul>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {canonical.grids.length === 0 ? (
-                    <li className="text-slate-400">No grids</li>
+                    <li className="text-gray-500 dark:text-gray-400">No grids</li>
                   ) : (
                     canonical.grids.map((g, i) => (
-                      <li key={`grid-${i}`} className="p-2 rounded bg-slate-50 border border-slate-100">
-                        <span className="text-slate-500">{g.id}</span> {g.rows}×{g.cols} ({g.cells_count} cells)
+                      <li key={`grid-${i}`} className="p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]">
+                        <span className="text-gray-600 dark:text-gray-400">{g.id}</span> {g.rows}×{g.cols} ({g.cells_count} cells)
                         <br />
-                        <span className="text-slate-400">p{g.page} (x:{g.origin.x.toFixed(2)}, y:{g.origin.y.toFixed(2)})</span>
+                        <span className="text-gray-500 dark:text-gray-500">p{g.page} (x:{g.origin.x.toFixed(2)}, y:{g.origin.y.toFixed(2)})</span>
                       </li>
                     ))
                   )}
                 </ul>
               )
             ) : (
-              <div className="py-4 text-center text-slate-400">Select a document</div>
+              <div className="py-4 text-center text-gray-500 dark:text-gray-400">Select a document</div>
             )}
           </div>
         </div>
       )}
 
-      <div className="p-4 border-t border-gray-100 bg-gray-50/50">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span className="material-symbols-outlined text-[16px]">cloud_done</span>
-          <span>API connected</span>
+      <div className="p-3 border-t border-gray-200 dark:border-[#30363d] bg-gray-50 dark:bg-[#161b22]">
+        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+          <span className="material-symbols-outlined text-[14px]">cloud_done</span>
+          <span className="font-mono">API connected</span>
         </div>
       </div>
     </aside>

@@ -3,18 +3,54 @@
 /* Tailwind v4 theme (CSS-first); extend defaults */
 @theme {
   --color-primary: #0066cc;
-  --color-background-light: #f5f7f8;
-  --color-background-dark: #0f1923;
-  --font-display: Inter, system-ui, sans-serif;
-  --font-sans: Inter, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
-  --shadow-soft: 0 0 20px rgba(0, 0, 0, 0.05);
+  --color-primary-dark: #0052a3;
+  --color-background-light: #ffffff;
+  --color-background-dark: #0d1117;
+  --color-border: #d1d5db;
+  --color-border-dark: #30363d;
+  --font-display: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", monospace;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 :root {
-  font-family: Inter, system-ui, sans-serif;
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
+  background: var(--color-background-light);
+  color: #1f2937;
 }
+
+/* Dark mode: applied when html has .dark (set by ThemeContext) */
+.dark body {
+  background: var(--color-background-dark);
+  color: #e5e7eb;
+}
+
+/* Very dark mode: darker backgrounds (ThemeContext theme === 'very-dark') */
+.dark.very-dark body {
+  background: #010409;
+  color: #e6edf3;
+}
+
+.dark.very-dark header {
+  background-color: #010409;
+  border-color: #21262d;
+}
+
+.dark.very-dark aside {
+  background-color: #010409;
+  border-color: #21262d;
+}
+
+.dark.very-dark main {
+  background-color: #0d1117;
+}
+

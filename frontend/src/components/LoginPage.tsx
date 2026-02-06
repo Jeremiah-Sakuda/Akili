@@ -25,26 +25,10 @@ const LoginPage: React.FC = () => {
 
   if (!authAvailable) {
     return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center px-4"
-        style={{
-          background: '#FAFAFA',
-          color: '#1A1A1A',
-          fontFamily: 'Inter, system-ui, sans-serif',
-        }}
-      >
-        <div
-          className="max-w-md w-full rounded-lg border p-6 text-center"
-          style={{
-            borderColor: '#E0E0E0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-            background: '#fff',
-          }}
-        >
-          <h1 className="font-semibold mb-2" style={{ fontSize: '1.5rem' }}>
-            Akili
-          </h1>
-          <p className="text-sm" style={{ color: '#5C5C5C' }}>
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-slate-100 font-sans">
+        <div className="max-w-md w-full border border-gray-200 dark:border-gray-600 p-6 text-center rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+          <h1 className="font-semibold mb-2 text-2xl">Akili</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Firebase is not configured. Set VITE_FIREBASE_* in .env to enable sign-in.
           </p>
         </div>
@@ -53,28 +37,11 @@ const LoginPage: React.FC = () => {
   }
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{
-        background: '#FAFAFA',
-        color: '#1A1A1A',
-        fontFamily: 'Inter, system-ui, sans-serif',
-      }}
-    >
-      <div
-        className="max-w-sm w-full rounded-lg border p-8 flex flex-col items-center"
-        style={{
-          borderColor: '#E0E0E0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-          background: '#fff',
-        }}
-      >
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-slate-50 dark:bg-gray-900 text-slate-900 dark:text-slate-100 font-sans">
+      <div className="max-w-sm w-full border border-slate-200 dark:border-gray-600 p-8 flex flex-col items-center rounded-lg bg-white dark:bg-gray-800 shadow-sm">
         {/* Logo + title — matches Header branding */}
         <div className="flex items-center gap-3 mb-2">
-          <div
-            className="size-10 rounded-lg flex items-center justify-center text-white"
-            style={{ background: '#0066CC' }}
-          >
+          <div className="size-10 rounded-lg flex items-center justify-center text-white bg-primary">
             <svg fill="none" height="22" viewBox="0 0 24 24" width="22" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M12 2L2 7L12 12L22 7L12 2Z"
@@ -99,23 +66,14 @@ const LoginPage: React.FC = () => {
               />
             </svg>
           </div>
-          <h1 className="font-semibold tracking-tight" style={{ fontSize: '1.5rem' }}>
-            Akili
-          </h1>
+          <h1 className="font-semibold tracking-tight text-2xl">Akili</h1>
         </div>
-        <p className="text-center mb-6" style={{ fontSize: '0.875rem', color: '#5C5C5C' }}>
+        <p className="text-center mb-6 text-sm text-slate-500 dark:text-slate-400">
           Verification workspace. Sign in to continue.
         </p>
 
         {error && (
-          <div
-            className="w-full mb-4 rounded-lg border px-3 py-2 text-sm"
-            style={{
-              borderColor: '#E0E0E0',
-              background: '#FAFAFA',
-              color: '#C00',
-            }}
-          >
+          <div className="w-full mb-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
             {error}
           </div>
         )}
@@ -124,33 +82,10 @@ const LoginPage: React.FC = () => {
           type="button"
           onClick={handleGoogleSignIn}
           disabled={signingIn}
-          className="w-full flex items-center justify-center gap-3 rounded-lg border font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60"
-          style={{
-            height: 40,
-            background: '#fff',
-            borderColor: '#E0E0E0',
-            color: '#1A1A1A',
-            fontSize: '0.875rem',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.background = '#F0F0F0';
-            e.currentTarget.style.borderColor = '#E0E0E0';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.background = '#fff';
-            e.currentTarget.style.borderColor = '#E0E0E0';
-          }}
-          onFocus={(e) => {
-            e.currentTarget.style.outline = 'none';
-            e.currentTarget.style.boxShadow = '0 0 0 2px #0066CC';
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
-          }}
+          className="w-full h-10 flex items-center justify-center gap-3 rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-200 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-800 disabled:opacity-60 hover:bg-slate-50 dark:hover:bg-gray-600"
         >
           {signingIn ? (
-            <span style={{ color: '#5C5C5C' }}>Signing in…</span>
+            <span className="text-slate-500 dark:text-slate-400">Signing in…</span>
           ) : (
             <>
               <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
