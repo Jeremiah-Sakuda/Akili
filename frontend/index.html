@@ -12,12 +12,13 @@
       (function () {
         var key = 'akili-theme';
         var stored = localStorage.getItem(key);
+        var prefersDark = !stored && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = stored === 'very-dark' || stored === 'dark' || stored === 'light' ? stored : (prefersDark ? 'dark' : 'light');
         var root = document.documentElement;
+        root.setAttribute('data-theme', theme);
         root.classList.remove('dark', 'very-dark');
-        if (stored === 'very-dark') { root.classList.add('dark', 'very-dark'); }
-        else if (stored === 'dark' || (!stored && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-          root.classList.add('dark');
-        }
+        if (theme === 'very-dark') { root.classList.add('dark', 'very-dark'); }
+        else if (theme === 'dark') { root.classList.add('dark'); }
       })();
     </script>
     <style>

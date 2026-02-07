@@ -37,8 +37,8 @@ All types are **validated at ingestion**. Ambiguous or low-confidence extraction
 2. **Chunking with Coordinates**  
    Each chunk sent to Gemini has an explicit coordinate context: e.g. “This image is page N; region (x1,y1)–(x2,y2). Return only facts that can be tied to (x,y).”
 
-3. **Gemini Multimodal Extraction**  
-   Prompt Gemini to output **structured** extractions: e.g. JSON conforming to Unit / Bijection / Grid schemas, with required `(x,y)` or bbox. Use structured output / response schema to reduce hallucination.
+3. **Gemini 3 Multimodal Extraction**  
+   Akili uses Gemini 3 for this step because it excels at document vision, structured JSON output, and coordinate-level grounding—critical for technical PDFs and schematics. Prompt Gemini to output **structured** extractions: e.g. JSON conforming to Unit / Bijection / Grid schemas, with required `(x,y)` or bbox. Use structured output / response schema to reduce hallucination.
 
 4. **Canonicalize**  
    Parse Gemini response into Pydantic models. Validate. Reject any object that fails validation or has missing coordinates.

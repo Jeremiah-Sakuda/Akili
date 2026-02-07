@@ -23,13 +23,24 @@ Akili doesn't just ask Gemini for an answer; it **forces Gemini to show its work
 | Layer | Technology | Rationale |
 |-------|------------|-----------|
 | **Runtime** | Python 3.11+ | Native fit for Gemini SDK, PDF/vision pipelines, and symbolic validation. |
-| **LLM & Vision** | Google Gemini API (multimodal) | PDFs, tables, schematics as images/chunks; structured extraction. |
+| **LLM & Vision** | Google Gemini 3 API (multimodal) | PDFs, tables, schematics as images/chunks; structured extraction (see *Why Gemini 3* below). |
 | **Typed Canonical Model** | Pydantic v2 | Units, bijections, grids as validated types; reject invalid shapes at ingestion. |
 | **Document Processing** | PyMuPDF, pdf2image | Extract pages, layout, bounding boxes; feed regions to Gemini with coordinates. |
 | **Coordinate Store** | SQLite (MVP) → PostgreSQL | Persist canonical objects with `(x, y)` and page/doc provenance. |
 | **Verification / Proof** | Rule-based + optional SMT (Z3) | Check that answers follow from canonical facts; deterministic refuse. |
 | **API** | FastAPI | Ingest documents, submit queries, return coordinate-grounded answers or REFUSE. |
 | **Optional Viewer** | Svelte/React + PDF.js | Overlay proven answers on source PDF for judge demos. |
+
+### Why Gemini 3
+
+Akili uses **Gemini 3** (default: `gemini-3.0-flash`) for ingestion because it excels where other models fall short for this workload:
+
+- **Multimodal document understanding** — Native vision + text in one model. PDF pages, pinout tables, and schematics are sent as images; Gemini 3 interprets layout, symbols, and structure in a single pass, without separate OCR or captioning pipelines.
+- **Structured output and instruction following** — Reliably returns JSON that conforms to our canonical schema (units, bijections, grids) with required `(x, y)` coordinates. This reduces hallucination and malformed extractions that would be rejected downstream.
+- **Reasoning over dense technical content** — Strong at parsing datasheets, pin mappings, and grids where precise cell-level and coordinate-level grounding matter. Better alignment with “show the location, not just the answer” than generic chat models.
+- **Efficiency** — Flash variants offer a strong speed/cost tradeoff for per-page extraction at scale; Pro variants are available via `AKILI_GEMINI_MODEL` when you need maximum accuracy on complex layouts.
+
+Other models may handle general Q&A well, but for **coordinate-grounded, schema-bound extraction** from technical PDFs, Gemini 3 is the fit Akili is built around.
 
 ---
 
@@ -191,7 +202,7 @@ You only need to restart the API once after adding these; after that, run the sc
 6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`.
 
 **Gemini rate limits (429)**  
-Ingestion calls the Gemini API **once per PDF page**. Free-tier limits (e.g. 15 requests per minute for `gemini-2.0-flash`) can be hit with multi-page PDFs. The app retries on 429 with exponential backoff and waits a few seconds between pages to reduce bursts. If you still see 429 after waiting:
+Ingestion calls the Gemini API **once per PDF page**. Free-tier limits (e.g. 15 requests per minute for `gemini-3.0-flash`) can be hit with multi-page PDFs. The app retries on 429 with exponential backoff and waits a few seconds between pages to reduce bursts. If you still see 429 after waiting:
 
 - **Per-minute limit:** Wait 1–2 minutes and try again, or ingest fewer pages at a time.
 - **Daily or project quota:** Check [Google AI Studio](https://aistudio.google.com/) quotas and billing; you may need to wait until the quota resets or use a paid tier.

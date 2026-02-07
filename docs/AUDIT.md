@@ -20,7 +20,7 @@
 | Layer | README | Implementation |
 |-------|--------|----------------|
 | Runtime | Python 3.11+ | pyproject.toml `requires-python = ">=3.11"`; CI matrix 3.11, 3.12. |
-| LLM / Vision | Google Gemini | `google-generativeai`; `gemini_extract.py` uses `gemini-2.0-flash`. |
+| LLM / Vision | Google Gemini | `google-generativeai`; `gemini_extract.py` uses `gemini-3.0-flash`. |
 | Canonical model | Pydantic v2 | `canonical/models.py`; extract_schema + canonicalize. |
 | Document processing | PyMuPDF, pdf2image | `pdf_loader.py` uses PyMuPDF (fitz); pdf2image in deps but not used in code. |
 | Store | SQLite (MVP) | `store/repository.py`; SQLite only; no PostgreSQL path yet. |
@@ -148,7 +148,7 @@ No critical gaps. Suggested next steps: (1) Update README with `GET /documents/{
 **Verified:** February 2025 (follow-up pass).
 
 - **docs/INGEST-FLOW.md:** Present; describes API → pipeline → pdf_loader → gemini_extract with code references. Actual code matches: pipeline has per-page try/except and page delay; pdf_loader has per-page try/except; gemini_extract uses `AKILI_GEMINI_MODEL`, retries on 429, normalizes extraction.
-- **.env.example:** Includes `AKILI_GEMINI_MODEL` (gemini-2.0-flash / gemini-3-*); retry/backoff vars documented. Backend reads these in `gemini_extract.py` and `pipeline.py`.
+- **.env.example:** Includes `AKILI_GEMINI_MODEL` (gemini-3.0-flash / gemini-3-*); retry/backoff vars documented. Backend reads these in `gemini_extract.py` and `pipeline.py`.
 - **.github/dependabot.yml:** npm (frontend), pip (root), github-actions; weekly; limits 5/5/3 PRs. No issues.
 - **CI:** Unchanged; backend Ruff + Flake8 + pytest; frontend lint, typecheck, build with empty VITE_*.
 - **README:** Project structure still lists only `ci.yml` (add `deploy.yml`). API list still omits `GET /documents/{doc_id}/file`.

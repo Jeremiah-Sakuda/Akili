@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 # Retry 429 / resource exhausted: max attempts, backoff base seconds
 _GEMINI_MAX_RETRIES = int(os.environ.get("AKILI_GEMINI_MAX_RETRIES", "4"))
 _GEMINI_BACKOFF_BASE = float(os.environ.get("AKILI_GEMINI_BACKOFF_BASE", "4.0"))
-# Model: e.g. gemini-2.0-flash (default), gemini-3-flash-preview, gemini-3-pro-preview
-_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-2.0-flash")
+# Model: e.g. gemini-3.0-flash (default), gemini-3-flash-preview, gemini-3-pro-preview
+_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3.0-flash")
 
 
 def _is_rate_limit_error(e: BaseException) -> bool:

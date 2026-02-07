@@ -28,29 +28,169 @@ body {
   color: #1f2937;
 }
 
+/* Light mode: explicit so switching to light is clearly visible */
+[data-theme="light"] body {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+[data-theme="light"] #root > div {
+  background: #ffffff !important;
+}
+
+[data-theme="light"] main {
+  background: #f1f5f9 !important;
+}
+
+[data-theme="light"] header {
+  background: #ffffff !important;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] aside {
+  background: #ffffff !important;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] main > div.h-10 {
+  background: #ffffff !important;
+  border-color: #e2e8f0;
+}
+
+/* Light mode scrollbars */
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-color: #f1f5f9;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 /* Dark mode: applied when html has .dark (set by ThemeContext) */
 .dark body {
   background: var(--color-background-dark);
   color: #e5e7eb;
 }
 
-/* Very dark mode: darker backgrounds (ThemeContext theme === 'very-dark') */
+/* Very dark mode: every section gets darker backgrounds */
+[data-theme="very-dark"] body,
 .dark.very-dark body {
-  background: #010409;
+  background: #010409 !important;
   color: #e6edf3;
 }
 
+[data-theme="very-dark"] #root > div,
+.dark.very-dark #root > div {
+  background: #010409 !important;
+}
+
+[data-theme="very-dark"] header,
 .dark.very-dark header {
-  background-color: #010409;
+  background: #010409 !important;
   border-color: #21262d;
 }
 
+[data-theme="very-dark"] aside,
 .dark.very-dark aside {
-  background-color: #010409;
+  background: #010409 !important;
   border-color: #21262d;
 }
 
+[data-theme="very-dark"] main,
 .dark.very-dark main {
-  background-color: #0d1117;
+  background: #0d1117 !important;
+}
+
+/* Toolbar under main */
+[data-theme="very-dark"] main > div.h-10,
+.dark.very-dark main > div.h-10 {
+  background: #0d1117 !important;
+  border-color: #21262d;
+}
+
+/* Document viewer container */
+[data-theme="very-dark"] main .flex-1.overflow-y-auto,
+.dark.very-dark main .flex-1.overflow-y-auto {
+  background: #0d1117 !important;
+}
+
+/* File uploader full-area background */
+[data-theme="very-dark"] .flex-1.bg-white,
+.dark.very-dark .flex-1.bg-white {
+  background: #010409 !important;
+}
+
+/* Right sidebar: header bar, form areas, result cards, footer */
+[data-theme="very-dark"] aside > div.p-4,
+[data-theme="very-dark"] aside > div.p-3,
+.dark.very-dark aside > div.p-4,
+.dark.very-dark aside > div.p-3 {
+  background: #010409 !important;
+  border-color: #21262d;
+}
+
+/* Left sidebar: document list header, canonical tabs, footer */
+[data-theme="very-dark"] aside > div.p-3,
+.dark.very-dark aside > div.p-3 {
+  background: #010409 !important;
+}
+
+/* File uploader drop zone and status cards */
+[data-theme="very-dark"] .group.relative.w-full.border-2,
+.dark.very-dark .group.relative.w-full.border-2 {
+  background: #0d1117 !important;
+  border-color: #21262d;
+}
+
+[data-theme="very-dark"] .mt-8.grid.grid-cols-2 > div,
+.dark.very-dark .mt-8.grid.grid-cols-2 > div {
+  background: #0d1117 !important;
+  border-color: #21262d;
+}
+
+/* Dropdowns and popovers (header menu, theme menu) */
+[data-theme="very-dark"] header [class*="absolute"][class*="py-1"],
+.dark.very-dark header [class*="absolute"][class*="py-1"] {
+  background: #0d1117 !important;
+  border-color: #21262d;
+}
+
+/* Sidebar inner sections: any div with dark-panel-style background */
+[data-theme="very-dark"] aside div.flex.gap-1,
+[data-theme="very-dark"] aside div.flex-1.overflow-y-auto,
+.dark.very-dark aside div.flex.gap-1,
+.dark.very-dark aside div.flex-1.overflow-y-auto {
+  background: #010409 !important;
+}
+
+/* Sidebar list item cards */
+[data-theme="very-dark"] aside li[class*="p-2"],
+.dark.very-dark aside li[class*="p-2"] {
+  background: #0d1117 !important;
+  border-color: #21262d;
+}
+
+/* Auth loading / App loading screen */
+[data-theme="very-dark"] .min-h-screen.flex.items-center.justify-center,
+.dark.very-dark .min-h-screen.flex.items-center.justify-center {
+  background: #010409 !important;
+}
+
+/* Scrollbars for very-dark */
+.dark.very-dark ::-webkit-scrollbar-track,
+[data-theme="very-dark"] ::-webkit-scrollbar-track {
+  background: #0d1117;
+}
+.dark.very-dark ::-webkit-scrollbar-thumb,
+[data-theme="very-dark"] ::-webkit-scrollbar-thumb {
+  background: #21262d;
+  border-color: #0d1117;
+}
+.dark.very-dark ::-webkit-scrollbar-thumb:hover,
+[data-theme="very-dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #30363d;
 }
 
