@@ -77,6 +77,7 @@ Other models may handle general Q&A well, but for **coordinate-grounded, schema-
 │                    ▼                                       ▼                 │
 │              [Provable]                            [Not provable]            │
 │              Answer + (x,y) proof                   REFUSE (deterministic)   │
+│              Optional: Shadow Formatting (Gemini rephrases answer in 1 sentence) │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -84,7 +85,7 @@ Other models may handle general Q&A well, but for **coordinate-grounded, schema-
 
 1. **Ingest**: PDF → split into pages/regions with bounding boxes → send to Gemini with “extract typed facts and their coordinates” → parse into `Unit`, `Bijection`, `Grid` → validate → persist only if valid.
 2. **Store**: Canonical objects live in DB with `(doc_id, page, x, y, ...)`. No free-text “beliefs”—only structural facts.
-3. **Query**: User asks a question → system retrieves candidate canonical facts (by semantic + spatial relevance) → verification layer checks if the answer is **derivable** from those facts → return answer + coordinate proof, or **REFUSE**.
+3. **Query**: User asks a question → system retrieves candidate canonical facts (by semantic + spatial relevance) → verification layer checks if the answer is **derivable** from those facts → return answer + coordinate proof, or **REFUSE**. Optionally, when the answer is verified, a **Shadow Formatting** step asks Gemini to rephrase the proven fact into one natural-language sentence (strict fact-only prompt; silent fallback to raw answer on failure or timeout).
 
 ---
 
@@ -115,7 +116,7 @@ akili/
 ├── src/
 │   └── akili/
 │       ├── canonical/        # Unit, Bijection, Grid
-│       ├── ingest/           # PDF → Gemini → canonicalize
+│       ├── ingest/           # PDF → Gemini → canonicalize; gemini_format for Shadow Formatting
 │       ├── store/            # SQLite persistence
 │       ├── verify/           # Proof + REFUSE
 │       └── api/              # FastAPI app
@@ -198,15 +199,15 @@ You only need to restart the API once after adding these; after that, run the sc
    ```
    Or, if the package is installed: `akili-serve`
 4. **Ingest a doc**: `POST /ingest` with PDF (multipart form `file`) → canonical store populated; returns `doc_id`.
-5. **Query**: `POST /query` with body `{"doc_id": "<from ingest>", "question": "What is pin 5?"}` → coordinate-grounded answer + proof or REFUSE.
-6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`.
+5. **Query**: `POST /query` with body `{"doc_id": "<from ingest>", "question": "What is pin 5?"}` (optional: `"include_formatted_answer": true`) → coordinate-grounded answer + proof or REFUSE. When `include_formatted_answer` is true and the answer is verified, the response may include `formatted_answer` (one-sentence natural-language phrasing from Gemini); on timeout or failure the UI falls back to the raw `answer`.
+6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`. **Get doc PDF**: `GET /documents/{doc_id}/file` (for viewer).
 
 **Gemini rate limits (429)**  
 Ingestion calls the Gemini API **once per PDF page**. Free-tier limits (e.g. 15 requests per minute for `gemini-3.0-flash`) can be hit with multi-page PDFs. The app retries on 429 with exponential backoff and waits a few seconds between pages to reduce bursts. If you still see 429 after waiting:
 
 - **Per-minute limit:** Wait 1–2 minutes and try again, or ingest fewer pages at a time.
 - **Daily or project quota:** Check [Google AI Studio](https://aistudio.google.com/) quotas and billing; you may need to wait until the quota resets or use a paid tier.
-- **Tuning:** Set `AKILI_GEMINI_PAGE_DELAY_SECONDS` (e.g. `4`) to slow down ingest, or `AKILI_GEMINI_MAX_RETRIES` / `AKILI_GEMINI_BACKOFF_BASE` to adjust retries (see `.env.example`).
+- **Tuning:** Set `AKILI_GEMINI_PAGE_DELAY_SECONDS` (e.g. `4`) to slow down ingest, or `AKILI_GEMINI_MAX_RETRIES` / `AKILI_GEMINI_BACKOFF_BASE` to adjust retries (see `.env.example`). Query-time **Shadow Formatting** (natural-language phrasing of verified answers) uses the same Gemini key and model; format calls use a short timeout (`AKILI_FORMAT_TIMEOUT_SEC`, default 2.5s) and silently fall back to the raw answer on failure.
 
 ### UI (frontend)
 
@@ -259,12 +260,12 @@ Runs on every **push** and **pull_request** to `main`, `master`, and `develop`.
 
 | Job | What it does |
 |-----|----------------|
-| **Backend (Python)** | Matrix: Python 3.11 and 3.12. Installs `.[dev]`, runs **Ruff** (lint + format check), **pytest** with coverage. Optional: uploads coverage to Codecov (Python 3.11 only). |
+| **Backend (Python)** | Matrix: Python 3.11 and 3.12. Installs `.[dev]`, runs **Ruff** (lint + format check), **Flake8**, **pytest** with coverage. Optional: uploads coverage to Codecov (Python 3.11 only). |
 | **Frontend (Node)** | Node 20. `npm ci` → **ESLint** → **TypeScript** (`tsc --noEmit`) → **Vite build**. Build uses empty Firebase env vars so it works without secrets. |
 
 **Local equivalents:**
 
-- Backend: `pip install -e ".[dev]"` then `ruff check src tests`, `ruff format --check src tests`, `pytest tests -v`
+- Backend: `pip install -e ".[dev]"` then `ruff check src tests`, `flake8 src tests`, `ruff format --check src tests`, `pytest tests -v`
 - Frontend: `cd frontend && npm ci && npm run lint && npm run typecheck && npm run build`
 
 ### CD (Firebase deploy)

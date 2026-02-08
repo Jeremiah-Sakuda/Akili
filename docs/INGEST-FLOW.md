@@ -242,3 +242,9 @@ POST /ingest (app.py)
 | Any other exception in ingest_document | Propagates → API returns 500 (or 429 if rate-limit message). |
 
 So one bad page or one bad Gemini response doesn’t kill the whole document; only that page contributes no canonical objects.
+
+---
+
+## Related
+
+- **Query flow**: After ingest, users submit questions via `POST /query`. The verification layer returns answer + proof or REFUSE. Optionally, **Shadow Formatting** (`akili.ingest.gemini_format`) rephrases the verified fact into one natural-language sentence; see README and `docs/ARCHITECTURE.md` (Verification Layer).

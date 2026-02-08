@@ -18,9 +18,7 @@ def _proof_point(
     source_id: str | None = None,
     source_type: str | None = None,
 ) -> ProofPoint:
-    return ProofPoint(
-        x=x, y=y, page=page, bbox=bbox, source_id=source_id, source_type=source_type
-    )
+    return ProofPoint(x=x, y=y, page=page, bbox=bbox, source_id=source_id, source_type=source_type)
 
 
 def _try_pin_lookup(
@@ -37,7 +35,8 @@ def _try_pin_lookup(
             if right is not None:
                 bbox = (
                     ProofPointBBox(x1=b.bbox.x1, y1=b.bbox.y1, x2=b.bbox.x2, y2=b.bbox.y2)
-                    if b.bbox else None
+                    if b.bbox
+                    else None
                 )
                 return AnswerWithProof(
                     answer=right,
@@ -49,7 +48,8 @@ def _try_pin_lookup(
             if left is not None:
                 bbox = (
                     ProofPointBBox(x1=b.bbox.x1, y1=b.bbox.y1, x2=b.bbox.x2, y2=b.bbox.y2)
-                    if b.bbox else None
+                    if b.bbox
+                    else None
                 )
                 return AnswerWithProof(
                     answer=left,
@@ -72,7 +72,8 @@ def _try_pin_lookup(
                         answer_val = str(name_cell.value) if name_cell else str(cell.value)
                         bbox = (
                             ProofPointBBox(x1=g.bbox.x1, y1=g.bbox.y1, x2=g.bbox.x2, y2=g.bbox.y2)
-                            if g.bbox else None
+                            if g.bbox
+                            else None
                         )
                         return AnswerWithProof(
                             answer=answer_val,
@@ -113,7 +114,8 @@ def _try_voltage_max(question: str, units: list[Unit]) -> AnswerWithProof | None
     max_u = max(numeric, key=lambda x: x[0])[1]
     bbox = (
         ProofPointBBox(x1=max_u.bbox.x1, y1=max_u.bbox.y1, x2=max_u.bbox.x2, y2=max_u.bbox.y2)
-        if max_u.bbox else None
+        if max_u.bbox
+        else None
     )
     return AnswerWithProof(
         answer=f"{max_u.value} {max_u.unit_of_measure or ''}".strip(),
@@ -129,7 +131,8 @@ def _try_unit_lookup(question: str, units: list[Unit]) -> AnswerWithProof | None
     for u in units:
         bbox = (
             ProofPointBBox(x1=u.bbox.x1, y1=u.bbox.y1, x2=u.bbox.x2, y2=u.bbox.y2)
-            if u.bbox else None
+            if u.bbox
+            else None
         )
         if u.label and u.label.lower() in question_lower:
             return AnswerWithProof(

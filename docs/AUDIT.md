@@ -20,7 +20,7 @@
 | Layer | README | Implementation |
 |-------|--------|----------------|
 | Runtime | Python 3.11+ | pyproject.toml `requires-python = ">=3.11"`; CI matrix 3.11, 3.12. |
-| LLM / Vision | Google Gemini | `google-generativeai`; `gemini_extract.py` uses `gemini-3.0-flash`. |
+| LLM / Vision | Google Gemini | `google-generativeai`; `gemini_extract.py` uses `gemini-3.0-flash` for ingest; `gemini_format.py` for Shadow Formatting (query-time natural-language phrasing of verified answers). |
 | Canonical model | Pydantic v2 | `canonical/models.py`; extract_schema + canonicalize. |
 | Document processing | PyMuPDF, pdf2image | `pdf_loader.py` uses PyMuPDF (fitz); pdf2image in deps but not used in code. |
 | Store | SQLite (MVP) | `store/repository.py`; SQLite only; no PostgreSQL path yet. |
@@ -33,7 +33,7 @@
 | Endpoint | README / ARCHITECTURE | Status |
 |----------|------------------------|--------|
 | POST /ingest | Yes | Implemented; PDF stored under `docs/`; max size via AKILI_MAX_UPLOAD_BYTES. |
-| POST /query | Yes | Implemented; returns answer + proof or REFUSE. |
+| POST /query | Yes | Implemented; returns answer + proof or REFUSE. Optional `include_formatted_answer`; when true and answer is verified, response may include `formatted_answer` (Shadow Formatting via `gemini_format.py`; silent fallback to raw answer on timeout/failure). |
 | GET /documents | Yes | Implemented. |
 | GET /documents/{id}/canonical | Yes | Implemented. |
 | GET /documents/{id}/file | UI-SPEC | Implemented; serves stored PDF. |
@@ -54,8 +54,8 @@
 
 ### 1.5 Gaps vs. Docs
 
-- **README project structure:** Lists only `ci.yml`; repo has `deploy.yml` as well.
-- **README API list:** Does not mention `GET /documents/{doc_id}/file` (used for viewer).
+- **README project structure:** Lists only `ci.yml`; deploy workflow was removed (only ci.yml exists).
+- **README API list:** Now includes `GET /documents/{doc_id}/file` (for viewer).
 - **ARCHITECTURE “Retrieval”:** Describes semantic/coordinate retrieval; current code loads all canonical for `doc_id` (no semantic/embedding filtering).
 - **UI-SPEC “Locate” link:** Optional “Locate” per canonical row (scroll PDF, show marker) not implemented.
 - **UI-SPEC proof legend:** “Unit · Bijection · Grid” swatches below viewer not implemented (overlay is single style).
@@ -106,10 +106,9 @@
 | Workflow | Trigger | Jobs |
 |----------|---------|------|
 | **CI** | push/PR to main, master, develop | Backend: Python 3.11/3.12, pip install -e ".[dev]", Ruff, Flake8, pytest, coverage; Frontend: npm ci, lint, typecheck, build. |
-| **Deploy** | push to main/master, workflow_dispatch | Build frontend with Firebase secrets; deploy to Firebase Hosting. |
 
 - **Backend CI:** No `firebase-admin` (auth optional); tests use `GOOGLE_API_KEY: dummy`.
-- **Deploy:** Uses repo secrets for Firebase and `FIREBASE_TOKEN`; optional `production` environment.
+- **Deploy:** Deploy workflow is removed; only CI runs. To deploy when ready, add a workflow that builds the frontend and runs `firebase deploy --only hosting` (use repo secrets for `FIREBASE_TOKEN` and `VITE_FIREBASE_*`). See README.
 
 ---
 
@@ -123,7 +122,7 @@
 
 ## 7. Documentation
 
-- **README:** Run instructions, Docker, Firebase, CI/CD, env vars; project structure slightly out of date (missing deploy.yml, GET /file).
+- **README:** Run instructions, Docker, Firebase, CI/CD, env vars; project structure lists only ci.yml (deploy removed); API list includes GET /documents/{doc_id}/file and flake8 in local equivalents.
 - **.env.example:** GOOGLE_API_KEY, AKILI_*, Firebase VITE_*; retry/backoff optional vars documented.
 - **ARCHITECTURE.md:** Matches design; retrieval described as semantic/coordinate but not implemented that way.
 - **UI-SPEC.md:** Matches layout and components; minor gaps (Locate link, proof legend).
@@ -139,7 +138,7 @@
 | **CI/CD** | Backend and frontend jobs consistent with pyproject and package.json; flake8 in dev deps. |
 | **Docs** | Small README/API list and project-structure updates would align docs with current behavior. |
 
-No critical gaps. Suggested next steps: (1) Update README with `GET /documents/{id}/file` and deploy.yml in project structure, (2) Optional: 401 → login or refresh in frontend, (3) Optional: rate limiting when auth is enabled.
+No critical gaps. Done: README updated with `GET /documents/{doc_id}/file` and flake8 in local equivalents; deploy remains removed. Optional: (1) 401 → login or refresh in frontend, (2) rate limiting when auth is enabled.
 
 ---
 
@@ -148,8 +147,8 @@ No critical gaps. Suggested next steps: (1) Update README with `GET /documents/{
 **Verified:** February 2025 (follow-up pass).
 
 - **docs/INGEST-FLOW.md:** Present; describes API → pipeline → pdf_loader → gemini_extract with code references. Actual code matches: pipeline has per-page try/except and page delay; pdf_loader has per-page try/except; gemini_extract uses `AKILI_GEMINI_MODEL`, retries on 429, normalizes extraction.
-- **.env.example:** Includes `AKILI_GEMINI_MODEL` (gemini-3.0-flash / gemini-3-*); retry/backoff vars documented. Backend reads these in `gemini_extract.py` and `pipeline.py`.
+- **.env.example:** Includes `AKILI_GEMINI_MODEL` (gemini-3.0-flash / gemini-3-*); retry/backoff vars documented; `AKILI_FORMAT_TIMEOUT_SEC` for Shadow Formatting timeout. Backend reads these in `gemini_extract.py`, `gemini_format.py`, and `pipeline.py`.
 - **.github/dependabot.yml:** npm (frontend), pip (root), github-actions; weekly; limits 5/5/3 PRs. No issues.
 - **CI:** Unchanged; backend Ruff + Flake8 + pytest; frontend lint, typecheck, build with empty VITE_*.
-- **README:** Project structure still lists only `ci.yml` (add `deploy.yml`). API list still omits `GET /documents/{doc_id}/file`.
+- **README:** Project structure lists only `ci.yml` (deploy removed). API list includes `GET /documents/{doc_id}/file`. Local equivalents include flake8.
 - **Security / implementation:** No changes; auth optional, CORS and upload limit in place, doc_id validated.

@@ -56,16 +56,18 @@ All types are **validated at ingestion**. Ambiguous or low-confidence extraction
   - For “what is the max voltage?” use Units with the same quantity; ensure the answer is one of the stored values and cite its coordinates.
 - **Refuse**: If no derivation exists (e.g. missing fact, contradictory facts, or answer not in canonical set), return REFUSE with an optional short reason (e.g. “No bijection found for pin 5 in this document”).
 
-Determinism: same question + same canonical store → same answer or same REFUSE. No sampling in the verification step.
+- **Shadow Formatting (optional)**: When the client requests it (`include_formatted_answer`), and the answer is verified, a separate step calls Gemini with a strict fact-only prompt: rephrase the verified fact (Q, F, C) into one sentence; do not add outside knowledge; if F does not answer Q, return `UNABLE TO PHRASE`. The response always includes raw `answer` and `proof`; `formatted_answer` is added only when the format call succeeds within a short timeout. On timeout or failure, the UI silently shows the raw answer. Implemented in `akili.ingest.gemini_format`.
+
+Determinism: same question + same canonical store → same answer or same REFUSE. No sampling in the verification step. Shadow Formatting does not affect determinism of the answer itself.
 
 ---
 
-## API Surface (Planned)
+## API Surface
 
 | Endpoint | Purpose |
 |----------|--------|
 | `POST /ingest` | Upload PDF; run ingestion pipeline; populate canonical store. |
-| `POST /query` | Submit question; return coordinate-grounded answer or REFUSE. |
+| `POST /query` | Submit question; return coordinate-grounded answer + proof or REFUSE. Request body may include `include_formatted_answer: true`; when true and the answer is verified, response may include `formatted_answer` (one-sentence natural-language phrasing from Gemini; silent fallback to raw answer on timeout/failure). |
 | `GET /documents` | List ingested documents and their canonical object counts. |
 | `GET /documents/{id}/canonical` | Inspect canonical objects for a document (for debugging/demos). |
 

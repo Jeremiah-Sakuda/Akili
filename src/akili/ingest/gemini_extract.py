@@ -128,14 +128,16 @@ def _normalize_extraction(data: dict, page_index: int = 0) -> dict:
                 uid = f"{page_prefix}u{i}"
             uom = u.get("unit_of_measure")
             bbox = _normalize_bbox(u.get("bbox"))
-            kept.append({
-                "id": uid,
-                "label": u.get("label") if isinstance(u.get("label"), str) else None,
-                "value": val,
-                "unit_of_measure": uom if isinstance(uom, str) else None,
-                "origin": origin,
-                "bbox": bbox,
-            })
+            kept.append(
+                {
+                    "id": uid,
+                    "label": u.get("label") if isinstance(u.get("label"), str) else None,
+                    "value": val,
+                    "unit_of_measure": uom if isinstance(uom, str) else None,
+                    "origin": origin,
+                    "bbox": bbox,
+                }
+            )
         data["units"] = kept
 
     for key, prefix in (("bijections", "b"), ("grids", "g")):

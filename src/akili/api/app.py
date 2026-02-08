@@ -126,7 +126,7 @@ class QueryRequest(BaseModel):
     question: str = Field(..., description="Question to answer from canonical facts")
     include_formatted_answer: bool = Field(
         False,
-        description="If true and answer is verified, request a 1-sentence natural-language phrasing from Gemini (best-effort; fallback to raw answer on failure).",
+        description="If true, request 1-sentence phrasing from Gemini (best-effort).",
     )
 
 
