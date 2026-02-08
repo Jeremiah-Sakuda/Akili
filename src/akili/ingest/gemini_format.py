@@ -14,7 +14,7 @@ import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
-_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3.0-flash")
+_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3-pro-preview")
 UNABLE_TO_PHRASE = "UNABLE TO PHRASE"
 
 FORMAT_PROMPT = (

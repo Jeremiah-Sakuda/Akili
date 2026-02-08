@@ -25,18 +25,29 @@ interface FileUploaderProps {
   onBack?: () => void;
 }
 
+/** Progress bar reaches this over PROGRESS_DURATION_MS while loading (then jumps to 100 when done). */
+const PROGRESS_DURATION_MS = 90_000; // 90 seconds to reach 90%
+const PROGRESS_CAP = 90;
+
 const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState<UploadPhase>('idle');
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IngestResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressStartRef = useRef<number>(0);
 
   const clearPhaseTimers = useCallback(() => {
     timersRef.current.forEach((t) => clearTimeout(t));
     timersRef.current = [];
+    if (progressIntervalRef.current !== null) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
   }, []);
 
   const copyDocId = async () => {
@@ -61,21 +72,32 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
     setResult(null);
     setLoading(true);
     setPhase('uploading');
+    setProgress(0);
+    progressStartRef.current = Date.now();
+
+    // Progress bar: advance toward 90% over PROGRESS_DURATION_MS (estimated time for long docs)
+    progressIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - progressStartRef.current;
+      const p = Math.min(PROGRESS_CAP, (elapsed / PROGRESS_DURATION_MS) * PROGRESS_CAP);
+      setProgress(Math.round(p));
+    }, 500);
 
     // Advance phases on a timer so engineers see pipeline progress (server doesn't stream status)
     const t1 = setTimeout(() => setPhase('rendering'), 500);
     const t2 = setTimeout(() => setPhase('extracting'), 2000);
     const t3 = setTimeout(() => setPhase('canonicalizing'), 4500);
-    timersRef.current = [t1, t2, t3];
+    timersRef.current.push(t1, t2, t3);
 
     try {
       const data = await ingest(file);
       clearPhaseTimers();
+      setProgress(100);
       setPhase('done');
       setResult(data);
       onSuccess(data.doc_id);
     } catch (e) {
       clearPhaseTimers();
+      setProgress(0);
       setPhase('error');
       setError(e instanceof Error ? e.message : 'Upload failed.');
     } finally {
@@ -99,7 +121,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
 
   return (
     <div
-      className="flex-1 bg-white dark:bg-[#0d1117] relative flex flex-col items-center justify-center p-8 overflow-hidden h-full"
+      className="file-uploader-root flex-1 bg-transparent relative flex flex-col items-center justify-center p-8 overflow-hidden h-full"
       onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
     >
@@ -121,31 +143,20 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
 
         <div
           className="group relative bg-white dark:bg-[#161b22] w-full border-2 border-dashed border-gray-300 dark:border-[#30363d] hover:border-primary dark:hover:border-primary transition-colors cursor-pointer overflow-hidden rounded-xl"
+          onClick={() => !loading && inputRef.current?.click()}
           onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
           role="button"
           tabIndex={0}
         >
-          {/* Grid inside panel - light theme: grey lines */}
-          <div
-            className="absolute inset-0 pointer-events-none z-0 opacity-[0.5] dark:opacity-0"
-            style={{
-              backgroundImage: 'linear-gradient(#e5e7eb 1px, transparent 1px), linear-gradient(90deg, #e5e7eb 1px, transparent 1px)',
-              backgroundSize: '20px 20px',
-            }}
-          />
-          {/* Grid inside panel - dark theme: white/grey lines */}
-          <div
-            className="absolute inset-0 pointer-events-none z-0 opacity-0 dark:opacity-[0.2]"
-            style={{
-              backgroundImage: 'linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px)',
-              backgroundSize: '20px 20px',
-            }}
-          />
+          <label htmlFor="akili-pdf-file-input" className="sr-only">
+            Choose PDF file
+          </label>
           <input
             ref={inputRef}
-            className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
+            id="akili-pdf-file-input"
+            name="file"
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full pointer-events-none"
             type="file"
-            aria-label="Choose PDF file"
             accept=".pdf,application/pdf"
             multiple={false}
             onChange={handleChange}
@@ -165,6 +176,24 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   {phase === 'done' ? 'Canonical facts stored' : PHASES.find((p) => p.key === phase)?.description ?? '…'}
                 </p>
+                {loading && (
+                  <div className="mt-4 w-full max-w-xs">
+                    <div className="h-2 bg-gray-200 dark:bg-[#21262d] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300 ease-out"
+                        style={{ width: `${progress}%` }}
+                        role="progressbar"
+                        aria-valuenow={progress}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label="Extraction progress"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                      Typically ~10–15 sec per page. Long documents may take several minutes.
+                    </p>
+                  </div>
+                )}
                 {(loading || phase === 'done') && (
                   <ul className="mt-6 w-full max-w-xs space-y-2 text-left" aria-label="Upload pipeline status">
                     {PHASES.map((p) => {
@@ -238,8 +267,18 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
               </button>
             </div>
             <p className="text-xs text-gray-700 dark:text-gray-300 font-mono">
-              {result.units_count} units · {result.bijections_count} bijections · {result.grids_count} grids
+              {result.units_count ?? 0} units · {result.bijections_count ?? 0} bijections · {result.grids_count ?? 0} grids
             </p>
+            {result.extraction_warning && (
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-2" role="alert">
+                {result.extraction_warning}
+              </p>
+            )}
+            {result.extraction_note && (
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-2" role="status">
+                {result.extraction_note}
+              </p>
+            )}
           </div>
         )}
 

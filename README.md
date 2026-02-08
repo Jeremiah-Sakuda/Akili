@@ -33,12 +33,12 @@ Akili doesn't just ask Gemini for an answer; it **forces Gemini to show its work
 
 ### Why Gemini 3
 
-Akili uses **Gemini 3** (default: `gemini-3.0-flash`) for ingestion because it excels where other models fall short for this workload:
+Akili uses **Gemini 3 Pro** (default: `gemini-3-pro-preview`) for ingestion because it excels where other models fall short for this workload:
 
 - **Multimodal document understanding** — Native vision + text in one model. PDF pages, pinout tables, and schematics are sent as images; Gemini 3 interprets layout, symbols, and structure in a single pass, without separate OCR or captioning pipelines.
 - **Structured output and instruction following** — Reliably returns JSON that conforms to our canonical schema (units, bijections, grids) with required `(x, y)` coordinates. This reduces hallucination and malformed extractions that would be rejected downstream.
 - **Reasoning over dense technical content** — Strong at parsing datasheets, pin mappings, and grids where precise cell-level and coordinate-level grounding matter. Better alignment with “show the location, not just the answer” than generic chat models.
-- **Efficiency** — Flash variants offer a strong speed/cost tradeoff for per-page extraction at scale; Pro variants are available via `AKILI_GEMINI_MODEL` when you need maximum accuracy on complex layouts.
+- **Efficiency** — Use `AKILI_GEMINI_MODEL=gemini-3-flash-preview` or `gemini-2.5-flash` for faster, lower-cost extraction; default Pro is best for maximum accuracy on complex layouts.
 
 Other models may handle general Q&A well, but for **coordinate-grounded, schema-bound extraction** from technical PDFs, Gemini 3 is the fit Akili is built around.
 
@@ -203,11 +203,11 @@ You only need to restart the API once after adding these; after that, run the sc
 6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`. **Get doc PDF**: `GET /documents/{doc_id}/file` (for viewer).
 
 **Gemini rate limits (429)**  
-Ingestion calls the Gemini API **once per PDF page**. Free-tier limits (e.g. 15 requests per minute for `gemini-3.0-flash`) can be hit with multi-page PDFs. The app retries on 429 with exponential backoff and waits a few seconds between pages to reduce bursts. If you still see 429 after waiting:
+Ingestion calls the Gemini API **once per PDF page**. Free-tier limits (e.g. requests per minute for `gemini-3-pro-preview`) can be hit with multi-page PDFs. The app retries on 429 with exponential backoff and waits a few seconds between pages to reduce bursts. If you still see 429 after waiting:
 
 - **Per-minute limit:** Wait 1–2 minutes and try again, or ingest fewer pages at a time.
 - **Daily or project quota:** Check [Google AI Studio](https://aistudio.google.com/) quotas and billing; you may need to wait until the quota resets or use a paid tier.
-- **Tuning:** Set `AKILI_GEMINI_PAGE_DELAY_SECONDS` (e.g. `4`) to slow down ingest, or `AKILI_GEMINI_MAX_RETRIES` / `AKILI_GEMINI_BACKOFF_BASE` to adjust retries (see `.env.example`). Query-time **Shadow Formatting** (natural-language phrasing of verified answers) uses the same Gemini key and model; format calls use a short timeout (`AKILI_FORMAT_TIMEOUT_SEC`, default 2.5s) and silently fall back to the raw answer on failure.
+- **Tuning:** Defaults are tuned to reduce skipped pages: 4 s between pages, 6 retries with longer backoff, and a 60 s cooldown after any 429 before the next page. Override with `AKILI_GEMINI_PAGE_DELAY_SECONDS`, `AKILI_GEMINI_MAX_RETRIES`, `AKILI_GEMINI_BACKOFF_BASE`, and `AKILI_GEMINI_429_COOLDOWN_SECONDS` (see `.env.example`). Query-time **Shadow Formatting** (natural-language phrasing of verified answers) uses the same Gemini key and model; format calls use a short timeout (`AKILI_FORMAT_TIMEOUT_SEC`, default 2.5s) and silently fall back to the raw answer on failure.
 
 ### UI (frontend)
 

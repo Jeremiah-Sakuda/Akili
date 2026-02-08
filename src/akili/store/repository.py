@@ -271,6 +271,14 @@ class Store:
         result.extend(self.get_grids_by_doc(doc_id))
         return result
 
+    def delete_document(self, doc_id: str) -> None:
+        """Remove a document and all its canonical objects from the store."""
+        with self._conn() as c:
+            c.execute("DELETE FROM units WHERE doc_id = ?", (doc_id,))
+            c.execute("DELETE FROM bijections WHERE doc_id = ?", (doc_id,))
+            c.execute("DELETE FROM grids WHERE doc_id = ?", (doc_id,))
+            c.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
+
     def list_documents(self) -> list[dict[str, Any]]:
         """List ingested documents with counts."""
         with self._conn() as c:

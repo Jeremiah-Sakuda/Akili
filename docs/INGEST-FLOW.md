@@ -22,8 +22,8 @@ with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
     tmp.write(content)
     tmp_path = Path(tmp.name)
 try:
-    doc_id, canonical = ingest_document(tmp_path, store=store)
-    # ... copy to docs_dir, then respond
+    doc_id, canonical, total_pages, pages_failed = ingest_document(tmp_path, store=store)
+    # ... copy to docs_dir, then respond with total_pages and pages_failed
 finally:
     tmp_path.unlink(missing_ok=True)
 ```
@@ -36,7 +36,7 @@ finally:
 
 - Generates or uses provided `doc_id` (UUID if not provided).
 - Loads PDF into page images, then for **each page**: call Gemini → canonicalize → accumulate. Failed pages are skipped (try/except per page).
-- Optionally writes to the store and returns `(doc_id, list[Unit|Bijection|Grid])`.
+- Optionally writes to the store and returns `(doc_id, list[Unit|Bijection|Grid], total_pages, pages_failed)`.
 
 ```python
 # pipeline.py (excerpt)
@@ -212,7 +212,7 @@ def store_canonical(self, doc_id, filename, page_count, units, bijections, grids
 
 - Temp file is deleted in `finally`.
 - PDF is copied to `docs/{doc_id}.pdf` if you use that feature.
-- Response body: `doc_id`, `filename`, `page_count`, `units_count`, `bijections_count`, `grids_count`.
+- Response body: `doc_id`, `filename`, `page_count`, `units_count`, `bijections_count`, `grids_count`, `pages_failed`. Optionally `extraction_note` when some pages were skipped (e.g. rate limits).
 
 ---
 

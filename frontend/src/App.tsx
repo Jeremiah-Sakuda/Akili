@@ -8,12 +8,12 @@ import LoginPage from './components/LoginPage';
 import { useAuth } from './contexts/AuthContext';
 import { AppState } from './types';
 import type { DocumentSummary, ProofPoint, QueryResponse } from './api';
-import { getDocuments } from './api';
+import { deleteDocument as apiDeleteDocument, getDocuments } from './api';
 
 const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
   id: d.doc_id,
   name: d.filename || d.doc_id,
-  meta: `${d.units_count} units · ${d.bijections_count} bijections · ${d.grids_count} grids`,
+  meta: `${d.units_count ?? 0} units · ${d.bijections_count ?? 0} bijections · ${d.grids_count ?? 0} grids`,
   icon: 'description',
   active: d.doc_id === activeId,
 });
@@ -64,6 +64,23 @@ const App: React.FC = () => {
     setOverlayProof(null);
   };
 
+  const handleDeleteDocument = useCallback(
+    async (docId: string) => {
+      try {
+        await apiDeleteDocument(docId);
+        await refreshDocuments();
+        if (selectedDocId === docId) {
+          setSelectedDocId(null);
+          setOverlayProof(null);
+          setQueryResult(null);
+        }
+      } catch {
+        // Error could be shown via toast; for now rely on refreshDocuments not updating
+      }
+    },
+    [refreshDocuments, selectedDocId]
+  );
+
   const handleShowProof = useCallback((proof: ProofPoint[] | null) => {
     setOverlayProof(proof);
     setViewState(AppState.VERIFIED);
@@ -101,6 +118,7 @@ const App: React.FC = () => {
           selectedDocId={selectedDocId}
           loading={loadingDocs}
           onSelectFile={handleSelectDoc}
+          onDeleteDocument={handleDeleteDocument}
         />
 
         <main className="flex-1 bg-gray-50 dark:bg-[#0d1117] relative flex flex-col overflow-hidden">

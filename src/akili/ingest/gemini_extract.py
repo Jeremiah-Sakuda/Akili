@@ -20,11 +20,11 @@ from akili.ingest.extract_schema import PageExtraction
 
 logger = logging.getLogger(__name__)
 
-# Retry 429 / resource exhausted: max attempts, backoff base seconds
-_GEMINI_MAX_RETRIES = int(os.environ.get("AKILI_GEMINI_MAX_RETRIES", "4"))
-_GEMINI_BACKOFF_BASE = float(os.environ.get("AKILI_GEMINI_BACKOFF_BASE", "4.0"))
-# Model: e.g. gemini-3.0-flash (default), gemini-3-flash-preview, gemini-3-pro-preview
-_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3.0-flash")
+# Retry 429 / resource exhausted: max attempts, backoff base seconds (longer = fewer skipped pages)
+_GEMINI_MAX_RETRIES = int(os.environ.get("AKILI_GEMINI_MAX_RETRIES", "6"))
+_GEMINI_BACKOFF_BASE = float(os.environ.get("AKILI_GEMINI_BACKOFF_BASE", "8.0"))
+# Model: gemini-3-pro-preview (default), gemini-3-flash-preview, or gemini-2.5-flash / gemini-2.5-pro
+_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3-pro-preview")
 
 
 def _is_rate_limit_error(e: BaseException) -> bool:

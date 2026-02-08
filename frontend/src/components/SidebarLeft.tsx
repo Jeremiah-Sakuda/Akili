@@ -12,6 +12,7 @@ interface SidebarLeftProps {
   selectedDocId: string | null;
   loading?: boolean;
   onSelectFile: (docId: string) => void;
+  onDeleteDocument?: (docId: string) => void;
 }
 
 const SidebarLeft: React.FC<SidebarLeftProps> = ({
@@ -21,6 +22,7 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
   selectedDocId,
   loading = false,
   onSelectFile,
+  onDeleteDocument,
 }) => {
   const [canonicalTab, setCanonicalTab] = useState<CanonicalTab>('units');
   const [canonical, setCanonical] = useState<CanonicalResponse | null>(null);
@@ -103,6 +105,22 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
                 </p>
                 <p className={`text-xs mt-0.5 font-mono ${file.active ? 'text-primary/80 dark:text-primary/70' : 'text-gray-500 dark:text-gray-500'}`}>{file.meta}</p>
               </div>
+              {onDeleteDocument && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete "${file.name}"? This cannot be undone.`)) {
+                      onDeleteDocument(file.id);
+                    }
+                  }}
+                  className="p-1 shrink-0 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Delete document"
+                  aria-label={`Delete ${file.name}`}
+                >
+                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                </button>
+              )}
             </div>
           ))
         )}

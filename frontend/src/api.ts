@@ -39,6 +39,12 @@ export interface IngestResponse {
   units_count: number;
   bijections_count: number;
   grids_count: number;
+  /** Number of pages that failed extraction (e.g. rate limit); 0 if all succeeded */
+  pages_failed?: number;
+  /** Present when no facts were extracted; suggests checking API key and server logs */
+  extraction_warning?: string;
+  /** Present when some pages were skipped (e.g. rate limits); suggests increasing delay */
+  extraction_note?: string;
 }
 
 export interface ProofPointBBox {
@@ -79,6 +85,19 @@ export async function getDocuments(): Promise<DocumentSummary[]> {
   if (!res.ok) throw new Error('Failed to fetch documents');
   const data = await res.json();
   return data.documents ?? [];
+}
+
+export async function deleteDocument(docId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}`, {
+    method: 'DELETE',
+    headers: await authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    const detail = err.detail;
+    const message = Array.isArray(detail) ? detail.join(' ') : detail ?? 'Delete failed';
+    throw new Error(message);
+  }
 }
 
 export async function ingest(file: File): Promise<IngestResponse> {

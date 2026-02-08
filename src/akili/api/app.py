@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from akili.api.auth import get_current_user
+from akili.canonical import Bijection, Grid, Unit
 from akili.ingest.gemini_format import format_answer
 from akili.ingest.pipeline import ingest_document
 from akili.store import Store
@@ -157,7 +158,7 @@ async def ingest(
         tmp.write(content)
         tmp_path = Path(tmp.name)
     try:
-        doc_id, canonical = ingest_document(tmp_path, store=store)
+        doc_id, canonical, total_pages, pages_failed = ingest_document(tmp_path, store=store)
         _validate_doc_id(doc_id)
         docs_dir = _docs_dir()
         docs_dir.mkdir(parents=True, exist_ok=True)
@@ -179,22 +180,30 @@ async def ingest(
         raise HTTPException(status_code=500, detail=err_msg) from e
     finally:
         tmp_path.unlink(missing_ok=True)
-    units = [o for o in canonical if o.__class__.__name__ == "Unit"]
-    bijections = [o for o in canonical if o.__class__.__name__ == "Bijection"]
-    grids = [o for o in canonical if o.__class__.__name__ == "Grid"]
-    page_count = (
-        (max((getattr(o, "page", 0) for o in canonical), default=-1) + 1) if canonical else 0
-    )
-    return JSONResponse(
-        content={
-            "doc_id": doc_id,
-            "filename": file.filename or "upload.pdf",
-            "page_count": page_count,
-            "units_count": len(units),
-            "bijections_count": len(bijections),
-            "grids_count": len(grids),
-        }
-    )
+    units = [o for o in canonical if isinstance(o, Unit)]
+    bijections = [o for o in canonical if isinstance(o, Bijection)]
+    grids = [o for o in canonical if isinstance(o, Grid)]
+    content = {
+        "doc_id": doc_id,
+        "filename": file.filename or "upload.pdf",
+        "page_count": total_pages,
+        "units_count": len(units),
+        "bijections_count": len(bijections),
+        "grids_count": len(grids),
+        "pages_failed": pages_failed,
+    }
+    if len(units) == 0 and len(bijections) == 0 and len(grids) == 0:
+        content["extraction_warning"] = (
+            "No facts extracted from this document. "
+            "Check GOOGLE_API_KEY in .env, Gemini model (AKILI_GEMINI_MODEL), and server logs for errors."
+        )
+    elif pages_failed > 0:
+        content["extraction_note"] = (
+            f"Extracted from {total_pages - pages_failed} of {total_pages} pages. "
+            f"{pages_failed} page(s) were skipped (often due to rate limits). "
+            "Try increasing AKILI_GEMINI_PAGE_DELAY_SECONDS in .env (e.g. 4) and re-upload."
+        )
+    return JSONResponse(content=content)
 
 
 # Thread pool for sync Gemini format call (short timeout; never blocks verified answer)
@@ -266,6 +275,21 @@ async def list_documents(
     store = get_store()
     docs = store.list_documents()
     return JSONResponse(content={"documents": docs})
+
+
+@app.delete("/documents/{doc_id}")
+async def delete_document(
+    doc_id: str,
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
+    """Delete an ingested document (canonical store and PDF file)."""
+    _validate_doc_id(doc_id)
+    store = get_store()
+    store.delete_document(doc_id)
+    dest = _docs_dir() / f"{doc_id}.pdf"
+    if dest.is_file():
+        dest.unlink()
+    return JSONResponse(content={"doc_id": doc_id, "deleted": True})
 
 
 @app.get("/documents/{doc_id}/file")

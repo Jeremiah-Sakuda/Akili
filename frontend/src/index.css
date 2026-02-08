@@ -28,51 +28,17 @@ body {
   color: #1f2937;
 }
 
-/* Light mode: explicit so switching to light is clearly visible */
-[data-theme="light"] body {
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-[data-theme="light"] #root > div {
-  background: #ffffff !important;
-}
-
-[data-theme="light"] main {
-  background: #f1f5f9 !important;
-}
-
-[data-theme="light"] header {
-  background: #ffffff !important;
-  border-color: #e2e8f0;
-}
-
-[data-theme="light"] aside {
-  background: #ffffff !important;
-  border-color: #e2e8f0;
-}
-
-[data-theme="light"] main > div.h-10 {
-  background: #ffffff !important;
-  border-color: #e2e8f0;
-}
-
-/* Light mode scrollbars */
-[data-theme="light"] ::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-color: #f1f5f9;
-}
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
 /* Dark mode: applied when html has .dark (set by ThemeContext) */
 .dark body {
   background: var(--color-background-dark);
   color: #e5e7eb;
+}
+
+/* Center panel: grid on main (placeholder for doc view) */
+.dark main {
+  background-color: #0d1117 !important;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
 }
 
 /* Very dark mode: every section gets darker backgrounds */
@@ -101,25 +67,21 @@ body {
 
 [data-theme="very-dark"] main,
 .dark.very-dark main {
-  background: #0d1117 !important;
+  background-color: #010409 !important;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
 }
 
 /* Toolbar under main */
 [data-theme="very-dark"] main > div.h-10,
 .dark.very-dark main > div.h-10 {
-  background: #0d1117 !important;
+  background: #010409 !important;
   border-color: #21262d;
 }
 
 /* Document viewer container */
 [data-theme="very-dark"] main .flex-1.overflow-y-auto,
 .dark.very-dark main .flex-1.overflow-y-auto {
-  background: #0d1117 !important;
-}
-
-/* File uploader full-area background */
-[data-theme="very-dark"] .flex-1.bg-white,
-.dark.very-dark .flex-1.bg-white {
   background: #010409 !important;
 }
 
