@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { ingest, type IngestResponse } from '../api';
+import { ingestStream, type IngestResponse } from '../api';
 
 type UploadPhase =
   | 'idle'
@@ -7,6 +7,7 @@ type UploadPhase =
   | 'rendering'
   | 'extracting'
   | 'canonicalizing'
+  | 'storing'
   | 'done'
   | 'error';
 
@@ -14,11 +15,12 @@ const PHASES: { key: UploadPhase; label: string; description: string }[] = [
   { key: 'uploading', label: 'Uploading file', description: 'Sending PDF to server' },
   { key: 'rendering', label: 'Rendering PDF pages', description: 'Converting pages to images (PyMuPDF)' },
   { key: 'extracting', label: 'Extracting with Gemini', description: 'Per-page vision extraction' },
-  { key: 'canonicalizing', label: 'Canonicalizing', description: 'Normalizing and storing facts' },
+  { key: 'canonicalizing', label: 'Canonicalizing', description: 'Normalizing facts per page' },
+  { key: 'storing', label: 'Storing', description: 'Writing to database' },
   { key: 'done', label: 'Done', description: 'Document ready for verification' },
 ];
 
-const PHASE_ORDER: UploadPhase[] = ['uploading', 'rendering', 'extracting', 'canonicalizing', 'done'];
+const PHASE_ORDER: UploadPhase[] = ['uploading', 'rendering', 'extracting', 'canonicalizing', 'storing', 'done'];
 
 interface FileUploaderProps {
   onSuccess: (docId: string) => void;
@@ -34,16 +36,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState<UploadPhase>('idle');
   const [progress, setProgress] = useState(0);
+  const [progressDetail, setProgressDetail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IngestResponse | null>(null);
   const [copied, setCopied] = useState(false);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressStartRef = useRef<number>(0);
 
-  const clearPhaseTimers = useCallback(() => {
-    timersRef.current.forEach((t) => clearTimeout(t));
-    timersRef.current = [];
+  const clearProgressInterval = useCallback(() => {
     if (progressIntervalRef.current !== null) {
       clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
@@ -73,32 +73,49 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
     setLoading(true);
     setPhase('uploading');
     setProgress(0);
+    setProgressDetail(null);
     progressStartRef.current = Date.now();
 
-    // Progress bar: advance toward 90% over PROGRESS_DURATION_MS (estimated time for long docs)
+    // Progress bar: advance toward 90% over PROGRESS_DURATION_MS (then jump to 100 on done)
     progressIntervalRef.current = setInterval(() => {
       const elapsed = Date.now() - progressStartRef.current;
       const p = Math.min(PROGRESS_CAP, (elapsed / PROGRESS_DURATION_MS) * PROGRESS_CAP);
       setProgress(Math.round(p));
     }, 500);
 
-    // Advance phases on a timer so engineers see pipeline progress (server doesn't stream status)
-    const t1 = setTimeout(() => setPhase('rendering'), 500);
-    const t2 = setTimeout(() => setPhase('extracting'), 2000);
-    const t3 = setTimeout(() => setPhase('canonicalizing'), 4500);
-    timersRef.current.push(t1, t2, t3);
-
     try {
-      const data = await ingest(file);
-      clearPhaseTimers();
-      setProgress(100);
-      setPhase('done');
+      const data = await ingestStream(file, (event) => {
+        // Map server phases to UI phase; phase is driven by server
+        if (event.phase === 'rendering' || event.phase === 'rendering_done') {
+          setPhase('rendering');
+          setProgressDetail(event.total_pages != null ? `${event.total_pages} page(s)` : null);
+        } else if (event.phase === 'extracting') {
+          setPhase('extracting');
+          const total = event.total_pages ?? 0;
+          const page = event.page ?? 0;
+          setProgressDetail(total > 0 ? `Page ${page + 1} of ${total}` : null);
+        } else if (event.phase === 'canonicalizing') {
+          setPhase('canonicalizing');
+          const total = event.total_pages ?? 0;
+          const page = event.page ?? 0;
+          setProgressDetail(total > 0 ? `Page ${page + 1} of ${total}` : null);
+        } else if (event.phase === 'storing') {
+          setPhase('storing');
+          setProgressDetail(null);
+        } else if (event.phase === 'done') {
+          clearProgressInterval();
+          setProgress(100);
+          setPhase('done');
+          setProgressDetail(null);
+        }
+      });
       setResult(data);
       onSuccess(data.doc_id);
     } catch (e) {
-      clearPhaseTimers();
+      clearProgressInterval();
       setProgress(0);
       setPhase('error');
+      setProgressDetail(null);
       setError(e instanceof Error ? e.message : 'Upload failed.');
     } finally {
       setLoading(false);
@@ -106,8 +123,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
   };
 
   React.useEffect(() => {
-    return () => clearPhaseTimers();
-  }, [clearPhaseTimers]);
+    return () => clearProgressInterval();
+  }, [clearProgressInterval]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -174,7 +191,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
                   {phase === 'done' ? 'Document ready' : `Phase: ${PHASES.find((p) => p.key === phase)?.label ?? phase}`}
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {phase === 'done' ? 'Canonical facts stored' : PHASES.find((p) => p.key === phase)?.description ?? '…'}
+                  {phase === 'done'
+                    ? 'Canonical facts stored'
+                    : progressDetail
+                      ? `${PHASES.find((p) => p.key === phase)?.description ?? '…'} — ${progressDetail}`
+                      : PHASES.find((p) => p.key === phase)?.description ?? '…'}
                 </p>
                 {loading && (
                   <div className="mt-4 w-full max-w-xs">

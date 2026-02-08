@@ -5,17 +5,20 @@ FastAPI app: ingest documents, submit queries, return coordinate-grounded answer
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import queue
 import re
 import shutil
 import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from akili.api.auth import get_current_user
@@ -204,6 +207,102 @@ async def ingest(
             "Try increasing AKILI_GEMINI_PAGE_DELAY_SECONDS in .env (e.g. 4) and re-upload."
         )
     return JSONResponse(content=content)
+
+
+def _run_ingest_with_progress(
+    tmp_path: Path,
+    store: Store,
+    progress_queue: queue.Queue,
+    filename: str,
+    docs_dir: Path,
+) -> None:
+    """Run ingest in a thread; put progress events into queue. Adds filename to final 'done'."""
+    result_holder: list[dict] = []
+
+    def callback(msg: dict) -> None:
+        if msg.get("phase") != "done":
+            progress_queue.put(msg)
+        else:
+            result_holder.append(msg)
+
+    try:
+        doc_id, canonical, total_pages, pages_failed = ingest_document(
+            tmp_path, store=store, progress_callback=callback
+        )
+        _validate_doc_id(doc_id)
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        dest = docs_dir / f"{doc_id}.pdf"
+        shutil.copy2(tmp_path, dest)
+        done = result_holder[0] if result_holder else {}
+        done["filename"] = filename or "upload.pdf"
+        progress_queue.put(done)
+    except Exception as e:
+        progress_queue.put({"phase": "error", "message": str(e)})
+
+
+@app.post("/ingest/stream")
+async def ingest_stream(
+    _user: dict[str, Any] | None = Depends(get_current_user),
+    file: UploadFile = File(...),
+) -> StreamingResponse:
+    """
+    Upload a PDF and run ingestion with server-sent progress.
+    Streams progress events: rendering, extracting (page/total), canonicalizing, storing, done.
+    Final event is done with doc_id, filename, counts. On error, event has phase 'error'.
+    """
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    max_bytes = int(os.environ.get("AKILI_MAX_UPLOAD_BYTES", "104857600"))
+    if max_bytes > 0 and len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override.",
+        )
+    store = get_store()
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+    progress_queue: queue.Queue = queue.Queue()
+    docs_dir = _docs_dir()
+    filename = file.filename or "upload.pdf"
+    thread = threading.Thread(
+        target=_run_ingest_with_progress,
+        args=(tmp_path, store, progress_queue, filename, docs_dir),
+    )
+    thread.start()
+
+    async def cleanup_and_stream() -> Any:
+        try:
+            loop = asyncio.get_event_loop()
+            async for chunk in _stream_sse(progress_queue, loop):
+                yield chunk
+        finally:
+            tmp_path.unlink(missing_ok=True)
+            thread.join(timeout=1.0)
+
+    async def _stream_sse(q: queue.Queue, loop: asyncio.AbstractEventLoop) -> Any:
+        while True:
+            def get_msg() -> dict | None:
+                try:
+                    return q.get(timeout=0.5)
+                except queue.Empty:
+                    return None
+            msg = await loop.run_in_executor(None, get_msg)
+            if msg is None:
+                continue
+            phase = msg.get("phase")
+            yield f"data: {json.dumps(msg)}\n\n"
+            if phase in ("done", "error"):
+                break
+
+    return StreamingResponse(
+        cleanup_and_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # Thread pool for sync Gemini format call (short timeout; never blocks verified answer)

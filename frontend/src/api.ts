@@ -118,6 +118,88 @@ export async function ingest(file: File): Promise<IngestResponse> {
   return res.json();
 }
 
+/** Server-sent progress event from POST /ingest/stream */
+export interface IngestProgressEvent {
+  phase: 'rendering' | 'rendering_done' | 'extracting' | 'canonicalizing' | 'storing' | 'done' | 'error';
+  total_pages?: number;
+  page?: number;
+  doc_id?: string;
+  filename?: string;
+  page_count?: number;
+  units_count?: number;
+  bijections_count?: number;
+  grids_count?: number;
+  pages_failed?: number;
+  extraction_warning?: string;
+  extraction_note?: string;
+  message?: string;
+}
+
+/**
+ * Upload a PDF and run ingestion with server-sent progress.
+ * Calls onProgress for each event; returns final IngestResponse on "done", throws on "error".
+ */
+export async function ingestStream(
+  file: File,
+  onProgress: (event: IngestProgressEvent) => void
+): Promise<IngestResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/ingest/stream`, {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    const detail = err.detail;
+    const message = Array.isArray(detail) ? detail.join(' ') : detail ?? 'Ingest failed';
+    throw new Error(message);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: IngestResponse | null = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() ?? '';
+    for (const event of events) {
+      const dataLine = event.split('\n').find((l) => l.startsWith('data: '));
+      if (!dataLine) continue;
+      try {
+        const msg = JSON.parse(dataLine.slice(6)) as IngestProgressEvent;
+        onProgress(msg);
+        if (msg.phase === 'done') {
+          result = {
+            doc_id: msg.doc_id!,
+            filename: msg.filename ?? 'upload.pdf',
+            page_count: msg.page_count ?? msg.total_pages ?? 0,
+            units_count: msg.units_count ?? 0,
+            bijections_count: msg.bijections_count ?? 0,
+            grids_count: msg.grids_count ?? 0,
+            pages_failed: msg.pages_failed,
+            extraction_warning: msg.extraction_warning,
+            extraction_note: msg.extraction_note,
+          };
+        }
+        if (msg.phase === 'error') {
+          throw new Error(msg.message ?? 'Ingest failed');
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;
+        throw e;
+      }
+    }
+  }
+  if (!result) throw new Error('Ingest stream ended without done event');
+  return result;
+}
+
 export async function query(
   docId: string,
   question: string,

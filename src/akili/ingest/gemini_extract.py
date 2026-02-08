@@ -38,12 +38,14 @@ EXTRACT_PROMPT = (
     "Rules:\n"
     "- Extract ONLY facts you can tie to a specific (x, y) location on the page. "
     "Use normalized coordinates 0.0–1.0 (e.g. top-left = 0,0; bottom-right = 1,1) or estimate from layout.\n"  # noqa: E501
-    "- For each fact, provide origin.x and origin.y. If you can infer a bounding box, provide bbox (x1,y1,x2,y2).\n"  # noqa: E501
-    "- Output only: units (discrete values like pin labels, voltages with position), "
-    "bijections (1:1 mappings e.g. pin name <-> pin number), grids (tables with row/col and optional cell origins).\n"  # noqa: E501
-    '- Use short, unique ids (e.g. "u1", "b1", "g1"). Leave arrays empty if nothing of that type is on the page.\n'  # noqa: E501
+    "- For each fact, provide origin with x and y (numbers). If you can infer a bounding box, provide bbox with x1, y1, x2, y2.\n"  # noqa: E501
+    "- Use short, unique ids (e.g. \"u1\", \"b1\", \"g1\"). Leave arrays empty if nothing of that type is on the page.\n"
     "- Do not guess. If a coordinate or value is ambiguous, omit that fact.\n\n"
-    "Respond with a single JSON object with keys: units (array), bijections (array), grids (array). No other text."  # noqa: E501
+    "JSON format (use exactly these field names so the response can be parsed):\n"
+    "- units: array of objects, each with: id (string), value (string or number), origin (object with x, y), optional label, unit_of_measure, bbox (object with x1, y1, x2, y2).\n"  # noqa: E501
+    "- bijections: array of 1:1 mappings. Each object MUST have: id (string), left_set (array of strings), right_set (array of strings), mapping (object: left label -> right label), origin (object with x, y), optional bbox. Example: {\"id\":\"b1\",\"left_set\":[\"Pin1\"],\"right_set\":[\"1\"],\"mapping\":{\"Pin1\":\"1\"},\"origin\":{\"x\":0.2,\"y\":0.3}}.\n"  # noqa: E501
+    "- grids: array of tables. Each object MUST have: id (string), rows (integer), cols (integer), cells (array of objects with row (int), col (int), value (string or number), optional origin), origin (object with x, y for the grid), optional bbox. Do NOT use \"rows\" as a list of row objects; use rows and cols as numbers and put all cells in the cells array with row/col indices.\n"  # noqa: E501
+    "Respond with a single JSON object with keys: units, bijections, grids. No other text."  # noqa: E501
 )
 
 
