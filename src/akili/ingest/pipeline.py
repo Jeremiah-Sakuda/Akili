@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Seconds to wait between page extractions to avoid bursting Gemini rate limits (default 4)
 _PAGE_DELAY = float(os.environ.get("AKILI_GEMINI_PAGE_DELAY_SECONDS", "4.0"))
-# After a page fails with 429/rate limit, wait this many seconds before trying the next page (default 60)
+# After a page fails with 429/rate limit, wait this many seconds before next page (default 60)
 _429_COOLDOWN = float(os.environ.get("AKILI_GEMINI_429_COOLDOWN_SECONDS", "60.0"))
 
 
@@ -43,9 +43,10 @@ def ingest_document(
     Returns (doc_id, list of canonical objects, total_pages, pages_failed).
     doc_id is generated if not provided. If store is provided, canonical objects are persisted.
     pages_failed is the number of pages that raised an exception (e.g. rate limit, validation).
-    If progress_callback is set, it is called with dicts: {"phase": "rendering"}, {"phase": "rendering_done", "total_pages": N},
-    {"phase": "extracting", "page": i, "total": N}, {"phase": "canonicalizing", "page": i, "total": N},
-    {"phase": "storing", "total_pages": N}, {"phase": "done", ...}.
+    If progress_callback is set, it is called with dicts: {"phase": "rendering"},
+    {"phase": "rendering_done", "total_pages": N}, {"phase": "extracting", "page": i, "total": N},
+    {"phase": "canonicalizing", "page": i, "total": N}, {"phase": "storing", "total_pages": N},
+    {"phase": "done", ...}.
     """
     def _progress(msg: dict) -> None:
         if progress_callback:
@@ -94,13 +95,14 @@ def ingest_document(
     if total_pages > 0 and len(all_canonical) == 0:
         logger.warning(
             "Ingest completed but no facts extracted from any of %s page(s) (doc_id=%s). "
-            "Check GOOGLE_API_KEY, Gemini model name (AKILI_GEMINI_MODEL), and server logs for per-page errors.",
+            "Check GOOGLE_API_KEY, Gemini model (AKILI_GEMINI_MODEL), and server logs.",
             total_pages,
             doc_id,
         )
     if pages_failed > 0:
         logger.info(
-            "Ingest: %s of %s page(s) failed (doc_id=%s). Often due to rate limits; try AKILI_GEMINI_PAGE_DELAY_SECONDS=4 or higher.",
+            "Ingest: %s of %s page(s) failed (doc_id=%s). Often rate limits; "
+            "try AKILI_GEMINI_PAGE_DELAY_SECONDS=4 or higher.",
             pages_failed,
             total_pages,
             doc_id,
@@ -122,16 +124,21 @@ def ingest_document(
         "bijections_count": len([o for o in all_canonical if isinstance(o, Bijection)]),
         "grids_count": len([o for o in all_canonical if isinstance(o, Grid)]),
     }
-    if result["units_count"] == 0 and result["bijections_count"] == 0 and result["grids_count"] == 0:
+    if (
+        result["units_count"] == 0
+        and result["bijections_count"] == 0
+        and result["grids_count"] == 0
+    ):
         result["extraction_warning"] = (
             "No facts extracted from this document. "
-            "Check GOOGLE_API_KEY in .env, Gemini model (AKILI_GEMINI_MODEL), and server logs for errors."
+            "Check GOOGLE_API_KEY in .env, Gemini model (AKILI_GEMINI_MODEL), "
+            "and server logs for errors."
         )
     elif pages_failed > 0:
         result["extraction_note"] = (
             f"Extracted from {total_pages - pages_failed} of {total_pages} pages. "
             f"{pages_failed} page(s) were skipped (often due to rate limits). "
-            "Try increasing AKILI_GEMINI_PAGE_DELAY_SECONDS in .env (e.g. 4) and re-upload."
+            "Try increasing AKILI_GEMINI_PAGE_DELAY_SECONDS in .env and re-upload."
         )
     _progress(result)
     return doc_id, all_canonical, total_pages, pages_failed

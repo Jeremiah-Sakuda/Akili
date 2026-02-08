@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import queue
 import re
@@ -27,6 +28,14 @@ from akili.ingest.gemini_format import format_answer
 from akili.ingest.pipeline import ingest_document
 from akili.store import Store
 from akili.verify import AnswerWithProof, Refuse, verify_and_answer
+
+logger = logging.getLogger("akili")
+
+
+def _is_debug() -> bool:
+    """Return True if full error messages should be included in API responses."""
+    return os.environ.get("AKILI_DEBUG", "").strip().lower() in ("1", "true", "yes")
+
 
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",
@@ -153,7 +162,8 @@ async def ingest(
         raise HTTPException(
             status_code=413,
             detail=(
-                f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override."
+                f"File too large (max {max_bytes} bytes). "
+                "Set AKILI_MAX_UPLOAD_BYTES to override."
             ),
         )
     store = get_store()
@@ -171,6 +181,7 @@ async def ingest(
         raise
     except Exception as e:
         err_msg = str(e)
+        logger.exception("Ingest failed: %s", err_msg)
         # Gemini/Vertex rate limit (429) — return 429 so the UI can show a clear message
         if "429" in err_msg or "Resource exhausted" in err_msg or "ResourceExhausted" in err_msg:
             raise HTTPException(
@@ -180,7 +191,8 @@ async def ingest(
                     "See https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429"
                 ),
             ) from e
-        raise HTTPException(status_code=500, detail=err_msg) from e
+        detail = err_msg if _is_debug() else "Internal server error"
+        raise HTTPException(status_code=500, detail=detail) from e
     finally:
         tmp_path.unlink(missing_ok=True)
     units = [o for o in canonical if isinstance(o, Unit)]
@@ -198,7 +210,8 @@ async def ingest(
     if len(units) == 0 and len(bijections) == 0 and len(grids) == 0:
         content["extraction_warning"] = (
             "No facts extracted from this document. "
-            "Check GOOGLE_API_KEY in .env, Gemini model (AKILI_GEMINI_MODEL), and server logs for errors."
+            "Check GOOGLE_API_KEY in .env, Gemini model (AKILI_GEMINI_MODEL), "
+            "and server logs for errors."
         )
     elif pages_failed > 0:
         content["extraction_note"] = (
@@ -237,7 +250,9 @@ def _run_ingest_with_progress(
         done["filename"] = filename or "upload.pdf"
         progress_queue.put(done)
     except Exception as e:
-        progress_queue.put({"phase": "error", "message": str(e)})
+        logger.exception("Ingest stream failed: %s", e)
+        msg = str(e) if _is_debug() else "An error occurred during ingest."
+        progress_queue.put({"phase": "error", "message": msg})
 
 
 @app.post("/ingest/stream")
@@ -259,7 +274,10 @@ async def ingest_stream(
     if max_bytes > 0 and len(content) > max_bytes:
         raise HTTPException(
             status_code=413,
-            detail=f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override.",
+            detail=(
+                f"File too large (max {max_bytes} bytes). "
+                "Set AKILI_MAX_UPLOAD_BYTES to override."
+            ),
         )
     store = get_store()
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -413,6 +431,7 @@ async def get_canonical(
     _user: dict[str, Any] | None = Depends(get_current_user),
 ) -> JSONResponse:
     """Return canonical objects (units, bijections, grids) for a document."""
+    _validate_doc_id(doc_id)
     store = get_store()
     units = store.get_units_by_doc(doc_id)
     bijections = store.get_bijections_by_doc(doc_id)

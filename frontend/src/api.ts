@@ -2,11 +2,22 @@
  * API client for Akili FastAPI backend.
  * In dev, Vite proxy forwards /api/* to the backend (see vite.config.ts).
  * When Firebase auth is configured and user is signed in, sends Bearer token for API auth.
+ * On 401, signs out from Firebase and throws so the UI shows the login page.
  */
 
+import { signOut } from 'firebase/auth';
 import { getFirebaseAuth } from './firebase';
 
 const API_BASE = '/api';
+
+/** On 401, sign out from Firebase and throw; AuthContext will show login. */
+async function handle401(res: Response): Promise<void> {
+  if (res.status === 401) {
+    const auth = getFirebaseAuth();
+    if (auth) await signOut(auth);
+    throw new Error('Session expired. Please sign in again.');
+  }
+}
 
 async function authHeaders(init?: HeadersInit): Promise<HeadersInit> {
   const headers = new Headers(init);
@@ -82,7 +93,10 @@ export type QueryResponse = AnswerWithProof | Refuse;
 
 export async function getDocuments(): Promise<DocumentSummary[]> {
   const res = await fetch(`${API_BASE}/documents`, { headers: await authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch documents');
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Failed to fetch documents');
+  }
   const data = await res.json();
   return data.documents ?? [];
 }
@@ -93,6 +107,7 @@ export async function deleteDocument(docId: string): Promise<void> {
     headers: await authHeaders(),
   });
   if (!res.ok) {
+    await handle401(res);
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = err.detail;
     const message = Array.isArray(detail) ? detail.join(' ') : detail ?? 'Delete failed';
@@ -109,6 +124,7 @@ export async function ingest(file: File): Promise<IngestResponse> {
     body: form,
   });
   if (!res.ok) {
+    await handle401(res);
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = err.detail;
     const message = Array.isArray(detail) ? detail.join(' ') : detail ?? 'Ingest failed';
@@ -152,6 +168,7 @@ export async function ingestStream(
     body: form,
   });
   if (!res.ok) {
+    await handle401(res);
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = err.detail;
     const message = Array.isArray(detail) ? detail.join(' ') : detail ?? 'Ingest failed';
@@ -215,7 +232,10 @@ export async function query(
       include_formatted_answer: options?.includeFormattedAnswer ?? true,
     }),
   });
-  if (!res.ok) throw new Error('Query failed');
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Query failed');
+  }
   return res.json();
 }
 
@@ -266,7 +286,10 @@ export async function getCanonical(docId: string): Promise<CanonicalResponse> {
   const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/canonical`, {
     headers: await authHeaders(),
   });
-  if (!res.ok) throw new Error('Failed to fetch canonical');
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Failed to fetch canonical');
+  }
   return res.json();
 }
 
@@ -275,7 +298,10 @@ export async function getDocumentFile(docId: string): Promise<string> {
   const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/file`, {
     headers: await authHeaders(),
   });
-  if (!res.ok) throw new Error('Failed to fetch document file');
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Failed to fetch document file');
+  }
   const blob = await res.blob();
   return URL.createObjectURL(blob);
 }

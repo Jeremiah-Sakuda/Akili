@@ -152,3 +152,15 @@ No critical gaps. Done: README updated with `GET /documents/{doc_id}/file` and f
 - **CI:** Unchanged; backend Ruff + Flake8 + pytest; frontend lint, typecheck, build with empty VITE_*.
 - **README:** Project structure lists only `ci.yml` (deploy removed). API list includes `GET /documents/{doc_id}/file`. Local equivalents include flake8.
 - **Security / implementation:** No changes; auth optional, CORS and upload limit in place, doc_id validated.
+
+---
+
+## 10. Further improvements (suggested)
+
+| Priority | Improvement | Status |
+|----------|-------------|--------|
+| **High** | Gate error detail on `AKILI_DEBUG` | **Done.** Backend now uses `_is_debug()`; returns generic "Internal server error" / "An error occurred during ingest." unless `AKILI_DEBUG` is set; full exception is always logged server-side. |
+| **Medium** | Rate limiting | Not implemented. When auth is enabled, add per-user or per-IP limits (e.g. slowapi) to protect Gemini quota. |
+| **Medium** | 401 handling (frontend) | **Done.** On 401, `api.ts` calls `handle401(res)`: signs out from Firebase and throws "Session expired. Please sign in again." so AuthContext shows the login page. |
+| **Low** | API / E2E tests | **Done.** `tests/test_api.py` added: GET /health, GET /status, POST /query validation (missing body, missing field), GET /documents/{doc_id}/canonical and /file with invalid doc_id (400). `get_canonical` now calls `_validate_doc_id(doc_id)` for consistency. |
+| **Low** | Lint consistency | E501 fixed; CI runs Ruff + Flake8. |

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Retry 429 / resource exhausted: max attempts, backoff base seconds (longer = fewer skipped pages)
 _GEMINI_MAX_RETRIES = int(os.environ.get("AKILI_GEMINI_MAX_RETRIES", "6"))
 _GEMINI_BACKOFF_BASE = float(os.environ.get("AKILI_GEMINI_BACKOFF_BASE", "8.0"))
-# Model: gemini-3-pro-preview (default), gemini-3-flash-preview, or gemini-2.5-flash / gemini-2.5-pro
+# Model: gemini-3-pro-preview (default), gemini-3-flash-preview, or gemini-2.5-*
 _GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3-pro-preview")
 
 
@@ -37,9 +37,12 @@ EXTRACT_PROMPT = (
     "technical documentation (datasheet, schematic, pinout table, etc.).\n\n"
     "Rules:\n"
     "- Extract ONLY facts you can tie to a specific (x, y) location on the page. "
-    "Use normalized coordinates 0.0–1.0 (e.g. top-left = 0,0; bottom-right = 1,1) or estimate from layout.\n"  # noqa: E501
-    "- For each fact, provide origin with x and y (numbers). If you can infer a bounding box, provide bbox with x1, y1, x2, y2.\n"  # noqa: E501
-    "- Use short, unique ids (e.g. \"u1\", \"b1\", \"g1\"). Leave arrays empty if nothing of that type is on the page.\n"
+    "Use normalized coordinates 0.0–1.0 (e.g. top-left = 0,0; bottom-right = 1,1) "
+    "or estimate from layout.\n"
+    "- For each fact, provide origin with x and y (numbers). "
+    "If you can infer a bounding box, provide bbox with x1, y1, x2, y2.\n"
+    "- Use short, unique ids (e.g. \"u1\", \"b1\", \"g1\"). "
+    "Leave arrays empty if nothing of that type is on the page.\n"
     "- Do not guess. If a coordinate or value is ambiguous, omit that fact.\n\n"
     "JSON format (use exactly these field names so the response can be parsed):\n"
     "- units: array of objects, each with: id (string), value (string or number), origin (object with x, y), optional label, unit_of_measure, bbox (object with x1, y1, x2, y2).\n"  # noqa: E501
@@ -126,7 +129,11 @@ def _normalize_bijection_item(item: dict, page_prefix: str, index: int) -> dict 
         left_set = [k]
         right_set = [v]
         mapping = {k: v}
-    elif not isinstance(left_set, list) or not isinstance(right_set, list) or not isinstance(mapping, dict):
+    elif not (
+        isinstance(left_set, list)
+        and isinstance(right_set, list)
+        and isinstance(mapping, dict)
+    ):
         return None
 
     return {
@@ -141,7 +148,8 @@ def _normalize_bijection_item(item: dict, page_prefix: str, index: int) -> dict 
 
 def _normalize_grid_item(item: object, page_prefix: str, index: int) -> dict | None:
     """
-    Convert Gemini grid shape to schema: rows (int), cols (int), cells (list of {row, col, value, origin}).
+    Convert Gemini grid shape to schema: rows (int), cols (int),
+    cells (list of {row, col, value, origin}).
     Accepts: rows as list of row objects with 'cells', or already rows/cols/cells.
     """
     if not isinstance(item, dict):
