@@ -94,6 +94,145 @@ def _normalize_bbox(bbox: object) -> dict | None:
     return None
 
 
+def _normalize_bijection_item(item: dict, page_prefix: str, index: int) -> dict | None:
+    """
+    Convert Gemini bijection shape to schema: left_set, right_set, mapping, origin.
+    Accepts: pair (list of 2), or key/value, or already left_set/right_set/mapping.
+    """
+    if not isinstance(item, dict):
+        return None
+    bid = item.get("id")
+    if not isinstance(bid, str) or not bid.strip():
+        bid = f"{page_prefix}b{index}"
+    origin = _normalize_origin(item.get("origin"))
+    if origin is None:
+        return None
+    bbox = _normalize_bbox(item.get("bbox"))
+
+    left_set = item.get("left_set")
+    right_set = item.get("right_set")
+    mapping = item.get("mapping")
+
+    if isinstance(item.get("pair"), (list, tuple)) and len(item["pair"]) >= 2:
+        left_val = str(item["pair"][0])
+        right_val = str(item["pair"][1])
+        left_set = [left_val]
+        right_set = [right_val]
+        mapping = {left_val: right_val}
+    elif "key" in item and "value" in item:
+        k, v = str(item["key"]), str(item["value"])
+        left_set = [k]
+        right_set = [v]
+        mapping = {k: v}
+    elif not isinstance(left_set, list) or not isinstance(right_set, list) or not isinstance(mapping, dict):
+        return None
+
+    return {
+        "id": bid,
+        "left_set": left_set,
+        "right_set": right_set,
+        "mapping": mapping,
+        "origin": origin,
+        "bbox": bbox,
+    }
+
+
+def _normalize_grid_item(item: object, page_prefix: str, index: int) -> dict | None:
+    """
+    Convert Gemini grid shape to schema: rows (int), cols (int), cells (list of {row, col, value, origin}).
+    Accepts: rows as list of row objects with 'cells', or already rows/cols/cells.
+    """
+    if not isinstance(item, dict):
+        return None
+    gid = item.get("id")
+    if not isinstance(gid, str) or not gid.strip():
+        gid = f"{page_prefix}g{index}"
+    origin = _normalize_origin(item.get("origin"))
+    bbox = _normalize_bbox(item.get("bbox"))
+
+    rows_raw = item.get("rows")
+    cols_raw = item.get("cols")
+    cells_raw = item.get("cells")
+
+    # Gemini often returns rows as list of row objects: [{"id":"r1","cells":[...]}, ...]
+    if isinstance(rows_raw, list) and rows_raw and not isinstance(rows_raw[0], (int, float)):
+        cells_list: list[dict] = []
+        nrows = len(rows_raw)
+        ncols = 0
+        for ri, row in enumerate(rows_raw):
+            if not isinstance(row, dict):
+                continue
+            row_cells = row.get("cells") or row.get("cell") or []
+            if not isinstance(row_cells, list):
+                continue
+            ncols = max(ncols, len(row_cells))
+            for ci, cell in enumerate(row_cells):
+                if isinstance(cell, dict):
+                    val = cell.get("value") or cell.get("text") or cell.get("content")
+                    if val is None:
+                        val = ""
+                    cell_origin = _normalize_origin(cell.get("origin"))
+                    cells_list.append({
+                        "row": ri,
+                        "col": ci,
+                        "value": val,
+                        "origin": cell_origin,
+                    })
+                else:
+                    cells_list.append({"row": ri, "col": ci, "value": str(cell), "origin": None})
+        if not cells_list and nrows > 0:
+            # No cell content but we have row count; create placeholder cells if needed
+            ncols = max(ncols, 1)
+        if origin is None:
+            origin = {"x": 0.0, "y": 0.0}
+        return {
+            "id": gid,
+            "rows": nrows,
+            "cols": max(ncols, 1),
+            "cells": cells_list,
+            "origin": origin,
+            "bbox": bbox,
+        }
+    # Already rows (int), cols (int), cells (list)
+    if isinstance(rows_raw, (int, float)) and isinstance(cols_raw, (int, float)):
+        if origin is None:
+            origin = {"x": 0.0, "y": 0.0}
+        if not isinstance(cells_raw, list):
+            cells_raw = []
+        normalized_cells = []
+        for c in cells_raw:
+            if not isinstance(c, dict):
+                continue
+            ro, co = c.get("row"), c.get("col")
+            if ro is None or co is None:
+                continue
+            try:
+                ro, co = int(ro), int(co)
+            except (TypeError, ValueError):
+                continue
+            if ro < 0 or co < 0:
+                continue
+            val = c.get("value") or c.get("text") or c.get("content")
+            if val is None:
+                val = ""
+            cell_origin = _normalize_origin(c.get("origin"))
+            normalized_cells.append({
+                "row": ro,
+                "col": co,
+                "value": val,
+                "origin": cell_origin,
+            })
+        return {
+            "id": gid,
+            "rows": int(rows_raw),
+            "cols": int(cols_raw),
+            "cells": normalized_cells,
+            "origin": origin,
+            "bbox": bbox,
+        }
+    return None
+
+
 def _normalize_extraction(data: dict, page_index: int = 0) -> dict:
     """
     Normalize Gemini response to match PageExtraction schema.
@@ -140,17 +279,27 @@ def _normalize_extraction(data: dict, page_index: int = 0) -> dict:
             )
         data["units"] = kept
 
-    for key, prefix in (("bijections", "b"), ("grids", "g")):
-        items = data.get(key)
-        if not isinstance(items, list):
-            data[key] = []
-        else:
-            for i, item in enumerate(items):
-                if isinstance(item, dict):
-                    if item.get("id") is None or item.get("id") == "":
-                        item["id"] = f"{page_prefix}{prefix}{i}"
-                    if not isinstance(item.get("bbox"), dict) and item.get("bbox") is not None:
-                        item["bbox"] = _normalize_bbox(item["bbox"])
+    # Bijections: normalize Gemini shapes (pair, key/value) to left_set, right_set, mapping
+    bijections_raw = data.get("bijections")
+    if not isinstance(bijections_raw, list):
+        data["bijections"] = []
+    else:
+        data["bijections"] = [
+            b
+            for i, item in enumerate(bijections_raw)
+            if (b := _normalize_bijection_item(item, page_prefix, i)) is not None
+        ]
+
+    # Grids: normalize Gemini shapes (rows as list of row objects) to rows, cols, cells
+    grids_raw = data.get("grids")
+    if not isinstance(grids_raw, list):
+        data["grids"] = []
+    else:
+        data["grids"] = [
+            g
+            for i, item in enumerate(grids_raw)
+            if (g := _normalize_grid_item(item, page_prefix, i)) is not None
+        ]
     return data
 
 
@@ -239,7 +388,6 @@ def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageEx
             "PageExtraction validation failed (returning empty extraction). Full error: %s",
             e,
         )
-        if hasattr(e, "errors") and e.errors:
-            for err in e.errors:
-                logger.error("Validation error detail: %s", err)
+        for err in e.errors():
+            logger.error("Validation error detail: %s", err)
         return PageExtraction(units=[], bijections=[], grids=[])
