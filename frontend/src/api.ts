@@ -63,6 +63,8 @@ export interface AnswerWithProof {
   proof: ProofPoint[];
   source_id?: string | null;
   source_type?: string | null;
+  /** When requested (include_formatted_answer), 1-sentence natural-language phrasing from Gemini; null on failure or timeout. */
+  formatted_answer?: string | null;
 }
 
 export interface Refuse {
@@ -97,12 +99,20 @@ export async function ingest(file: File): Promise<IngestResponse> {
   return res.json();
 }
 
-export async function query(docId: string, question: string): Promise<QueryResponse> {
+export async function query(
+  docId: string,
+  question: string,
+  options?: { includeFormattedAnswer?: boolean }
+): Promise<QueryResponse> {
   const headers = await authHeaders({ 'Content-Type': 'application/json' });
   const res = await fetch(`${API_BASE}/query`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ doc_id: docId, question }),
+    body: JSON.stringify({
+      doc_id: docId,
+      question,
+      include_formatted_answer: options?.includeFormattedAnswer ?? true,
+    }),
   });
   if (!res.ok) throw new Error('Query failed');
   return res.json();

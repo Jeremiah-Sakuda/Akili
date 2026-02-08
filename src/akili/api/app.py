@@ -4,10 +4,12 @@ FastAPI app: ingest documents, submit queries, return coordinate-grounded answer
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import shutil
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -17,9 +19,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from akili.api.auth import get_current_user
+from akili.ingest.gemini_format import format_answer
 from akili.ingest.pipeline import ingest_document
 from akili.store import Store
-from akili.verify import Refuse, verify_and_answer
+from akili.verify import AnswerWithProof, Refuse, verify_and_answer
 
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",
@@ -121,6 +124,10 @@ class QueryRequest(BaseModel):
 
     doc_id: str = Field(..., description="Document id from ingest")
     question: str = Field(..., description="Question to answer from canonical facts")
+    include_formatted_answer: bool = Field(
+        False,
+        description="If true and answer is verified, request a 1-sentence natural-language phrasing from Gemini (best-effort; fallback to raw answer on failure).",
+    )
 
 
 @app.post("/ingest")
@@ -190,6 +197,31 @@ async def ingest(
     )
 
 
+# Thread pool for sync Gemini format call (short timeout; never blocks verified answer)
+_FORMAT_EXECUTOR: ThreadPoolExecutor | None = None
+_FORMAT_TIMEOUT = float(os.environ.get("AKILI_FORMAT_TIMEOUT_SEC", "2.5"))
+
+
+def _get_format_executor() -> ThreadPoolExecutor:
+    global _FORMAT_EXECUTOR
+    if _FORMAT_EXECUTOR is None:
+        _FORMAT_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="akili_format")
+    return _FORMAT_EXECUTOR
+
+
+def _proof_to_coordinates(proof: list[Any]) -> str:
+    """Build a short coordinates summary for the format prompt."""
+    if not proof:
+        return "no coordinates"
+    parts = []
+    for p in proof:
+        x = getattr(p, "x", 0)
+        y = getattr(p, "y", 0)
+        page = getattr(p, "page", 0)
+        parts.append(f"page {page} (x={x:.2f}, y={y:.2f})")
+    return "; ".join(parts)
+
+
 @app.post("/query")
 async def query(
     req: QueryRequest,
@@ -197,6 +229,8 @@ async def query(
 ) -> JSONResponse:
     """
     Submit a question for a document. Returns coordinate-grounded answer + proof, or REFUSE.
+    If include_formatted_answer is true and the answer is verified, also requests a 1-sentence
+    natural-language phrasing from Gemini (best-effort; response still includes raw answer).
     """
     store = get_store()
     units = store.get_units_by_doc(req.doc_id)
@@ -205,7 +239,23 @@ async def query(
     result = verify_and_answer(req.question, units, bijections, grids)
     if isinstance(result, Refuse):
         return JSONResponse(content=result.model_dump())
-    return JSONResponse(content=result.model_dump())
+    # AnswerWithProof: always return answer + proof; optionally add formatted_answer
+    content: dict[str, Any] = result.model_dump()
+    if req.include_formatted_answer and isinstance(result, AnswerWithProof):
+        coordinates = _proof_to_coordinates(result.proof)
+        loop = asyncio.get_event_loop()
+        try:
+            formatted = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _get_format_executor(),
+                    lambda: format_answer(req.question, result.answer, coordinates),
+                ),
+                timeout=_FORMAT_TIMEOUT,
+            )
+            content["formatted_answer"] = formatted
+        except (asyncio.TimeoutError, Exception):
+            content["formatted_answer"] = None
+    return JSONResponse(content=content)
 
 
 @app.get("/documents")

@@ -35,7 +35,7 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
     if (!selectedDocId?.trim() || !question.trim()) return;
     setQueryLoading(true);
     try {
-      const result = await query(selectedDocId, question.trim());
+      const result = await query(selectedDocId, question.trim(), { includeFormattedAnswer: true });
       onQueryResult(result);
     } catch {
       onQueryResult({ status: 'refuse', reason: 'Query failed. Is the API running?' });
@@ -145,7 +145,14 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
                     <span className="text-emerald-800 dark:text-emerald-300 font-semibold text-xs tracking-wide uppercase">VERIFIED</span>
                   </div>
                   <div className="p-4">
-                    <p className="text-gray-900 dark:text-gray-100 text-sm leading-relaxed">{queryResult.answer}</p>
+                    <p className="text-gray-900 dark:text-gray-100 text-sm leading-relaxed">
+                      {queryResult.formatted_answer ?? queryResult.answer}
+                    </p>
+                    {(queryResult.formatted_answer != null && queryResult.formatted_answer !== queryResult.answer) && (
+                      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        Raw: {queryResult.answer}
+                      </p>
+                    )}
                     {queryResult.proof?.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800">
                         <label className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-2 block">

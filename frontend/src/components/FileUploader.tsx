@@ -120,11 +120,27 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
         </div>
 
         <div
-          className="group relative bg-white dark:bg-[#161b22] w-full border-2 border-dashed border-gray-300 dark:border-[#30363d] hover:border-primary dark:hover:border-primary transition-colors cursor-pointer"
+          className="group relative bg-white dark:bg-[#161b22] w-full border-2 border-dashed border-gray-300 dark:border-[#30363d] hover:border-primary dark:hover:border-primary transition-colors cursor-pointer overflow-hidden rounded-xl"
           onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
           role="button"
           tabIndex={0}
         >
+          {/* Grid inside panel - light theme: grey lines */}
+          <div
+            className="absolute inset-0 pointer-events-none z-0 opacity-[0.5] dark:opacity-0"
+            style={{
+              backgroundImage: 'linear-gradient(#e5e7eb 1px, transparent 1px), linear-gradient(90deg, #e5e7eb 1px, transparent 1px)',
+              backgroundSize: '20px 20px',
+            }}
+          />
+          {/* Grid inside panel - dark theme: white/grey lines */}
+          <div
+            className="absolute inset-0 pointer-events-none z-0 opacity-0 dark:opacity-[0.2]"
+            style={{
+              backgroundImage: 'linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px)',
+              backgroundSize: '20px 20px',
+            }}
+          />
           <input
             ref={inputRef}
             className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
@@ -135,7 +151,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
             onChange={handleChange}
             disabled={loading}
           />
-          <div className="flex flex-col items-center justify-center min-h-64 p-6">
+          <div className="relative z-10 flex flex-col items-center justify-center min-h-64 p-6">
             {loading || phase === 'done' ? (
               <>
                 <div className="size-12 bg-primary/10 dark:bg-primary/20 flex items-center justify-center mb-4">
