@@ -66,3 +66,61 @@ def format_answer(question: str, verified_fact: str, coordinates: str) -> str | 
     except Exception as e:
         logger.warning("Gemini format_answer failed (silent fallback): %s", e)
         return None
+
+
+REFUSAL_PROMPT = (
+    "The user asked a question about a technical document. No verified answer was found.\n\n"
+    "User question: {question}\n\n"
+    "Document contents: {doc_summary}\n\n"
+    "Task: Write a short refusal reason (1–2 sentences) in plain language. "
+    "Examples: 'No mention of that was found in the document.' "
+    "'The document has pin mappings but none match your question.' "
+    "'I found voltage values in the doc but they don't match what you asked.' "
+    "Do not invent facts; only refer to what is in the document or that nothing matched. "
+    "One or two sentences only."
+)
+
+
+def format_refusal(
+    question: str,
+    n_units: int,
+    n_bijections: int,
+    n_grids: int,
+) -> str | None:
+    """
+    Ask Gemini to phrase a short, natural-language reason for refusing to answer.
+
+    Returns the reason string, or None if API key missing, call fails, or empty response.
+    """
+    if not os.environ.get("GOOGLE_API_KEY", "").strip():
+        return None
+    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+    model = genai.GenerativeModel(_GEMINI_MODEL)
+    doc_summary = (
+        f"{n_units} units (e.g. voltages, labels), "
+        f"{n_bijections} bijections (e.g. pin name ↔ number), "
+        f"{n_grids} grids (tables)."
+    )
+    prompt = REFUSAL_PROMPT.format(question=question, doc_summary=doc_summary)
+    try:
+        response = model.generate_content(prompt)
+        text = ""
+        if hasattr(response, "text") and response.text:
+            text = response.text
+        else:
+            candidates = getattr(response, "candidates", None) or []
+            if candidates:
+                c = candidates[0]
+                content = getattr(c, "content", None)
+                parts = getattr(content, "parts", None) if content else None
+                if content and parts:
+                    part = parts[0]
+                    if hasattr(part, "text") and part.text:
+                        text = part.text
+        text = (text or "").strip()
+        if not text:
+            return None
+        return text
+    except Exception as e:
+        logger.warning("Gemini format_refusal failed (silent fallback): %s", e)
+        return None

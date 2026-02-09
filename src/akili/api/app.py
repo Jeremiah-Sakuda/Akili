@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from akili.api.auth import get_current_user
 from akili.canonical import Bijection, Grid, Unit
-from akili.ingest.gemini_format import format_answer
+from akili.ingest.gemini_format import format_answer, format_refusal
 from akili.ingest.pipeline import ingest_document
 from akili.store import Store
 from akili.verify import AnswerWithProof, Refuse, verify_and_answer
@@ -364,6 +364,25 @@ async def query(
     grids = store.get_grids_by_doc(req.doc_id)
     result = verify_and_answer(req.question, units, bijections, grids)
     if isinstance(result, Refuse):
+        # Optional: phrase refusal reason in natural language via Gemini
+        loop = asyncio.get_event_loop()
+        try:
+            formatted_reason = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _get_format_executor(),
+                    lambda: format_refusal(
+                        req.question,
+                        len(units),
+                        len(bijections),
+                        len(grids),
+                    ),
+                ),
+                timeout=_FORMAT_TIMEOUT,
+            )
+            if formatted_reason and formatted_reason.strip():
+                result = Refuse(reason=formatted_reason.strip())
+        except (asyncio.TimeoutError, Exception):
+            pass
         return JSONResponse(content=result.model_dump())
     # AnswerWithProof: always return answer + proof; optionally add formatted_answer
     content: dict[str, Any] = result.model_dump()
