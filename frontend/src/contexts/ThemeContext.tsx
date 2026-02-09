@@ -2,17 +2,16 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 
 const STORAGE_KEY = 'akili-theme';
 
-export type Theme = 'dark' | 'very-dark';
+export type Theme = 'light' | 'dark' | 'very-dark';
 
-const THEMES: Theme[] = ['dark', 'very-dark'];
+const THEMES: Theme[] = ['light', 'dark', 'very-dark'];
 
 function getInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'dark';
   const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-  if (stored === 'dark' || stored === 'very-dark') return stored;
-  if (stored === 'light') return 'dark';
+  if (stored === 'light' || stored === 'dark' || stored === 'very-dark') return stored;
   if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark';
-  return 'dark';
+  return 'light';
 }
 
 interface ThemeContextValue {
@@ -30,8 +29,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
     root.setAttribute('data-theme', theme);
     root.classList.remove('dark', 'very-dark');
-    root.classList.add('dark');
-    if (theme === 'very-dark') root.classList.add('very-dark');
+    if (theme === 'dark' || theme === 'very-dark') {
+      root.classList.add('dark');
+      if (theme === 'very-dark') root.classList.add('very-dark');
+    }
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 

@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
 
 const THEME_LABELS: Record<Theme, string> = {
+  'light': 'Light',
   'dark': 'Dark',
   'very-dark': 'Very dark',
 };
@@ -44,7 +45,7 @@ const Header: React.FC = () => {
             title="Theme"
           >
             <span className="material-symbols-outlined text-[18px]">
-              {theme === 'dark' ? 'dark_mode' : 'contrast'}
+              {theme === 'light' ? 'light_mode' : theme === 'dark' ? 'dark_mode' : 'contrast'}
             </span>
             <span className="text-xs font-medium hidden sm:inline">{THEME_LABELS[theme]}</span>
           </button>
@@ -63,7 +64,7 @@ const Header: React.FC = () => {
                       className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${theme === t ? 'bg-primary/10 dark:bg-primary/20 text-primary font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#0d1117]'}`}
                     >
                       <span className="material-symbols-outlined text-[16px]">
-                        {t === 'dark' ? 'dark_mode' : 'contrast'}
+                        {t === 'light' ? 'light_mode' : t === 'dark' ? 'dark_mode' : 'contrast'}
                       </span>
                       {THEME_LABELS[t]}
                     </button>
