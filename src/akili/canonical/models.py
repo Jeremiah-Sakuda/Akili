@@ -37,6 +37,7 @@ class Unit(BaseModel):
     label: str | None = Field(None, description="Human-readable label")
     value: str | float = Field(..., description="Numeric or string value")
     unit_of_measure: str | None = Field(None, description="e.g. V, A, Ω")
+    context: str | None = Field(None, description="What this value refers to (e.g. charge voltage, nominal capacity)")
     origin: Point = Field(..., description="(x,y) location in document")
     doc_id: str = Field(..., description="Source document id")
     page: int = Field(..., ge=0, description="Page number (0-based)")

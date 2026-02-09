@@ -8,7 +8,7 @@ import LoginPage from './components/LoginPage';
 import { useAuth } from './contexts/AuthContext';
 import { AppState } from './types';
 import type { DocumentSummary, ProofPoint, QueryResponse } from './api';
-import { deleteDocument as apiDeleteDocument, getDocuments } from './api';
+import { deleteDocument as apiDeleteDocument, getDocuments, query as apiQuery, isRefuse } from './api';
 
 const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
   id: d.doc_id,
@@ -23,7 +23,7 @@ const App: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [viewState, setViewState] = useState<AppState>(AppState.UPLOAD);
-  const [queryResult, setQueryResult] = useState<QueryResponse | null>(null);
+  const [messages, setMessages] = useState<import('./api').ChatMessage[]>([]);
   const [overlayProof, setOverlayProof] = useState<ProofPoint[] | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [queryLoading, setQueryLoading] = useState(false);
@@ -48,19 +48,19 @@ const App: React.FC = () => {
 
   const handleStateChange = (state: AppState) => {
     setViewState(state);
-    if (state !== AppState.UPLOAD) setQueryResult(null);
+    if (state !== AppState.UPLOAD) setMessages([]);
   };
 
   const handleIngestSuccess = (newDocId: string) => {
     setSelectedDocId(newDocId);
     refreshDocuments().then(() => setViewState(AppState.VERIFIED));
-    setQueryResult(null);
+    setMessages([]);
   };
 
   const handleSelectDoc = (docId: string) => {
     setSelectedDocId(docId);
     setViewState(AppState.VERIFIED);
-    setQueryResult(null);
+    setMessages([]);
     setOverlayProof(null);
   };
 
@@ -72,7 +72,7 @@ const App: React.FC = () => {
         if (selectedDocId === docId) {
           setSelectedDocId(null);
           setOverlayProof(null);
-          setQueryResult(null);
+          setMessages([]);
         }
       } catch {
         // Error could be shown via toast; for now rely on refreshDocuments not updating
@@ -86,12 +86,32 @@ const App: React.FC = () => {
     setViewState(AppState.VERIFIED);
   }, []);
 
-  const handleQueryResult = (result: QueryResponse) => {
-    setQueryResult(result);
-    setViewState(result.status === 'refuse' ? AppState.REFUSED : AppState.VERIFIED);
-  };
+  const handleSendQuestion = useCallback(
+    async (question: string) => {
+      if (!selectedDocId?.trim() || !question.trim()) return;
+      setMessages((m) => [...m, { role: 'user', text: question.trim() }]);
+      setQueryLoading(true);
+      try {
+        const result = await apiQuery(selectedDocId, question.trim(), { includeFormattedAnswer: true });
+        const text = isRefuse(result) ? result.reason : (result.formatted_answer ?? result.answer);
+        setMessages((m) => [...m, { role: 'assistant', text, response: result }]);
+        setViewState(isRefuse(result) ? AppState.REFUSED : AppState.VERIFIED);
+      } catch {
+        setMessages((m) => [
+          ...m,
+          { role: 'assistant', text: 'Query failed. Is the API running?', response: { status: 'refuse', reason: 'Query failed.' } },
+        ]);
+      } finally {
+        setQueryLoading(false);
+      }
+    },
+    [selectedDocId]
+  );
 
-  const displayState = queryResult?.status === 'refuse' ? AppState.REFUSED : viewState;
+  const displayState =
+    messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].response
+      ? (messages[messages.length - 1].response!.status === 'refuse' ? AppState.REFUSED : AppState.VERIFIED)
+      : viewState;
   const files = documents.map((d) => documentToFile(d, selectedDocId));
 
   if (authLoading) {
@@ -169,12 +189,11 @@ const App: React.FC = () => {
           onStateChange={handleStateChange}
           selectedDocId={selectedDocId}
           documents={documents}
-          queryResult={queryResult}
-          onQueryResult={handleQueryResult}
+          messages={messages}
+          onSendQuestion={handleSendQuestion}
           onSelectDoc={handleSelectDoc}
           onShowProof={handleShowProof}
           queryLoading={queryLoading}
-          setQueryLoading={setQueryLoading}
         />
       </div>
     </div>

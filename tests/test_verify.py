@@ -68,3 +68,39 @@ def test_pin_lookup_via_grid_returns_name():
     assert result.answer == "VCC"
     assert len(result.proof) == 1
     assert result.proof[0].page == 0
+
+
+def test_max_voltage_fallback_from_text():
+    """Max voltage works when unit has value as text like 'Charge: 4A, 4.2V' with no unit_of_measure."""
+    u = Unit(
+        id="u1",
+        value="Charge: CC-CV 4A, 4.2V, 100mA cut-off at 23℃",
+        unit_of_measure=None,
+        origin=Point(x=0.37, y=0.20),
+        doc_id="d",
+        page=5,
+    )
+    result = verify_and_answer("What is the max voltage?", [u], [], [])
+    assert result is not None
+    assert not isinstance(result, Refuse)
+    assert "4.2" in result.answer
+    assert "V" in result.answer
+    assert len(result.proof) == 1
+
+
+def test_unit_by_intent_charge_voltage():
+    """'What is the charge voltage?' matches a unit containing 'charge' and voltage in text."""
+    u = Unit(
+        id="u1",
+        value="Charge: CC-CV 4A, 4.2V, 100mA cut-off",
+        label=None,
+        unit_of_measure=None,
+        origin=Point(x=0.37, y=0.20),
+        doc_id="d",
+        page=5,
+    )
+    result = verify_and_answer("What is the charge voltage?", [u], [], [])
+    assert result is not None
+    assert not isinstance(result, Refuse)
+    assert "4.2" in result.answer
+    assert len(result.proof) == 1

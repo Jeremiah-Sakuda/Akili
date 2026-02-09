@@ -43,9 +43,11 @@ EXTRACT_PROMPT = (
     "If you can infer a bounding box, provide bbox with x1, y1, x2, y2.\n"
     "- Use short, unique ids (e.g. \"u1\", \"b1\", \"g1\"). "
     "Leave arrays empty if nothing of that type is on the page.\n"
-    "- Do not guess. If a coordinate or value is ambiguous, omit that fact.\n\n"
+    "- Do not guess. If a coordinate or value is ambiguous, omit that fact.\n"
+    "- For voltage/current/capacity: split values like \"4.2V\" or \"2500mAh\" into value (number) and unit_of_measure (e.g. V, mA, mAh). "
+    "Include optional context (what the value refers to, e.g. \"charge voltage\", \"nominal capacity\", \"cutoff voltage\") so questions can be matched.\n\n"
     "JSON format (use exactly these field names so the response can be parsed):\n"
-    "- units: array of objects, each with: id (string), value (string or number), origin (object with x, y), optional label, unit_of_measure, bbox (object with x1, y1, x2, y2).\n"  # noqa: E501
+    "- units: array of objects, each with: id (string), value (string or number), origin (object with x, y), optional label, unit_of_measure, optional context, bbox (object with x1, y1, x2, y2).\n"  # noqa: E501
     "- bijections: array of 1:1 mappings. Each object MUST have: id (string), left_set (array of strings), right_set (array of strings), mapping (object: left label -> right label), origin (object with x, y), optional bbox. Example: {\"id\":\"b1\",\"left_set\":[\"Pin1\"],\"right_set\":[\"1\"],\"mapping\":{\"Pin1\":\"1\"},\"origin\":{\"x\":0.2,\"y\":0.3}}.\n"  # noqa: E501
     "- grids: array of tables. Each object MUST have: id (string), rows (integer), cols (integer), cells (array of objects with row (int), col (int), value (string or number), optional origin), origin (object with x, y for the grid), optional bbox. Do NOT use \"rows\" as a list of row objects; use rows and cols as numbers and put all cells in the cells array with row/col indices.\n"  # noqa: E501
     "Respond with a single JSON object with keys: units, bijections, grids. No other text."  # noqa: E501
@@ -276,6 +278,7 @@ def _normalize_extraction(data: dict, page_index: int = 0) -> dict:
             if not isinstance(uid, str) or not uid.strip():
                 uid = f"{page_prefix}u{i}"
             uom = u.get("unit_of_measure")
+            ctx = u.get("context")
             bbox = _normalize_bbox(u.get("bbox"))
             kept.append(
                 {
@@ -283,6 +286,7 @@ def _normalize_extraction(data: dict, page_index: int = 0) -> dict:
                     "label": u.get("label") if isinstance(u.get("label"), str) else None,
                     "value": val,
                     "unit_of_measure": uom if isinstance(uom, str) else None,
+                    "context": ctx if isinstance(ctx, str) else None,
                     "origin": origin,
                     "bbox": bbox,
                 }

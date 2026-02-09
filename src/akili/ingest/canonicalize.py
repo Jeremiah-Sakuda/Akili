@@ -37,6 +37,7 @@ def canonicalize_units(extracts: list[UnitExtract], doc_id: str, page: int) -> l
                     label=e.label,
                     value=e.value,
                     unit_of_measure=e.unit_of_measure,
+                    context=getattr(e, "context", None),
                     origin=_point(e.origin),
                     doc_id=doc_id,
                     page=page,
