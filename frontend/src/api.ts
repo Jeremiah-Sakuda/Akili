@@ -91,6 +91,14 @@ export interface Refuse {
 
 export type QueryResponse = AnswerWithProof | Refuse;
 
+/** Single message in the verification chat */
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  /** For assistant: full API response (proof, refuse reason, etc.); null when loading */
+  response?: QueryResponse | null;
+}
+
 export async function getDocuments(): Promise<DocumentSummary[]> {
   const res = await fetch(`${API_BASE}/documents`, { headers: await authHeaders() });
   if (!res.ok) {

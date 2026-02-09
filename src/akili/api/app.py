@@ -464,6 +464,7 @@ async def get_canonical(
             "label": getattr(u, "label", None),
             "value": getattr(u, "value", None),
             "unit_of_measure": getattr(u, "unit_of_measure", None),
+            "context": getattr(u, "context", None),
             "origin": {
                 "x": getattr(getattr(u, "origin", None), "x", 0),
                 "y": getattr(getattr(u, "origin", None), "y", 0),

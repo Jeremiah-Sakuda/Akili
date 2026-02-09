@@ -33,6 +33,7 @@ class UnitExtract(BaseModel):
     label: str | None = Field(None, description="Human-readable label")
     value: str | float = Field(..., description="Numeric or string value")
     unit_of_measure: str | None = Field(None, description="e.g. V, A, Ω")
+    context: str | None = Field(None, description="What this value refers to (e.g. charge voltage, nominal capacity)")
     origin: PointSchema = Field(..., description="(x,y) location in document")
     bbox: BBoxSchema | None = Field(None, description="Optional bounding box")
 

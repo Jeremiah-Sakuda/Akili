@@ -62,11 +62,19 @@ class Store:
                     label TEXT,
                     value TEXT NOT NULL,
                     unit_of_measure TEXT,
+                    context TEXT,
                     origin_json TEXT NOT NULL,
                     bbox_json TEXT,
                     UNIQUE(doc_id, page, unit_id),
                     FOREIGN KEY (doc_id) REFERENCES documents(doc_id)
                 );
+            """)
+            # Migration: add context column to existing units tables
+            try:
+                c.execute("ALTER TABLE units ADD COLUMN context TEXT")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+            c.executescript("""
                 CREATE TABLE IF NOT EXISTS bijections (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     doc_id TEXT NOT NULL,
@@ -117,7 +125,7 @@ class Store:
             for u in units:
                 c.execute(
                     """INSERT OR REPLACE INTO units (doc_id, page, unit_id, label, value,
-                       unit_of_measure, origin_json, bbox_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                       unit_of_measure, context, origin_json, bbox_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         u.doc_id,
                         u.page,
@@ -125,6 +133,7 @@ class Store:
                         u.label,
                         str(u.value),
                         u.unit_of_measure,
+                        getattr(u, "context", None),
                         _point_to_json(u.origin),
                         _bbox_to_json(u.bbox),
                     ),
@@ -175,7 +184,7 @@ class Store:
     def get_units_by_doc(self, doc_id: str) -> list[Unit]:
         with self._conn() as c:
             rows = c.execute(
-                "SELECT doc_id, page, unit_id, label, value, unit_of_measure, "
+                "SELECT doc_id, page, unit_id, label, value, unit_of_measure, context, "
                 "origin_json, bbox_json FROM units WHERE doc_id = ?",
                 (doc_id,),
             ).fetchall()
@@ -197,8 +206,9 @@ class Store:
                     label=r[3],
                     value=val,
                     unit_of_measure=r[5],
-                    origin=_json_to_point(r[6]),
-                    bbox=_json_to_bbox(r[7]),
+                    context=r[6] if len(r) > 6 else None,
+                    origin=_json_to_point(r[7]),
+                    bbox=_json_to_bbox(r[8]),
                 )
             )
         return out
