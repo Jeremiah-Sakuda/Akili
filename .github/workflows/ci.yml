@@ -57,7 +57,7 @@ jobs:
           GOOGLE_API_KEY: dummy
 
       - name: Upload backend coverage (optional)
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         if: matrix.python-version == '3.11'
         with:
           files: ./coverage.xml
