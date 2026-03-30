@@ -16,18 +16,31 @@ build/
 .env
 .env.local
 *.key
+*.pem
+
+# Database
+*.db
+*.sqlite3
 
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 
 # Tests / coverage
 .coverage
 htmlcov/
+coverage/
 .pytest_cache/
+
+# Logs
+*.log
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Node
+node_modules/
