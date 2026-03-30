@@ -12,9 +12,9 @@ import os
 
 import google.generativeai as genai
 
-logger = logging.getLogger(__name__)
+from akili import config
 
-_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3-pro-preview")
+logger = logging.getLogger(__name__)
 UNABLE_TO_PHRASE = "UNABLE TO PHRASE"
 
 FORMAT_PROMPT = (
@@ -38,7 +38,7 @@ def format_answer(question: str, verified_fact: str, coordinates: str) -> str | 
     if not os.environ.get("GOOGLE_API_KEY", "").strip():
         return None
     genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-    model = genai.GenerativeModel(_GEMINI_MODEL)
+    model = genai.GenerativeModel(config.GEMINI_MODEL)
     prompt = FORMAT_PROMPT.format(
         question=question,
         verified_fact=verified_fact,
@@ -95,7 +95,7 @@ def format_refusal(
     if not os.environ.get("GOOGLE_API_KEY", "").strip():
         return None
     genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-    model = genai.GenerativeModel(_GEMINI_MODEL)
+    model = genai.GenerativeModel(config.GEMINI_MODEL)
     doc_summary = (
         f"{n_units} units (e.g. voltages, labels), "
         f"{n_bijections} bijections (e.g. pin name ↔ number), "

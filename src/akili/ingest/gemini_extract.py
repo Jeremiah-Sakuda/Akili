@@ -16,15 +16,10 @@ import time
 import google.generativeai as genai
 from pydantic import ValidationError
 
+from akili import config
 from akili.ingest.extract_schema import PageExtraction
 
 logger = logging.getLogger(__name__)
-
-# Retry 429 / resource exhausted: max attempts, backoff base seconds (longer = fewer skipped pages)
-_GEMINI_MAX_RETRIES = int(os.environ.get("AKILI_GEMINI_MAX_RETRIES", "6"))
-_GEMINI_BACKOFF_BASE = float(os.environ.get("AKILI_GEMINI_BACKOFF_BASE", "8.0"))
-# Model: gemini-3-pro-preview (default), gemini-3-flash-preview, or gemini-2.5-*
-_GEMINI_MODEL = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3-pro-preview")
 
 
 def _is_rate_limit_error(e: BaseException) -> bool:
@@ -32,26 +27,243 @@ def _is_rate_limit_error(e: BaseException) -> bool:
     return "429" in msg or "resource exhausted" in msg or "resourceexhausted" in msg
 
 
-EXTRACT_PROMPT = (
-    "You are extracting structured, coordinate-grounded facts from a single page of "
-    "technical documentation (datasheet, schematic, pinout table, etc.).\n\n"
-    "Rules:\n"
-    "- Extract ONLY facts you can tie to a specific (x, y) location on the page. "
-    "Use normalized coordinates 0.0–1.0 (e.g. top-left = 0,0; bottom-right = 1,1) "
-    "or estimate from layout.\n"
-    "- For each fact, provide origin with x and y (numbers). "
-    "If you can infer a bounding box, provide bbox with x1, y1, x2, y2.\n"
-    "- Use short, unique ids (e.g. \"u1\", \"b1\", \"g1\"). "
-    "Leave arrays empty if nothing of that type is on the page.\n"
-    "- Do not guess. If a coordinate or value is ambiguous, omit that fact.\n"
-    "- For voltage/current/capacity: split values like \"4.2V\" or \"2500mAh\" into value (number) and unit_of_measure (e.g. V, mA, mAh). "
-    "Include optional context (what the value refers to, e.g. \"charge voltage\", \"nominal capacity\", \"cutoff voltage\") so questions can be matched.\n\n"
-    "JSON format (use exactly these field names so the response can be parsed):\n"
-    "- units: array of objects, each with: id (string), value (string or number), origin (object with x, y), optional label, unit_of_measure, optional context, bbox (object with x1, y1, x2, y2).\n"  # noqa: E501
-    "- bijections: array of 1:1 mappings. Each object MUST have: id (string), left_set (array of strings), right_set (array of strings), mapping (object: left label -> right label), origin (object with x, y), optional bbox. Example: {\"id\":\"b1\",\"left_set\":[\"Pin1\"],\"right_set\":[\"1\"],\"mapping\":{\"Pin1\":\"1\"},\"origin\":{\"x\":0.2,\"y\":0.3}}.\n"  # noqa: E501
-    "- grids: array of tables. Each object MUST have: id (string), rows (integer), cols (integer), cells (array of objects with row (int), col (int), value (string or number), optional origin), origin (object with x, y for the grid), optional bbox. Do NOT use \"rows\" as a list of row objects; use rows and cols as numbers and put all cells in the cells array with row/col indices.\n"  # noqa: E501
-    "Respond with a single JSON object with keys: units, bijections, grids. No other text."  # noqa: E501
-)
+EXTRACT_PROMPT = """\
+You are extracting structured, coordinate-grounded facts from a single page of \
+technical documentation (datasheet, schematic, pinout table, etc.).
+
+## Rules
+
+- Extract ONLY facts you can tie to a specific (x, y) location on the page. \
+Use normalized coordinates 0.0-1.0 (top-left = 0,0; bottom-right = 1,1).
+- For each fact, provide origin with x and y (numbers). \
+If you can infer a bounding box, provide bbox with x1, y1, x2, y2.
+- Use short, unique ids (e.g. "u1", "b1", "g1"). \
+Leave arrays empty if nothing of that type is on the page.
+- Do not guess. If a coordinate or value is ambiguous, omit that fact.
+
+## Coordinate Calibration
+
+- origin should point to the CENTER of the text or value being extracted.
+- bbox should cover the ENTIRE cell, row, or region containing the fact, NOT just the header.
+- Correct: bbox covers "4.2V" cell from its top-left to bottom-right corners.
+- Incorrect: bbox covers only the column header "Max Voltage" but not the value row.
+- For tables: the grid's origin should be the top-left corner of the table; \
+the grid's bbox should cover the entire table from top-left to bottom-right.
+- When estimating coordinates, use surrounding text and layout as reference points. \
+A value near the top of the page has y close to 0.0; near the bottom, close to 1.0.
+
+## Unit Extraction Rules
+
+- For every unit, ALWAYS include a `context` field describing what the value represents \
+in the document. This is critical for question matching.
+  - Good context examples: "nominal supply voltage", "absolute maximum junction temperature", \
+"typical propagation delay", "ESD Human Body Model rating", "package thermal resistance theta-JA"
+  - Bad context: "" (empty), "value", "specification" (too vague)
+- Split compound values like "4.2V" or "2500mAh" into value (number) and \
+unit_of_measure (e.g. V, mA, mAh).
+- For min/typ/max tables: extract EACH value as a separate unit with context indicating \
+whether it is minimum, typical, or maximum (e.g. "minimum supply voltage", "maximum supply voltage").
+- Include the section heading or table title in the context when available \
+(e.g. "Absolute Maximum Ratings - storage temperature", "Electrical Characteristics - input leakage current").
+
+## JSON Format
+
+- units: array of objects, each with: id (string), value (string or number), \
+origin (object with x, y), label (string, short name like "VCC" or "tPD"), \
+unit_of_measure (string like "V", "mA", "ns", "MHz", "mm"), \
+context (string describing what this value is), bbox (object with x1, y1, x2, y2).
+- bijections: array of 1:1 mappings. Each object MUST have: id (string), \
+left_set (array of strings), right_set (array of strings), \
+mapping (object: left label -> right label), origin (object with x, y), optional bbox. \
+Example: {"id":"b1","left_set":["1","2","3"],"right_set":["VCC","GND","CLK"],\
+"mapping":{"1":"VCC","2":"GND","3":"CLK"},"origin":{"x":0.2,"y":0.3}}.
+- grids: array of tables. Each object MUST have: id (string), rows (integer), \
+cols (integer), cells (array of objects with row (int), col (int), value (string or number), \
+optional origin), origin (object with x, y for the grid top-left), optional bbox. \
+Do NOT use "rows" as a list of row objects; use rows and cols as numbers and put all cells \
+in the cells array with row/col indices. Row 0 should be the header row.
+
+## Few-Shot Examples
+
+### Example 1: Pinout Table Page
+Input: A page showing a pin assignment table with columns "Pin Number", "Pin Name", "Function".
+Expected output:
+```json
+{
+  "units": [],
+  "bijections": [
+    {
+      "id": "b1",
+      "left_set": ["1", "2", "3", "4"],
+      "right_set": ["VCC", "GND", "DATA", "CLK"],
+      "mapping": {"1": "VCC", "2": "GND", "3": "DATA", "4": "CLK"},
+      "origin": {"x": 0.3, "y": 0.25},
+      "bbox": {"x1": 0.1, "y1": 0.15, "x2": 0.9, "y2": 0.55}
+    }
+  ],
+  "grids": [
+    {
+      "id": "g1", "rows": 5, "cols": 3,
+      "cells": [
+        {"row": 0, "col": 0, "value": "Pin Number"},
+        {"row": 0, "col": 1, "value": "Pin Name"},
+        {"row": 0, "col": 2, "value": "Function"},
+        {"row": 1, "col": 0, "value": "1"},
+        {"row": 1, "col": 1, "value": "VCC"},
+        {"row": 1, "col": 2, "value": "Power Supply"},
+        {"row": 2, "col": 0, "value": "2"},
+        {"row": 2, "col": 1, "value": "GND"},
+        {"row": 2, "col": 2, "value": "Ground"},
+        {"row": 3, "col": 0, "value": "3"},
+        {"row": 3, "col": 1, "value": "DATA"},
+        {"row": 3, "col": 2, "value": "Serial Data I/O"},
+        {"row": 4, "col": 0, "value": "4"},
+        {"row": 4, "col": 1, "value": "CLK"},
+        {"row": 4, "col": 2, "value": "Clock Input"}
+      ],
+      "origin": {"x": 0.1, "y": 0.15},
+      "bbox": {"x1": 0.1, "y1": 0.15, "x2": 0.9, "y2": 0.55}
+    }
+  ]
+}
+```
+
+### Example 2: Electrical Characteristics Table
+Input: A page with a table titled "Electrical Characteristics (TA = 25C)" with columns \
+"Parameter", "Symbol", "Min", "Typ", "Max", "Unit".
+Expected output:
+```json
+{
+  "units": [
+    {"id": "u1", "label": "VCC", "value": 2.7, "unit_of_measure": "V", "context": "Electrical Characteristics - minimum supply voltage", "origin": {"x": 0.35, "y": 0.32}},
+    {"id": "u2", "label": "VCC", "value": 3.3, "unit_of_measure": "V", "context": "Electrical Characteristics - typical supply voltage", "origin": {"x": 0.5, "y": 0.32}},
+    {"id": "u3", "label": "VCC", "value": 3.6, "unit_of_measure": "V", "context": "Electrical Characteristics - maximum supply voltage", "origin": {"x": 0.65, "y": 0.32}},
+    {"id": "u4", "label": "ICC", "value": 5, "unit_of_measure": "mA", "context": "Electrical Characteristics - typical supply current", "origin": {"x": 0.5, "y": 0.38}},
+    {"id": "u5", "label": "ICC", "value": 10, "unit_of_measure": "mA", "context": "Electrical Characteristics - maximum supply current", "origin": {"x": 0.65, "y": 0.38}}
+  ],
+  "bijections": [],
+  "grids": [
+    {
+      "id": "g1", "rows": 3, "cols": 6,
+      "cells": [
+        {"row": 0, "col": 0, "value": "Parameter"}, {"row": 0, "col": 1, "value": "Symbol"},
+        {"row": 0, "col": 2, "value": "Min"}, {"row": 0, "col": 3, "value": "Typ"},
+        {"row": 0, "col": 4, "value": "Max"}, {"row": 0, "col": 5, "value": "Unit"},
+        {"row": 1, "col": 0, "value": "Supply Voltage"}, {"row": 1, "col": 1, "value": "VCC"},
+        {"row": 1, "col": 2, "value": "2.7"}, {"row": 1, "col": 3, "value": "3.3"},
+        {"row": 1, "col": 4, "value": "3.6"}, {"row": 1, "col": 5, "value": "V"},
+        {"row": 2, "col": 0, "value": "Supply Current"}, {"row": 2, "col": 1, "value": "ICC"},
+        {"row": 2, "col": 2, "value": "-"}, {"row": 2, "col": 3, "value": "5"},
+        {"row": 2, "col": 4, "value": "10"}, {"row": 2, "col": 5, "value": "mA"}
+      ],
+      "origin": {"x": 0.05, "y": 0.2},
+      "bbox": {"x1": 0.05, "y1": 0.2, "x2": 0.95, "y2": 0.5}
+    }
+  ]
+}
+```
+
+### Example 3: Absolute Maximum Ratings Table
+Input: A page showing "Absolute Maximum Ratings" with parameters, ratings, and units.
+Expected output:
+```json
+{
+  "units": [
+    {"id": "u1", "label": "VCC", "value": 7.0, "unit_of_measure": "V", "context": "Absolute Maximum Ratings - supply voltage", "origin": {"x": 0.5, "y": 0.28}},
+    {"id": "u2", "label": "TSTG", "value": -65, "unit_of_measure": "C", "context": "Absolute Maximum Ratings - storage temperature minimum", "origin": {"x": 0.4, "y": 0.34}},
+    {"id": "u3", "label": "TSTG", "value": 150, "unit_of_measure": "C", "context": "Absolute Maximum Ratings - storage temperature maximum", "origin": {"x": 0.6, "y": 0.34}},
+    {"id": "u4", "label": "IO", "value": 25, "unit_of_measure": "mA", "context": "Absolute Maximum Ratings - output current per pin", "origin": {"x": 0.5, "y": 0.4}},
+    {"id": "u5", "label": "ESD HBM", "value": 2000, "unit_of_measure": "V", "context": "Absolute Maximum Ratings - ESD Human Body Model", "origin": {"x": 0.5, "y": 0.46}}
+  ],
+  "bijections": [],
+  "grids": []
+}
+```
+
+Respond with a single JSON object with keys: units, bijections, grids. No other text."""
+
+
+def _simplified_extraction_schema() -> dict:
+    """Build a flat JSON schema for PageExtraction without $defs.
+
+    Pydantic's model_json_schema() uses $defs for shared sub-models (PointSchema,
+    BBoxSchema, etc.) which Gemini's structured output mode doesn't support.
+    This builds an equivalent flat schema that Gemini can use directly.
+    """
+    point = {
+        "type": "object",
+        "properties": {
+            "x": {"type": "number"},
+            "y": {"type": "number"},
+        },
+        "required": ["x", "y"],
+    }
+    bbox = {
+        "type": "object",
+        "properties": {
+            "x1": {"type": "number"},
+            "y1": {"type": "number"},
+            "x2": {"type": "number"},
+            "y2": {"type": "number"},
+        },
+        "required": ["x1", "y1", "x2", "y2"],
+    }
+    unit_item = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "label": {"type": "string"},
+            "value": {},
+            "unit_of_measure": {"type": "string"},
+            "context": {"type": "string"},
+            "origin": point,
+            "bbox": bbox,
+        },
+        "required": ["id", "value", "origin"],
+    }
+    bijection_item = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "left_set": {"type": "array", "items": {"type": "string"}},
+            "right_set": {"type": "array", "items": {"type": "string"}},
+            "mapping": {"type": "object"},
+            "origin": point,
+            "bbox": bbox,
+        },
+        "required": ["id", "left_set", "right_set", "mapping", "origin"],
+    }
+    grid_cell = {
+        "type": "object",
+        "properties": {
+            "row": {"type": "integer"},
+            "col": {"type": "integer"},
+            "value": {},
+            "origin": point,
+        },
+        "required": ["row", "col", "value"],
+    }
+    grid_item = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "rows": {"type": "integer"},
+            "cols": {"type": "integer"},
+            "cells": {"type": "array", "items": grid_cell},
+            "origin": point,
+            "bbox": bbox,
+        },
+        "required": ["id", "rows", "cols", "cells", "origin"],
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "units": {"type": "array", "items": unit_item},
+            "bijections": {"type": "array", "items": bijection_item},
+            "grids": {"type": "array", "items": grid_item},
+        },
+        "required": ["units", "bijections", "grids"],
+    }
 
 
 def _normalize_origin(origin: object) -> dict | None:
@@ -322,45 +534,50 @@ def _ensure_configured() -> None:
         raise ValueError("GOOGLE_API_KEY environment variable is required for Gemini extraction")
 
 
-def extract_page(page_index: int, image_png_bytes: bytes, doc_id: str) -> PageExtraction:
+def extract_page(
+    page_index: int,
+    image_png_bytes: bytes,
+    doc_id: str,
+    page_type_hint: str = "",
+) -> PageExtraction:
     """
     Send one page image to Gemini and return structured extraction.
 
     Raises if API key is missing. Returns empty extraction on parse/API errors.
+    page_type_hint is an optional string prepended to the prompt (from page_classifier).
     """
     _ensure_configured()
     genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
-    model = genai.GenerativeModel(_GEMINI_MODEL)
+    model = genai.GenerativeModel(config.GEMINI_MODEL)
     image_part = {
         "inline_data": {
             "mime_type": "image/png",
             "data": base64.standard_b64encode(image_png_bytes).decode("utf-8"),
         }
     }
+    hint_block = f"\n\nPAGE TYPE HINT: {page_type_hint}\n" if page_type_hint else ""
     prompt = (
-        f"{EXTRACT_PROMPT}\n\n"
-        f"This image is page {page_index} of document {doc_id}. "
+        f"{EXTRACT_PROMPT}{hint_block}\n\n"
+        f"This image is page {page_index}. "
         "Return JSON with keys: units, bijections, grids."
     )
     contents = [prompt, image_part]
 
-    for attempt in range(_GEMINI_MAX_RETRIES):
+    for attempt in range(config.GEMINI_MAX_RETRIES):
         try:
             try:
                 generation_config = genai.types.GenerationConfig(
                     response_mime_type="application/json",
-                    response_schema=PageExtraction.model_json_schema(),
+                    response_schema=_simplified_extraction_schema(),
                 )
                 response = model.generate_content(contents, generation_config=generation_config)
             except (TypeError, AttributeError, ValueError):
-                # Gemini API does not accept JSON Schema with $defs (from Pydantic);
-                # use prompt-only and parse JSON
                 response = model.generate_content(contents)
             break
         except Exception as e:
-            if _is_rate_limit_error(e) and attempt < _GEMINI_MAX_RETRIES - 1:
-                wait = _GEMINI_BACKOFF_BASE * (2**attempt)
+            if _is_rate_limit_error(e) and attempt < config.GEMINI_MAX_RETRIES - 1:
+                wait = config.GEMINI_BACKOFF_BASE * (2**attempt)
                 time.sleep(wait)
                 continue
             raise

@@ -6,24 +6,22 @@ Adds a short delay between pages to reduce 429 rate-limit hits (one Gemini call 
 from __future__ import annotations
 
 import logging
-import os
 import time
 import uuid
 from pathlib import Path
 from typing import Callable
 
+from akili import config
 from akili.canonical import Bijection, Grid, Unit
 from akili.ingest.canonicalize import canonicalize_page
+from akili.ingest.consensus import consensus_extract_page, should_use_consensus
 from akili.ingest.gemini_extract import extract_page as gemini_extract_page
+from akili.ingest.multipage import merge_multipage_tables
+from akili.ingest.page_classifier import classify_page, get_extraction_hint
 from akili.ingest.pdf_loader import load_pdf_pages
 from akili.store.repository import Store
 
 logger = logging.getLogger(__name__)
-
-# Seconds to wait between page extractions to avoid bursting Gemini rate limits (default 4)
-_PAGE_DELAY = float(os.environ.get("AKILI_GEMINI_PAGE_DELAY_SECONDS", "4.0"))
-# After a page fails with 429/rate limit, wait this many seconds before next page (default 60)
-_429_COOLDOWN = float(os.environ.get("AKILI_GEMINI_429_COOLDOWN_SECONDS", "60.0"))
 
 
 def _is_rate_limit_error(e: BaseException) -> bool:
@@ -66,11 +64,18 @@ def ingest_document(
     pages_failed = 0
 
     for i, (page_index, image_bytes) in enumerate(pages):
-        if i > 0 and _PAGE_DELAY > 0:
-            time.sleep(_PAGE_DELAY)
+        if i > 0 and config.GEMINI_PAGE_DELAY > 0:
+            time.sleep(config.GEMINI_PAGE_DELAY)
         _progress({"phase": "extracting", "page": page_index, "total": total_pages})
         try:
-            extraction = gemini_extract_page(page_index, image_bytes, doc_id)
+            page_type = classify_page(image_bytes)
+            hint = get_extraction_hint(page_type)
+            if should_use_consensus(page_type):
+                extraction, _agreement = consensus_extract_page(
+                    page_index, image_bytes, doc_id, page_type_hint=hint,
+                )
+            else:
+                extraction = gemini_extract_page(page_index, image_bytes, doc_id, page_type_hint=hint)
             _progress({"phase": "canonicalizing", "page": page_index, "total": total_pages})
             canonical = canonicalize_page(extraction, doc_id, page_index)
             all_canonical.extend(canonical)
@@ -83,14 +88,21 @@ def ingest_document(
                 e,
                 exc_info=True,
             )
-            if _is_rate_limit_error(e) and _429_COOLDOWN > 0:
+            if _is_rate_limit_error(e) and config.GEMINI_429_COOLDOWN > 0:
                 logger.info(
                     "Rate limit detected; waiting %.0f s before next page (doc_id=%s).",
-                    _429_COOLDOWN,
+                    config.GEMINI_429_COOLDOWN,
                     doc_id,
                 )
-                time.sleep(_429_COOLDOWN)
+                time.sleep(config.GEMINI_429_COOLDOWN)
             continue
+
+    all_canonical, merge_candidates = merge_multipage_tables(all_canonical)
+    if merge_candidates:
+        logger.info(
+            "Multi-page merge: %d table(s) merged across page boundaries (doc_id=%s).",
+            len(merge_candidates), doc_id,
+        )
 
     if total_pages > 0 and len(all_canonical) == 0:
         logger.warning(
@@ -102,7 +114,7 @@ def ingest_document(
     if pages_failed > 0:
         logger.info(
             "Ingest: %s of %s page(s) failed (doc_id=%s). Often rate limits; "
-            "try AKILI_GEMINI_PAGE_DELAY_SECONDS=4 or higher.",
+            "try AKILI_GEMINIconfig.GEMINI_PAGE_DELAY_SECONDS=4 or higher.",
             pages_failed,
             total_pages,
             doc_id,
@@ -138,7 +150,7 @@ def ingest_document(
         result["extraction_note"] = (
             f"Extracted from {total_pages - pages_failed} of {total_pages} pages. "
             f"{pages_failed} page(s) were skipped (often due to rate limits). "
-            "Try increasing AKILI_GEMINI_PAGE_DELAY_SECONDS in .env and re-upload."
+            "Try increasing AKILI_GEMINIconfig.GEMINI_PAGE_DELAY_SECONDS in .env and re-upload."
         )
     _progress(result)
     return doc_id, all_canonical, total_pages, pages_failed
