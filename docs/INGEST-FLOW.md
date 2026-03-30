@@ -247,4 +247,4 @@ So one bad page or one bad Gemini response doesn’t kill the whole document; on
 
 ## Related
 
-- **Query flow**: After ingest, users submit questions via `POST /query`. The verification layer returns answer + proof or REFUSE. Optionally, **Shadow Formatting** (`akili.ingest.gemini_format`) rephrases the verified fact into one natural-language sentence; see README and `docs/ARCHITECTURE.md` (Verification Layer).
+- **Query flow**: After ingest, users submit questions via `POST /query`. The 30-rule verification engine (priority-ordered registry in `verify/proof.py`) returns answer + proof + confidence score, or REFUSE. Optionally (when `include_formatted_answer: true`), **Shadow Formatting** (`akili.ingest.gemini_format`) rephrases the verified fact into natural language; this is disabled by default and labeled as `"gemini_rephrase"` in the response. See README and `docs/ARCHITECTURE.md`.

@@ -12,35 +12,33 @@ Akili is a deterministic verification layer for technical documentation. While L
 |--------|-------------|
 | **Structural Canonicalization** | Raw Gemini perception → typed objects (units, bijections, grids). Ambiguous data rejected at the source. |
 | **Coordinate-Level Grounding** | Every answer mapped to precise `(x, y)` coordinates. No "citations"—only proof. |
-| **Deterministic Refusal** | If a specification cannot be mathematically proven from the canonical structure, Akili refuses to answer. |
+| **Deterministic Refusal** | If a specification cannot be derived from the canonical structure, Akili refuses to answer. |
+| **Confidence Scoring** | Three-component confidence (extraction agreement, canonical validation, verification strength) classifies answers as VERIFIED, REVIEW, or REFUSED. |
 
 Akili doesn't just ask Gemini for an answer; it **forces Gemini to show its work** against a verifiable map of the truth.
 
 ---
 
-## Proposed Tech Stack
+## Tech Stack
 
 | Layer | Technology | Rationale |
 |-------|------------|-----------|
 | **Runtime** | Python 3.11+ | Native fit for Gemini SDK, PDF/vision pipelines, and symbolic validation. |
-| **LLM & Vision** | Google Gemini 3 API (multimodal) | PDFs, tables, schematics as images/chunks; structured extraction (see *Why Gemini 3* below). |
+| **LLM & Vision** | Google Gemini 3 API (multimodal) | PDFs, tables, schematics as images; structured extraction with coordinate grounding. |
 | **Typed Canonical Model** | Pydantic v2 | Units, bijections, grids as validated types; reject invalid shapes at ingestion. |
-| **Document Processing** | PyMuPDF, pdf2image | Extract pages, layout, bounding boxes; feed regions to Gemini with coordinates. |
-| **Coordinate Store** | SQLite (MVP) → PostgreSQL | Persist canonical objects with `(x, y)` and page/doc provenance. |
-| **Verification / Proof** | Rule-based + optional SMT (Z3) | Check that answers follow from canonical facts; deterministic refuse. |
-| **API** | FastAPI | Ingest documents, submit queries, return coordinate-grounded answers or REFUSE. |
-| **Optional Viewer** | Svelte/React + PDF.js | Overlay proven answers on source PDF for judge demos. |
+| **Document Processing** | PyMuPDF (fitz) | Extract pages as images with bounding boxes; feed to Gemini with coordinates. |
+| **Coordinate Store** | SQLite (dev) / PostgreSQL (prod) | Persist canonical objects with `(x, y)` and page/doc provenance. Multi-tenant with audit log. |
+| **Verification / Proof** | Rule-based engine (30 rules) + derived queries + Z3 constraint checks | Priority-ordered rule registry derives answers from canonical facts; derived query engine computes P=V×I, thermal checks, voltage margins; Z3 validates consistency. |
+| **Confidence** | Three-component scoring | Extraction agreement × canonical validation × verification strength → VERIFIED / REVIEW / REFUSED. |
+| **API** | FastAPI | Ingest documents, submit queries, return coordinate-grounded answers with confidence or REFUSE. |
+| **Frontend** | React + TypeScript + Vite + Tailwind | Three-pane verification workspace: document list, PDF viewer with proof overlay, chat-style query panel. |
 
 ### Why Gemini 3
 
-Akili uses **Gemini 3 Pro** (default: `gemini-3-pro-preview`) for ingestion because it excels where other models fall short for this workload:
-
-- **Multimodal document understanding** — Native vision + text in one model. PDF pages, pinout tables, and schematics are sent as images; Gemini 3 interprets layout, symbols, and structure in a single pass, without separate OCR or captioning pipelines.
-- **Structured output and instruction following** — Reliably returns JSON that conforms to our canonical schema (units, bijections, grids) with required `(x, y)` coordinates. This reduces hallucination and malformed extractions that would be rejected downstream.
-- **Reasoning over dense technical content** — Strong at parsing datasheets, pin mappings, and grids where precise cell-level and coordinate-level grounding matter. Better alignment with “show the location, not just the answer” than generic chat models.
-- **Efficiency** — Use `AKILI_GEMINI_MODEL=gemini-3-flash-preview` or `gemini-2.5-flash` for faster, lower-cost extraction; default Pro is best for maximum accuracy on complex layouts.
-
-Other models may handle general Q&A well, but for **coordinate-grounded, schema-bound extraction** from technical PDFs, Gemini 3 is the fit Akili is built around.
+- **Multimodal document understanding** — Native vision + text in one model. PDF pages sent as images; Gemini interprets layout, symbols, and structure in a single pass.
+- **Structured output** — Reliably returns JSON conforming to the canonical schema (units, bijections, grids) with required `(x, y)` coordinates.
+- **Technical content reasoning** — Strong at parsing datasheets, pin mappings, and grids where precise cell-level grounding matters.
+- **Efficiency** — Use `AKILI_GEMINI_MODEL=gemini-3-flash-preview` for faster, lower-cost extraction; default Pro for maximum accuracy.
 
 ---
 
@@ -50,42 +48,101 @@ Other models may handle general Q&A well, but for **coordinate-grounded, schema-
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              INGESTION PIPELINE                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  PDF / Schematic  →  Chunk + Layout  →  Gemini Multimodal  →  Canonicalize  │
-│       (raw)            (pages, bbox)      (extract facts)       (typed only) │
+│  PDF / Schematic  →  Page Images  →  Gemini Multimodal  →  Canonicalize    │
+│       (raw)          (PyMuPDF)       (extract facts)       (typed only)     │
 │                                                                              │
-│  Reject: low confidence, ambiguous, or non-typed extractions                 │
+│  Reject: ambiguous, non-typed, or coordinate-less extractions               │
 └─────────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           CANONICAL TRUTH STORE                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  • Units (with units of measure, (x,y) origin)                               │
-│  • Bijections (A ↔ B with coordinate ranges)                                 │
-│  • Grids (table/schematic cells with (row,col) → (x,y))                      │
-│  All entries: doc_id, page, bbox, provenance                                 │
+│  • Units (value + unit_of_measure + context + (x,y) origin)                 │
+│  • Bijections (A ↔ B with coordinate ranges)                                │
+│  • Grids (table/schematic cells with (row,col) → (x,y))                    │
+│  • Ranges (min/typ/max with conditions) [Stage B]                           │
+│  • ConditionalUnits (value + condition + derating) [Stage B]                │
+│  All entries: doc_id, page, bbox, provenance                                │
 └─────────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            QUERY & VERIFICATION                              │
+│                     QUERY, VERIFICATION & CONFIDENCE                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  User Question  →  Retrieve relevant canonical facts  →  Proof check        │
-│                         (by content + coordinates)         (derivable?)      │
-│                                        │                                    │
-│                    ┌───────────────────┴───────────────────┐                 │
-│                    ▼                                       ▼                 │
-│              [Provable]                            [Not provable]            │
-│              Answer + (x,y) proof                   REFUSE (deterministic)   │
-│              Optional: Shadow Formatting (Gemini rephrases answer in 1 sentence) │
+│  User Question  →  30-rule verification engine  →  Confidence scoring       │
+│                    (priority-ordered registry)                               │
+│                            │                                                │
+│              ┌─────────────┼─────────────┐                                  │
+│              ▼             ▼             ▼                                   │
+│         [VERIFIED]    [REVIEW]     [REFUSED]                                │
+│         ≥85% conf.   50-85% conf.  <50% conf.                              │
+│         Answer +      Answer +      Deterministic                           │
+│         proof +       proof +       refusal with                            │
+│         confidence    "needs review" reason                                 │
+│                                                                              │
+│  Optional: Shadow Formatting (Gemini rephrases answer — opt-in, labeled)    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow Summary
 
-1. **Ingest**: PDF → split into pages/regions with bounding boxes → send to Gemini with “extract typed facts and their coordinates” → parse into `Unit`, `Bijection`, `Grid` → validate → persist only if valid.
-2. **Store**: Canonical objects live in DB with `(doc_id, page, x, y, ...)`. No free-text “beliefs”—only structural facts.
-3. **Query**: User asks a question → system retrieves candidate canonical facts (by semantic + spatial relevance) → verification layer checks if the answer is **derivable** from those facts → return answer + coordinate proof, or **REFUSE**. Optionally, when the answer is verified, a **Shadow Formatting** step asks Gemini to rephrase the proven fact into one natural-language sentence (strict fact-only prompt; silent fallback to raw answer on failure or timeout).
+1. **Ingest**: PDF → split into page images (PyMuPDF at 150 DPI) → classify page type → optionally run consensus dual-pass (Stage B) → send to Gemini with structured prompt → parse into `Unit`, `Bijection`, `Grid`, `Range`, `ConditionalUnit` → detect and merge multi-page tables (Stage C) → Z3 consistency checks → validate → persist only if valid.
+2. **Store**: Canonical objects live in SQLite or PostgreSQL with `(doc_id, page, x, y, context, ...)`. No free-text "beliefs"—only structural facts. Immutable audit log tracks all mutations.
+3. **Query**: User asks a question → 30 verification rules run in priority order → if no direct match, derived-query engine tries computed answers (P=V×I, thermal check, voltage margin, current budget) with full proof chains → first result returns it with coordinate proof and a three-component confidence score → or deterministic REFUSE.
+4. **Compare** (Stage C): Cross-document comparison via `/compare` endpoint. Select multiple documents, compare parameters (max voltage, thermal resistance, etc.) side-by-side with best-value highlighting.
+5. **Review** (Stage B): REVIEW-tier answers surface for human confirmation/correction. Engineers can CONFIRM or CORRECT facts via the ReviewPanel.
+6. **Learn** (Stage C): Correction patterns are analyzed to detect systematic errors (unit confusion, value scaling, label misreads). Auto-correction rules are built from high-confidence patterns.
+7. **Shadow Formatting** (opt-in): When explicitly requested, a separate Gemini call rephrases the verified fact into natural language. The response always labels this as `"formatting_source": "gemini_rephrase"`. Disabled by default.
+
+---
+
+## Verification Rules (30)
+
+The rule engine in `src/akili/verify/proof.py` uses a `@rule(priority)` decorator registry. Rules are tried in priority order (lower = first); the first non-None result wins.
+
+| Priority | Rule | What it answers |
+|----------|------|-----------------|
+| 100 | Pin lookup | "What is pin 5?" via bijection or grid |
+| 150 | Part number | "What is the part number?" / ordering info |
+| 160 | Description | "What does this component do?" |
+| 200–210 | Absolute max voltage/current | "What is the absolute maximum voltage?" |
+| 300–320 | Max voltage/current/capacity | "What is the maximum voltage?" |
+| 400–430 | Operating ranges, temperatures | "Operating voltage range?", "Storage temp?", "Soldering temp?" |
+| 500–530 | Power, ESD, leakage, threshold | "Max power dissipation?", "ESD ratings?", "Logic threshold levels?" |
+| 600–630 | Timing & performance | "Clock frequency?", "Propagation delay?", "Rise/fall time?", "Setup/hold?" |
+| 700–750 | Physical / package | "Package type?", "Dimensions?", "Thermal resistance?", "Weight?", "Pin count?", "MSL?" |
+| 800 | Recommended operating conditions | Table lookup from grids |
+| 900 | Unit-by-intent | Keyword-scored fallback across all unit types |
+| 950 | Grid cell lookup | Header-matching fallback across grids |
+| 1000 | Unit lookup by label | Fuzzy label/value matching fallback |
+| — | **Derived: Power** | P = V × I with full proof chain [C1] |
+| — | **Derived: Thermal** | T_j = T_a + (P × θ_JA), safety check [C1] |
+| — | **Derived: Voltage Margin** | (V_max - V_op) / V_max × 100% [C1] |
+| — | **Derived: Current Budget** | Supply current vs. sum of output currents [C1] |
+
+---
+
+## Confidence Scoring
+
+Every verified answer includes a three-component confidence score:
+
+```
+confidence = {
+    "extraction_agreement": 0.0–1.0,   // Consensus between extractions (0.5 = single-pass default)
+    "canonical_validation": 0.0–1.0,   // Schema completeness (bbox, label, context, unit_of_measure)
+    "verification_strength": 0.0–1.0,  // How directly the proof supports the answer
+    "overall": weighted_average
+}
+```
+
+| Tier | Overall Score | UI Treatment |
+|------|---------------|--------------|
+| **VERIFIED** | ≥ 0.85 | Green badge, full proof |
+| **REVIEW** | 0.50 – 0.85 | Yellow badge, flagged for confirmation |
+| **REFUSED** | < 0.50 | Red/amber, deterministic refusal with reason |
+
+Thresholds are configurable via `AKILI_VERIFY_THRESHOLD` and `AKILI_REVIEW_THRESHOLD` environment variables.
 
 ---
 
@@ -95,35 +152,101 @@ Other models may handle general Q&A well, but for **coordinate-grounded, schema-
 akili/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml      # Lint, typecheck, test (backend + frontend)
+│       └── ci.yml               # Lint, typecheck, test (backend + frontend)
 ├── README.md
 ├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── UX-DESIGN-BRIEF.md
-│   └── UI-SPEC.md
-├── frontend/                 # React + TypeScript + Vite UI
-│   ├── public/
+│   ├── ARCHITECTURE.md          # Detailed design and principles
+│   ├── AUDIT.md                 # Full repository audit
+│   ├── INGEST-FLOW.md           # Engineer-level ingest walkthrough
+│   ├── UI-SPEC.md               # Visual and component spec
+│   ├── UX-DESIGN-BRIEF.md       # UX scope and direction
+│   └── TECHNICAL-EXECUTION-PLAN.md  # Staged implementation roadmap
+├── frontend/                    # React + TypeScript + Vite + Tailwind
 │   ├── src/
-│   │   ├── components/
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   ├── api.ts
-│   │   └── types.ts
-│   ├── index.html
+│   │   ├── components/          # DocumentViewer, FileUploader, Header, LoginPage,
+│   │   │                        #   SidebarLeft, SidebarRight, ReviewPanel,
+│   │   │                        #   CompareView [C3]
+│   │   ├── contexts/            # AuthContext (Firebase), ThemeContext (dark mode)
+│   │   ├── App.tsx              # Main app component
+│   │   ├── api.ts               # API client with auth
+│   │   ├── types.ts             # TypeScript types (QueryResult, FormattingSource, etc.)
+│   │   └── firebase.ts          # Firebase config
+│   ├── Dockerfile
 │   ├── package.json
-│   ├── vite.config.ts
-│   └── tsconfig.json
+│   └── vite.config.ts
 ├── src/
 │   └── akili/
-│       ├── canonical/        # Unit, Bijection, Grid
-│       ├── ingest/           # PDF → Gemini → canonicalize; gemini_format for Shadow Formatting
-│       ├── store/            # SQLite persistence
-│       ├── verify/           # Proof + REFUSE
-│       └── api/              # FastAPI app
+│       ├── canonical/           # Unit, Bijection, Grid, Range, ConditionalUnit models
+│       ├── ingest/              # PDF → Gemini → canonicalize pipeline
+│       │   ├── gemini_extract.py   # Gemini API calls with retry/backoff
+│       │   ├── gemini_format.py    # Shadow Formatting (opt-in)
+│       │   ├── consensus.py        # Dual-pass consensus extraction [B1]
+│       │   ├── multipage.py        # Multi-page table detection & merge [C2]
+│       │   ├── page_classifier.py  # Page-type classification
+│       │   ├── canonicalize.py     # Extract → canonical conversion
+│       │   ├── pdf_loader.py       # PDF → page images (PyMuPDF)
+│       │   └── pipeline.py         # Orchestration
+│       ├── store/               # Persistence layer
+│       │   ├── base.py             # Abstract BaseStore interface
+│       │   ├── repository.py       # SQLite implementation
+│       │   ├── postgres.py         # PostgreSQL implementation [B4]
+│       │   ├── corrections.py      # Human correction tracking [B5]
+│       │   └── migrate.py          # SQLite → PostgreSQL migration [B4]
+│       ├── verify/              # Verification engine
+│       │   ├── proof.py            # 30-rule registry with @rule decorator
+│       │   ├── derived.py          # Derived query engine (P=V×I, thermal, margin) [C1]
+│       │   ├── compare.py          # Cross-document comparison engine [C3]
+│       │   ├── matchers.py         # Shared regex patterns and parsers
+│       │   ├── z3_checks.py        # Z3 constraint verification [B3]
+│       │   └── models.py          # AnswerWithProof, Refuse, ProofChain, ConfidenceScore
+│       ├── learn/               # Correction learning [C4]
+│       │   └── pattern_analyzer.py # Pattern detection & auto-correction rules
+│       └── api/                 # FastAPI app + auth middleware
 ├── tests/
+│   ├── conftest.py              # Shared fixtures (store, sample data)
+│   ├── test_verify.py           # 46 verification rule tests
+│   ├── test_derived.py          # 19 derived query tests [C1]
+│   ├── test_multipage.py        # 10 multi-page table tests [C2]
+│   ├── test_compare.py          # 7 cross-document comparison tests [C3]
+│   ├── test_pattern_analyzer.py # 12 correction pattern tests [C4]
+│   ├── test_consensus.py        # 12 consensus extraction tests [B1]
+│   ├── test_canonical_extended.py # 11 Range/ConditionalUnit tests [B2]
+│   ├── test_z3_checks.py        # 10 Z3 constraint tests [B3]
+│   ├── test_corrections.py      # 11 corrections/audit tests [B5]
+│   ├── test_store.py            # 13 storage CRUD tests
+│   ├── test_confidence.py       # 11 confidence scoring tests
+│   ├── test_api.py              # 14 API endpoint tests
+│   ├── test_extraction.py       # 11 extraction prompt/schema tests
+│   ├── test_pipeline_integration.py # 7 pipeline integration tests
+│   ├── test_canonical.py        # 4 canonical model tests
+│   └── benchmark/               # Extraction quality benchmark
 ├── pyproject.toml
-└── requirements.txt
+├── Dockerfile
+└── docker-compose.yml
 ```
+
+---
+
+## API Surface
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/ingest` | POST | Upload PDF; run ingestion pipeline; populate canonical store. Returns `doc_id` and counts. |
+| `/ingest/stream` | POST | Same as `/ingest` but with server-sent events for progress tracking. |
+| `/query` | POST | Submit question for a document. Returns answer + proof + confidence, or REFUSE. Optional `include_formatted_answer` for Gemini rephrasing (labeled as `"gemini_rephrase"`). |
+| `/documents` | GET | List ingested documents with canonical object counts. |
+| `/documents/{doc_id}/canonical` | GET | Inspect canonical objects (units, bijections, grids) for a document. |
+| `/documents/{doc_id}/file` | GET | Download the ingested PDF (for viewer). |
+| `/documents/{doc_id}` | DELETE | Remove a document and all its canonical objects. |
+| `/corrections` | POST | Submit human correction or confirmation for a canonical fact. |
+| `/corrections/{doc_id}` | GET | List all corrections for a document. |
+| `/corrections/stats/{doc_id}` | GET | Correction statistics (total, confirmation/correction rate). |
+| `/compare` | POST | Compare parameters across 2+ documents. Returns side-by-side table with best-value highlighting. [C3] |
+| `/patterns` | GET | Analyze correction patterns across all documents (unit confusion, scaling errors, etc.). [C4] |
+| `/patterns/{doc_id}` | GET | Correction patterns for a specific document. [C4] |
+| `/patterns/suggest` | POST | Suggest auto-correction based on learned patterns. [C4] |
+| `/status` | GET | Environment check (API key, DB path). No auth required. |
+| `/health` | GET | Health check. No auth required. |
 
 ---
 
@@ -140,7 +263,7 @@ One-command run for API + frontend with a persistent SQLite store.
    ```bash
    docker compose up --build
    ```
-3. Open **http://localhost:3001** for the UI (port 3001 to avoid conflict with other apps on 3000). API docs: **http://localhost:8000/docs**; the UI proxies `/api` to the API inside Docker.
+3. Open **http://localhost:3001** for the UI. API docs: **http://localhost:8000/docs**.
 
 **Notes:**
 - The SQLite DB is stored in a Docker volume `akili-data` (path `/data/akili.db` in the API container).
@@ -148,133 +271,96 @@ One-command run for API + frontend with a persistent SQLite store.
 
 ---
 
-## Testing the API (no UI, no restart)
-
-Check each part of the API in isolation from the host (no Docker restart after the first time).
-
-1. **Status (env + DB)**  
-   In a browser or with curl (use the port your API is on — e.g. 8001 if that’s how you run it):
-   ```text
-   http://localhost:8001/status
-   ```
-   Response includes `GOOGLE_API_KEY_set: true|false` and DB path. If the key is missing, set it in `.env` and ensure the API container uses `env_file: .env`.
-
-2. **Documents**  
-   ```text
-   http://localhost:8001/documents
-   ```
-
-3. **Script (PowerShell, from repo root)**  
-   ```powershell
-   .\scripts\test-api.ps1
-   ```
-   Prints status and documents. To test ingest with a PDF:
-   ```powershell
-   .\scripts\test-api.ps1 -PdfPath .\path\to\your.pdf
-   ```
-   The script prints the **exact API error body** if ingest returns 500 (e.g. missing key, Gemini error).
-
-You only need to restart the API once after adding these; after that, run the script or hit `/status` anytime to verify.
-
-**If the test script says "Could not reach API":**  
-- The **backend does not connect to another project**. The frontend (port 3001) proxies `/api` to the API container (`api:8000`). The script runs on your machine and hits the API’s published port (8000).  
-- Run `docker compose logs api` — if the API process crashed, you’ll see the error.  
-- Run `docker compose ps` — confirm the API container shows port 8000.  
-- Then run: `.\scripts\test-api.ps1 -BaseUrl 'http://localhost:8000'` (use the port that matches `docker compose ps`).
-
----
-
-## Getting Started
+## Getting Started (local dev)
 
 ### Backend (API)
 
-1. **Environment**: From repo root, create and activate a venv, then set `GOOGLE_API_KEY` for Gemini.
+1. **Environment**: Create and activate a venv, then set `GOOGLE_API_KEY` for Gemini.
    - **Windows (PowerShell):** `python -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
-   - **Windows (cmd):** `python -m venv .venv` then `.venv\Scripts\activate.bat`
    - **macOS/Linux:** `python3 -m venv .venv` then `source .venv/bin/activate`
-2. **Install**: `pip install -e .` (for API auth with Firebase ID tokens, use `pip install -e ".[auth]"`).
-3. **Run API** (from repo root, with venv active):
+2. **Install**: `pip install -e ".[dev]"` (for Firebase auth: `pip install -e ".[auth]"`; for Z3 verification: `pip install -e ".[verify]"`).
+3. **Run API**:
    ```bash
    python -m uvicorn akili.api.app:app --reload --host 0.0.0.0 --port 8000
    ```
-   Or, if the package is installed: `akili-serve`
-4. **Ingest a doc**: `POST /ingest` with PDF (multipart form `file`) → canonical store populated; returns `doc_id`.
-5. **Query**: `POST /query` with body `{"doc_id": "<from ingest>", "question": "What is pin 5?"}` (optional: `"include_formatted_answer": true`) → coordinate-grounded answer + proof or REFUSE. When `include_formatted_answer` is true and the answer is verified, the response may include `formatted_answer` (one-sentence natural-language phrasing from Gemini); on timeout or failure the UI falls back to the raw `answer`.
-6. **List docs**: `GET /documents`. **Inspect canonical**: `GET /documents/{doc_id}/canonical`. **Get doc PDF**: `GET /documents/{doc_id}/file` (for viewer).
-
-**Gemini rate limits (429)**  
-Ingestion calls the Gemini API **once per PDF page**. Free-tier limits (e.g. requests per minute for `gemini-3-pro-preview`) can be hit with multi-page PDFs. The app retries on 429 with exponential backoff and waits a few seconds between pages to reduce bursts. If you still see 429 after waiting:
-
-- **Per-minute limit:** Wait 1–2 minutes and try again, or ingest fewer pages at a time.
-- **Daily or project quota:** Check [Google AI Studio](https://aistudio.google.com/) quotas and billing; you may need to wait until the quota resets or use a paid tier.
-- **Tuning:** Defaults are tuned to reduce skipped pages: 4 s between pages, 6 retries with longer backoff, and a 60 s cooldown after any 429 before the next page. Override with `AKILI_GEMINI_PAGE_DELAY_SECONDS`, `AKILI_GEMINI_MAX_RETRIES`, `AKILI_GEMINI_BACKOFF_BASE`, and `AKILI_GEMINI_429_COOLDOWN_SECONDS` (see `.env.example`). Query-time **Shadow Formatting** (natural-language phrasing of verified answers) uses the same Gemini key and model; format calls use a short timeout (`AKILI_FORMAT_TIMEOUT_SEC`, default 2.5s) and silently fall back to the raw answer on failure.
-
-### UI (frontend)
-
-The React + TypeScript UI lives in `frontend/` and is wired to the API via a Vite proxy.
-
-1. **Install Node.js** if you don’t have it: [nodejs.org](https://nodejs.org/) (LTS). Then `node` and `npm` should be in your PATH.
-2. **Start the API** (from repo root, in a first terminal, with venv active):
+4. **Run tests**:
    ```bash
-   python -m uvicorn akili.api.app:app --reload --port 8000
+   pytest tests/ -v
    ```
-3. **Start the UI** (in a second terminal, from repo root):
+   Current suite: **205 tests** covering verification rules, derived queries, multi-page tables, cross-document comparison, correction pattern analysis, consensus extraction, Z3 checks, corrections, storage CRUD, confidence scoring, API endpoints, and canonical models.
+
+### Frontend (UI)
+
+1. **Install Node.js** (LTS) from [nodejs.org](https://nodejs.org/).
+2. **Start the API** first (see above).
+3. **Start the UI** (in a second terminal):
    ```bash
    cd frontend
    npm install
    npm run dev
    ```
-4. Open **http://localhost:3000** (or **http://localhost:3001** if using Docker). Upload a PDF, then select a document and ask a question; the right panel shows VERIFIED (answer + proof) or REFUSED.
+4. Open **http://localhost:3000**. Upload a PDF, select a document, ask a question.
+
+### Gemini rate limits (429)
+
+Ingestion calls the Gemini API **once per PDF page**. Free-tier limits can be hit with multi-page PDFs. The app retries on 429 with exponential backoff and waits between pages to reduce bursts.
+
+- **Tuning:** Override with `AKILI_GEMINI_PAGE_DELAY_SECONDS` (default 4), `AKILI_GEMINI_MAX_RETRIES` (default 6), `AKILI_GEMINI_BACKOFF_BASE` (default 8s), and `AKILI_GEMINI_429_COOLDOWN_SECONDS` (default 60s). See `.env.example`.
 
 ### Firebase hosting & sign-in
 
-The app can be hosted on Firebase with Google sign-in.
-
-1. **Create a Firebase project** at [console.firebase.google.com](https://console.firebase.google.com). Note your project ID.
-2. **Enable Authentication → Sign-in method → Google** in the Firebase Console.
-3. **Configure the project**: replace `your-firebase-project-id` in `.firebaserc` with your project ID.
-4. **Env**: copy `.env.example` to `.env` in the repo root and fill in `GOOGLE_API_KEY` and the Firebase vars (Project settings → General → Your apps → Web app). Vite loads from the repo root, so one `.env` covers both API and frontend.
-5. **Build and deploy** (from repo root):
-   ```bash
-   cd frontend
-   npm install
-   npm run build
-   cd ..
-   npx firebase deploy
-   ```
-   The hosted app will be at `https://<project-id>.web.app` (or your custom domain). Unauthenticated users see the login page; after signing in with Google they get the verification workspace.
-
-**If you get "command not found":**
-- **API:** Use `python -m uvicorn akili.api.app:app --reload --port 8000` (or `py -m uvicorn ...` on Windows). Run this from the **project root** after activating the venv and running `pip install -e .`.
-- **UI:** Run `npm install` and `npm run dev` from inside the `frontend/` folder. If `npm` is not found, install Node.js and ensure it’s on your PATH.
+The app supports optional Google sign-in via Firebase. See `.env.example` for the required `VITE_FIREBASE_*` variables. When `AKILI_REQUIRE_AUTH=1` is set, the API requires a valid Firebase ID token on all endpoints except `/health` and `/status`.
 
 ---
 
 ## CI/CD
 
-GitHub Actions workflows in `.github/workflows/` provide CI and CD.
-
-### CI (`.github/workflows/ci.yml`)
-
-Runs on every **push** and **pull_request** to `main`, `master`, and `develop`.
+GitHub Actions workflow in `.github/workflows/ci.yml` runs on every push and PR to `main`, `master`, and `develop`.
 
 | Job | What it does |
-|-----|----------------|
-| **Backend (Python)** | Matrix: Python 3.11 and 3.12. Installs `.[dev]`, runs **Ruff** (lint + format check), **Flake8**, **pytest** with coverage. Optional: uploads coverage to Codecov (Python 3.11 only). |
-| **Frontend (Node)** | Node 20. `npm ci` → **ESLint** → **TypeScript** (`tsc --noEmit`) → **Vite build**. Build uses empty Firebase env vars so it works without secrets. |
+|-----|--------------|
+| **Backend (Python)** | Matrix: Python 3.11 and 3.12. Installs `.[dev]`, runs Ruff (lint + format check), Flake8, pytest with coverage. |
+| **Frontend (Node)** | Node 20. `npm ci` → ESLint → TypeScript (`tsc --noEmit`) → Vite build. |
 
 **Local equivalents:**
-
-- Backend: `pip install -e ".[dev]"` then `ruff check src tests`, `flake8 src tests`, `ruff format --check src tests`, `pytest tests -v`
+- Backend: `pip install -e ".[dev]"` then `ruff check src tests`, `flake8 src tests`, `pytest tests -v`
 - Frontend: `cd frontend && npm ci && npm run lint && npm run typecheck && npm run build`
 
-### CD (Firebase deploy)
+---
 
-**Deploy workflow is removed for now** so CI does not run Firebase deploy until you are ready. To deploy the frontend to Firebase Hosting when ready: add a workflow under `.github/workflows/` that builds the frontend and runs `firebase deploy --only hosting` (use repo secrets for `FIREBASE_TOKEN` and `VITE_FIREBASE_*`). See the Firebase hosting section above for manual `npx firebase deploy`.
+## Test Coverage
 
-### Dependabot (`.github/dependabot.yml`)
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| `verify/proof.py` (30 rules) | 46 | 70% |
+| `verify/derived.py` (4 derivations) | 19 | 95% |
+| `verify/compare.py` (cross-doc) | 7 | 90% |
+| `verify/models.py` (confidence) | 11 | 100% |
+| `verify/z3_checks.py` | 10 | 85% |
+| `ingest/consensus.py` | 12 | 90% |
+| `ingest/multipage.py` (multi-page tables) | 10 | 95% |
+| `store/repository.py` | 13 | 100% |
+| `store/corrections.py` | 11 | 95% |
+| `learn/pattern_analyzer.py` | 12 | 90% |
+| `canonical/models.py` (incl. Range, ConditionalUnit) | 15 | 98% |
+| `ingest/gemini_extract.py` + `page_classifier.py` | 11 | 60% |
+| `ingest/pipeline.py` | 7 | 65% |
+| `api/app.py` | 14 | 35% |
+| `benchmark/` | 3 | N/A |
+| **Total** | **205** | **~62%** |
 
-Weekly PRs to update **npm** (frontend), **pip** (backend), and **GitHub Actions**. Adjust or remove if you prefer manual updates.
+---
+
+## Roadmap
+
+See [`docs/TECHNICAL-EXECUTION-PLAN.md`](docs/TECHNICAL-EXECUTION-PLAN.md) for the full staged implementation plan.
+
+| Stage | Goal | Status |
+|-------|------|--------|
+| **A: Make It Work** | 30 verification rules, confidence scoring, shadow format fix, test coverage | **Done** |
+| **B: Pilot-Ready** | Consensus extraction, Range/ConditionalUnit models, Z3 checks, PostgreSQL, review UI | **Done** |
+| **C: Deeper Reasoning** | Derived queries (P=V×I), multi-page tables, cross-document comparison, correction learning | **Done** |
+| **D: Enterprise** | RBAC, audit trails, LLM abstraction (swap Gemini/Claude/GPT-4V), EDA/JIRA integrations | Planned |
 
 ---
 
