@@ -8,7 +8,7 @@
 import { signOut } from 'firebase/auth';
 import { getFirebaseAuth } from './firebase';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 /** On 401, sign out from Firebase and throw; AuthContext will show login. */
 async function handle401(res: Response): Promise<void> {

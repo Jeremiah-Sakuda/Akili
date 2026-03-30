@@ -27,7 +27,7 @@ from akili.api.auth import get_current_user
 from akili.canonical import Bijection, Grid, Unit
 from akili.ingest.gemini_format import format_answer, format_refusal
 from akili.ingest.pipeline import ingest_document
-from akili.store import Store
+from akili.store import Store, create_store
 from akili.learn.pattern_analyzer import PatternAnalyzer
 from akili.store.corrections import CorrectionStore
 from akili.verify import AnswerWithProof, Refuse, verify_and_answer
@@ -150,8 +150,10 @@ def status() -> JSONResponse:
     """
     key = os.environ.get("GOOGLE_API_KEY")
     key_set = bool(key and key.strip())
+    db_url = os.environ.get("DATABASE_URL", "")
+    using_pg = db_url.startswith("postgresql")
     db_path = config.DB_PATH
-    db_exists = Path(db_path).parent.exists() if db_path else False
+    db_exists = Path(db_path).parent.exists() if db_path and not using_pg else False
     return JSONResponse(
         content={
             "ok": True,
@@ -161,8 +163,9 @@ def status() -> JSONResponse:
                 if key_set
                 else "GOOGLE_API_KEY is missing or empty. Set it in .env and ensure the API container uses env_file: .env"  # noqa: E501
             ),
-            "AKILI_DB_PATH": db_path,
-            "db_dir_exists": db_exists,
+            "database": "postgresql" if using_pg else "sqlite",
+            "AKILI_DB_PATH": db_path if not using_pg else None,
+            "db_dir_exists": db_exists if not using_pg else None,
         }
     )
 
@@ -177,8 +180,8 @@ def get_store() -> Store:
     if _store is None:
         with _store_lock:
             if _store is None:
-                db_path = config.DB_PATH
-                _store = Store(Path(db_path))
+                db_url = os.environ.get("DATABASE_URL", "")
+                _store = create_store(db_url=db_url or None)
     return _store
 
 
@@ -642,8 +645,8 @@ def get_correction_store() -> CorrectionStore:
     if _correction_store is None:
         with _correction_store_lock:
             if _correction_store is None:
-                db_path = config.DB_PATH
-                _correction_store = CorrectionStore(db_path=Path(db_path))
+                db_url = os.environ.get("DATABASE_URL", "")
+                _correction_store = CorrectionStore(db_url=db_url or None)
     return _correction_store
 
 
