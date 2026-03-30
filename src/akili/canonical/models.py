@@ -103,3 +103,37 @@ class Grid(BaseModel):
     def as_dict(self) -> dict[tuple[int, int], Any]:
         """(row, col) → value for quick lookup."""
         return {(c.row, c.col): c.value for c in self.cells}
+
+
+class Range(BaseModel):
+    """Min/typ/max specification with optional conditions (e.g. 'at 25C', 'VCC = 3.3V')."""
+
+    id: str = Field(..., description="Unique id within document")
+    label: str | None = Field(None, description="Parameter name (e.g. 'VCC', 'ICC')")
+    min: float | None = Field(None, description="Minimum value")
+    typ: float | None = Field(None, description="Typical value")
+    max: float | None = Field(None, description="Maximum value")
+    unit: str = Field(..., description="Unit of measure (e.g. V, mA, ns)")
+    conditions: str | None = Field(None, description="Test conditions (e.g. 'at 25C', 'VCC = 3.3V')")
+    context: str | None = Field(None, description="Section/table context")
+    origin: Point = Field(..., description="(x,y) location")
+    doc_id: str = Field(..., description="Source document id")
+    page: int = Field(..., ge=0, description="Page number (0-based)")
+    bbox: BBox | None = Field(None, description="Optional bounding box")
+
+
+class ConditionalUnit(BaseModel):
+    """Value that depends on a specific condition (e.g. derating curves)."""
+
+    id: str = Field(..., description="Unique id within document")
+    label: str | None = Field(None, description="Parameter name")
+    value: float = Field(..., description="The value under this condition")
+    unit: str = Field(..., description="Unit of measure")
+    condition_type: str = Field(..., description="What varies (e.g. 'temperature', 'voltage')")
+    condition_value: str = Field(..., description="The specific condition (e.g. '85C', '3.3V')")
+    derating: str | None = Field(None, description="Derating description (e.g. '20mV/C above 85C')")
+    context: str | None = Field(None, description="Section/table context")
+    origin: Point = Field(..., description="(x,y) location")
+    doc_id: str = Field(..., description="Source document id")
+    page: int = Field(..., ge=0, description="Page number (0-based)")
+    bbox: BBox | None = Field(None, description="Optional bounding box")
