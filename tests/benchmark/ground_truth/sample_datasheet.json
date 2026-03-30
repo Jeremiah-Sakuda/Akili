@@ -1,0 +1,162 @@
+{
+    "filename": "sample_datasheet.pdf",
+    "description": "Synthetic ground truth using the test fixture data from conftest.py",
+    "queries": [
+        {
+            "question": "What is pin 5?",
+            "query_type": "pin_lookup",
+            "expected_status": "answer",
+            "expected_answer_contains": ["RST"]
+        },
+        {
+            "question": "What is the maximum voltage?",
+            "query_type": "max_voltage",
+            "expected_status": "answer",
+            "expected_answer_contains": ["5.5"]
+        },
+        {
+            "question": "What is the maximum current?",
+            "query_type": "max_current",
+            "expected_status": "answer",
+            "expected_answer_contains": ["250"]
+        },
+        {
+            "question": "What is the absolute maximum voltage?",
+            "query_type": "absolute_max_voltage",
+            "expected_status": "answer",
+            "expected_answer_contains": ["5.5"]
+        },
+        {
+            "question": "What is the absolute maximum current?",
+            "query_type": "absolute_max_current",
+            "expected_status": "answer",
+            "expected_answer_contains": ["500"]
+        },
+        {
+            "question": "What is the supply voltage range?",
+            "query_type": "operating_voltage_range",
+            "expected_status": "answer",
+            "expected_answer_contains": ["2.7"]
+        },
+        {
+            "question": "What is the operating temperature range?",
+            "query_type": "operating_temp_range",
+            "expected_status": "answer",
+            "expected_answer_contains": ["-40"]
+        },
+        {
+            "question": "What is the storage temperature range?",
+            "query_type": "storage_temp_range",
+            "expected_status": "answer",
+            "expected_answer_contains": ["-65"]
+        },
+        {
+            "question": "What is the reflow soldering temperature?",
+            "query_type": "solder_temp",
+            "expected_status": "answer",
+            "expected_answer_contains": ["260"]
+        },
+        {
+            "question": "What is the max power dissipation?",
+            "query_type": "power_dissipation",
+            "expected_status": "answer",
+            "expected_answer_contains": ["500"]
+        },
+        {
+            "question": "What are the ESD ratings?",
+            "query_type": "esd_rating",
+            "expected_status": "answer",
+            "expected_answer_contains": ["2000"]
+        },
+        {
+            "question": "What is the input leakage current?",
+            "query_type": "leakage_current",
+            "expected_status": "answer",
+            "expected_answer_contains": ["1"]
+        },
+        {
+            "question": "What are the logic threshold levels?",
+            "query_type": "threshold_voltage",
+            "expected_status": "answer",
+            "expected_answer_contains": ["0.8"]
+        },
+        {
+            "question": "What is the max clock frequency?",
+            "query_type": "clock_frequency",
+            "expected_status": "answer",
+            "expected_answer_contains": ["100"]
+        },
+        {
+            "question": "What is the propagation delay?",
+            "query_type": "propagation_delay",
+            "expected_status": "answer",
+            "expected_answer_contains": ["5.5"]
+        },
+        {
+            "question": "What are the rise and fall times?",
+            "query_type": "rise_fall_time",
+            "expected_status": "answer",
+            "expected_answer_contains": ["2"]
+        },
+        {
+            "question": "What are the setup and hold times?",
+            "query_type": "setup_hold_time",
+            "expected_status": "answer",
+            "expected_answer_contains": ["3"]
+        },
+        {
+            "question": "What package is this?",
+            "query_type": "package_type",
+            "expected_status": "answer",
+            "expected_answer_contains": ["TQFP"]
+        },
+        {
+            "question": "What are the package dimensions?",
+            "query_type": "package_dimensions",
+            "expected_status": "answer",
+            "expected_answer_contains": ["7"]
+        },
+        {
+            "question": "What is the thermal resistance?",
+            "query_type": "thermal_resistance",
+            "expected_status": "answer",
+            "expected_answer_contains": ["45"]
+        },
+        {
+            "question": "What is the component weight?",
+            "query_type": "weight",
+            "expected_status": "answer",
+            "expected_answer_contains": ["0.5"]
+        },
+        {
+            "question": "How many pins does it have?",
+            "query_type": "pin_count",
+            "expected_status": "answer",
+            "expected_answer_contains": ["6"]
+        },
+        {
+            "question": "What is the MSL rating?",
+            "query_type": "moisture_sensitivity",
+            "expected_status": "answer",
+            "expected_answer_contains": ["3"]
+        },
+        {
+            "question": "What is the part number?",
+            "query_type": "part_number",
+            "expected_status": "answer",
+            "expected_answer_contains": ["AKILI-48Q"]
+        },
+        {
+            "question": "What does this component do?",
+            "query_type": "description",
+            "expected_status": "answer",
+            "expected_answer_contains": ["logic IC"]
+        },
+        {
+            "question": "What is the gravitational constant of this chip?",
+            "query_type": "nonexistent_spec",
+            "expected_status": "refuse",
+            "notes": "Completely unrelated to electronics - should refuse"
+        }
+    ]
+}
