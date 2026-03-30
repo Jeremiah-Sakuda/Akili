@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import './index.css';
 
 const rootElement = document.getElementById('root');
@@ -50,7 +51,9 @@ function AppWithErrorBoundary() {
       <ErrorBoundary>
         <ThemeProvider>
           <AuthProvider>
-            <App />
+            <ToastProvider>
+              <App />
+            </ToastProvider>
           </AuthProvider>
         </ThemeProvider>
       </ErrorBoundary>

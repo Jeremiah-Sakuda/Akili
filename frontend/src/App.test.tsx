@@ -9,6 +9,7 @@ vi.mock('./components/SidebarRight', () => ({ default: () => <div data-testid="s
 vi.mock('./components/DocumentViewer', () => ({ default: () => <div data-testid="doc-viewer">DocViewer</div> }));
 vi.mock('./components/FileUploader', () => ({ default: () => <div data-testid="file-uploader">FileUploader</div> }));
 vi.mock('./components/LoginPage', () => ({ default: () => <div data-testid="login-page">LoginPage</div> }));
+vi.mock('./components/Toast', () => ({ default: () => null }));
 
 const mockGetDocuments = vi.fn(() => Promise.resolve([]));
 vi.mock('./api', () => ({
@@ -21,6 +22,10 @@ vi.mock('./api', () => ({
 let mockAuthValue = { user: null as any, loading: false, signInWithGoogle: vi.fn(), signOut: vi.fn(), authAvailable: true };
 vi.mock('./contexts/AuthContext', () => ({
   useAuth: () => mockAuthValue,
+}));
+
+vi.mock('./contexts/ToastContext', () => ({
+  useToast: () => ({ toasts: [], addToast: vi.fn(), removeToast: vi.fn() }),
 }));
 
 describe('App', () => {

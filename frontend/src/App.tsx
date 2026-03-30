@@ -5,7 +5,9 @@ import SidebarRight from './components/SidebarRight';
 import DocumentViewer from './components/DocumentViewer';
 import FileUploader from './components/FileUploader';
 import LoginPage from './components/LoginPage';
+import ToastContainer from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
+import { useToast } from './contexts/ToastContext';
 import { AppState } from './types';
 import type { ChatMessage, DocumentSummary, ProofPoint, QueryResponse } from './api';
 import { deleteDocument as apiDeleteDocument, getDocuments, query as apiQuery, isRefuse } from './api';
@@ -20,6 +22,7 @@ const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
 
 const App: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
+  const { addToast } = useToast();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [viewState, setViewState] = useState<AppState>(AppState.UPLOAD);
@@ -35,12 +38,13 @@ const App: React.FC = () => {
       setDocuments(list);
       if (list.length === 0) setSelectedDocId(null);
       else setSelectedDocId((prev) => (prev && list.some((d) => d.doc_id === prev) ? prev : list[0].doc_id));
-    } catch {
+    } catch (err) {
       setDocuments([]);
+      addToast(err instanceof Error ? err.message : 'Failed to load documents');
     } finally {
       setLoadingDocs(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     refreshDocuments();
@@ -74,11 +78,11 @@ const App: React.FC = () => {
           setOverlayProof(null);
           setMessages([]);
         }
-      } catch {
-        // Error could be shown via toast; for now rely on refreshDocuments not updating
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'Failed to delete document');
       }
     },
-    [refreshDocuments, selectedDocId]
+    [refreshDocuments, selectedDocId, addToast]
   );
 
   const handleShowProof = useCallback((proof: ProofPoint[] | null) => {
@@ -129,6 +133,7 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-[#0d1117]">
       <Header />
+      <ToastContainer />
 
       <div className="layout-desktop flex flex-1 overflow-hidden">
         <SidebarLeft
