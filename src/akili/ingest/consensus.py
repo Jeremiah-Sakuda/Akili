@@ -154,25 +154,27 @@ def merge_extractions(
 
     matched, unmatched_a, unmatched_b = _match_units(units_a, units_b, agreement_threshold)
 
+    from pydantic import ValidationError
+
     from akili.ingest.extract_schema import UnitExtract
     merged_units: list[UnitExtract] = []
 
     for ua, _ub, _sim in matched:
         try:
             merged_units.append(UnitExtract.model_validate(ua))
-        except Exception:
+        except (ValidationError, ValueError, TypeError):
             continue
 
     for ua in unmatched_a:
         try:
             merged_units.append(UnitExtract.model_validate(ua))
-        except Exception:
+        except (ValidationError, ValueError, TypeError):
             continue
 
     for ub in unmatched_b:
         try:
             merged_units.append(UnitExtract.model_validate(ub))
-        except Exception:
+        except (ValidationError, ValueError, TypeError):
             continue
 
     bijections = extraction_a.bijections or extraction_b.bijections

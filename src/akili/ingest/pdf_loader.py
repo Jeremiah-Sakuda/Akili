@@ -6,11 +6,14 @@ Uses PyMuPDF to render pages as PNG bytes for Gemini vision.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import fitz  # PyMuPDF
 
 from akili import config
+
+logger = logging.getLogger(__name__)
 
 
 def load_pdf_pages(pdf_path: Path) -> list[tuple[int, bytes]]:
@@ -36,7 +39,8 @@ def load_pdf_pages(pdf_path: Path) -> list[tuple[int, bytes]]:
                 pix = page.get_pixmap(dpi=150, alpha=False)
                 png_bytes = pix.tobytes(output="png")
                 pages.append((page_index, png_bytes))
-            except Exception:
+            except (RuntimeError, ValueError, TypeError) as exc:
+                logger.warning("Failed to render page %d: %s", page_index, exc)
                 continue
     finally:
         doc.close()

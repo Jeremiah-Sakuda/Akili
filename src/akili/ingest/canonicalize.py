@@ -6,6 +6,8 @@ Validates and rejects any entry that fails or lacks coordinates.
 
 from __future__ import annotations
 
+import logging
+
 from akili.canonical import Bijection, Grid, Point, Unit
 from akili.canonical.models import BBox, GridCell
 from akili.ingest.extract_schema import (
@@ -14,6 +16,8 @@ from akili.ingest.extract_schema import (
     PageExtraction,
     UnitExtract,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _point(origin: object) -> Point:
@@ -37,14 +41,15 @@ def canonicalize_units(extracts: list[UnitExtract], doc_id: str, page: int) -> l
                     label=e.label,
                     value=e.value,
                     unit_of_measure=e.unit_of_measure,
-                    context=getattr(e, "context", None),
+                    context=e.context,
                     origin=_point(e.origin),
                     doc_id=doc_id,
                     page=page,
                     bbox=_bbox(e.bbox),
                 )
             )
-        except Exception:
+        except (ValueError, TypeError, AttributeError) as exc:
+            logger.debug("Skipping invalid unit extract id=%s: %s", getattr(e, "id", "?"), exc)
             continue
     return out
 
@@ -68,7 +73,8 @@ def canonicalize_bijections(
                     bbox=_bbox(e.bbox),
                 )
             )
-        except Exception:
+        except (ValueError, TypeError, AttributeError) as exc:
+            logger.debug("Skipping invalid bijection extract id=%s: %s", getattr(e, "id", "?"), exc)
             continue
     return out
 
@@ -100,7 +106,8 @@ def canonicalize_grids(extracts: list[GridExtract], doc_id: str, page: int) -> l
                     bbox=_bbox(e.bbox),
                 )
             )
-        except Exception:
+        except (ValueError, TypeError, AttributeError) as exc:
+            logger.debug("Skipping invalid grid extract id=%s: %s", getattr(e, "id", "?"), exc)
             continue
     return out
 

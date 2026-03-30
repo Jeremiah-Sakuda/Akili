@@ -15,26 +15,30 @@ import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from akili import config
 from akili.api.auth import get_current_user
 from akili.canonical import Bijection, Grid, Unit
 from akili.ingest.gemini_format import format_answer, format_refusal
 from akili.ingest.pipeline import ingest_document
 from akili.store import Store
+from akili.learn.pattern_analyzer import PatternAnalyzer
+from akili.store.corrections import CorrectionStore
 from akili.verify import AnswerWithProof, Refuse, verify_and_answer
+from akili.verify.compare import compare_documents, format_comparison_response
 
 logger = logging.getLogger("akili")
 
 
 def _is_debug() -> bool:
     """Return True if full error messages should be included in API responses."""
-    return os.environ.get("AKILI_DEBUG", "").strip().lower() in ("1", "true", "yes")
+    return config.DEBUG
 
 
 _DEFAULT_CORS_ORIGINS = [
@@ -44,12 +48,30 @@ _DEFAULT_CORS_ORIGINS = [
     "http://127.0.0.1:3001",
 ]
 
+_ALLOWED_CORS_METHODS = ["GET", "POST", "DELETE", "OPTIONS"]
+_ALLOWED_CORS_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "Accept",
+    "Origin",
+    "X-Requested-With",
+]
+
 
 def _cors_origins() -> list[str]:
-    raw = os.environ.get("AKILI_CORS_ORIGINS", "").strip()
-    if not raw:
+    origins = config.CORS_ORIGINS
+    if not origins:
         return _DEFAULT_CORS_ORIGINS
-    return [o.strip() for o in raw.split(",") if o.strip()]
+    validated = []
+    for origin in origins:
+        if origin == "*":
+            logger.warning("Wildcard CORS origin '*' is insecure with credentials; skipping")
+            continue
+        if origin.startswith("http://") or origin.startswith("https://"):
+            validated.append(origin)
+        else:
+            logger.warning("Skipping invalid CORS origin (must start with http/https): %s", origin)
+    return validated or _DEFAULT_CORS_ORIGINS
 
 
 app = FastAPI(
@@ -65,21 +87,58 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_ALLOWED_CORS_METHODS,
+    allow_headers=_ALLOWED_CORS_HEADERS,
 )
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+_RATE_LIMIT_ENABLED = config.RATE_LIMIT_ENABLED
+
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+
+    limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=["60/minute"],
+        enabled=_RATE_LIMIT_ENABLED,
+    )
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+except ImportError:
+
+    class _NoOpLimiter:
+        """Stub when slowapi is not installed."""
+        def limit(self, *args: Any, **kwargs: Any) -> Any:
+            def decorator(fn: Any) -> Any:
+                return fn
+            return decorator
+
+    limiter = _NoOpLimiter()  # type: ignore[assignment]
+    if _RATE_LIMIT_ENABLED:
+        logger.warning(
+            "slowapi not installed — rate limiting disabled. "
+            "Install with: pip install slowapi"
+        )
 
 
 @app.on_event("startup")
 def _log_env() -> None:
-    import logging
-
     key = os.environ.get("GOOGLE_API_KEY")
     if key and key.strip():
-        logging.getLogger("akili").info("GOOGLE_API_KEY is set (ingest will call Gemini)")
+        logger.info("GOOGLE_API_KEY is set (ingest will call Gemini)")
     else:
-        logging.getLogger("akili").warning(
+        logger.warning(
             "GOOGLE_API_KEY is missing or empty — ingest will return 500 until set in .env"
+        )
+    from akili.api.auth import is_auth_required
+    if not is_auth_required():
+        logger.warning(
+            "Authentication is DISABLED — all endpoints are public. "
+            "Set AKILI_REQUIRE_AUTH=1 and FIREBASE_PROJECT_ID to enable auth in production."
         )
 
 
@@ -91,7 +150,7 @@ def status() -> JSONResponse:
     """
     key = os.environ.get("GOOGLE_API_KEY")
     key_set = bool(key and key.strip())
-    db_path = os.environ.get("AKILI_DB_PATH", "akili.db")
+    db_path = config.DB_PATH
     db_exists = Path(db_path).parent.exists() if db_path else False
     return JSONResponse(
         content={
@@ -110,19 +169,22 @@ def status() -> JSONResponse:
 
 # Default store (SQLite in cwd); override via dependency if needed
 _store: Store | None = None
+_store_lock = threading.Lock()
 
 
 def get_store() -> Store:
     global _store
     if _store is None:
-        db_path = os.environ.get("AKILI_DB_PATH", "akili.db")
-        _store = Store(Path(db_path))
+        with _store_lock:
+            if _store is None:
+                db_path = config.DB_PATH
+                _store = Store(Path(db_path))
     return _store
 
 
 def _docs_dir() -> Path:
     """Directory where ingested PDFs are stored (next to DB)."""
-    db_path = os.environ.get("AKILI_DB_PATH", "akili.db")
+    db_path = config.DB_PATH
     return Path(db_path).resolve().parent / "docs"
 
 
@@ -136,7 +198,9 @@ class QueryRequest(BaseModel):
     """Request body for POST /query."""
 
     doc_id: str = Field(..., description="Document id from ingest")
-    question: str = Field(..., description="Question to answer from canonical facts")
+    question: str = Field(
+        ..., description="Question to answer from canonical facts", max_length=2000,
+    )
     include_formatted_answer: bool = Field(
         False,
         description="If true, request 1-sentence phrasing from Gemini (best-effort).",
@@ -144,7 +208,9 @@ class QueryRequest(BaseModel):
 
 
 @app.post("/ingest")
+@limiter.limit("10/minute")
 async def ingest(
+    request: Request,
     _user: dict[str, Any] | None = Depends(get_current_user),
     file: UploadFile = File(...),
 ) -> JSONResponse:
@@ -157,7 +223,9 @@ async def ingest(
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
-    max_bytes = int(os.environ.get("AKILI_MAX_UPLOAD_BYTES", "104857600"))  # default 100 MB
+    if not content[:5].startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="File is not a valid PDF (bad magic bytes)")
+    max_bytes = config.MAX_UPLOAD_BYTES  # default 100 MB
     if max_bytes > 0 and len(content) > max_bytes:
         raise HTTPException(
             status_code=413,
@@ -182,7 +250,6 @@ async def ingest(
     except Exception as e:
         err_msg = str(e)
         logger.exception("Ingest failed: %s", err_msg)
-        # Gemini/Vertex rate limit (429) — return 429 so the UI can show a clear message
         if "429" in err_msg or "Resource exhausted" in err_msg or "ResourceExhausted" in err_msg:
             raise HTTPException(
                 status_code=429,
@@ -191,7 +258,9 @@ async def ingest(
                     "See https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429"
                 ),
             ) from e
-        detail = err_msg if _is_debug() else "Internal server error"
+        detail = "Internal server error"
+        if _is_debug():
+            detail = f"Ingest error: {type(e).__name__}"
         raise HTTPException(status_code=500, detail=detail) from e
     finally:
         tmp_path.unlink(missing_ok=True)
@@ -256,7 +325,9 @@ def _run_ingest_with_progress(
 
 
 @app.post("/ingest/stream")
+@limiter.limit("10/minute")
 async def ingest_stream(
+    request: Request,
     _user: dict[str, Any] | None = Depends(get_current_user),
     file: UploadFile = File(...),
 ) -> StreamingResponse:
@@ -270,7 +341,9 @@ async def ingest_stream(
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
-    max_bytes = int(os.environ.get("AKILI_MAX_UPLOAD_BYTES", "104857600"))
+    if not content[:5].startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="File is not a valid PDF (bad magic bytes)")
+    max_bytes = config.MAX_UPLOAD_BYTES
     if max_bytes > 0 and len(content) > max_bytes:
         raise HTTPException(
             status_code=413,
@@ -298,8 +371,8 @@ async def ingest_stream(
             async for chunk in _stream_sse(progress_queue, loop):
                 yield chunk
         finally:
+            thread.join(timeout=30.0)
             tmp_path.unlink(missing_ok=True)
-            thread.join(timeout=1.0)
 
     async def _stream_sse(q: queue.Queue, loop: asyncio.AbstractEventLoop) -> Any:
         while True:
@@ -325,7 +398,7 @@ async def ingest_stream(
 
 # Thread pool for sync Gemini format call (short timeout; never blocks verified answer)
 _FORMAT_EXECUTOR: ThreadPoolExecutor | None = None
-_FORMAT_TIMEOUT = float(os.environ.get("AKILI_FORMAT_TIMEOUT_SEC", "2.5"))
+_FORMAT_TIMEOUT = config.FORMAT_TIMEOUT
 
 
 def _get_format_executor() -> ThreadPoolExecutor:
@@ -349,7 +422,9 @@ def _proof_to_coordinates(proof: list[Any]) -> str:
 
 
 @app.post("/query")
+@limiter.limit("30/minute")
 async def query(
+    request: Request,
     req: QueryRequest,
     _user: dict[str, Any] | None = Depends(get_current_user),
 ) -> JSONResponse:
@@ -364,28 +439,33 @@ async def query(
     grids = store.get_grids_by_doc(req.doc_id)
     result = verify_and_answer(req.question, units, bijections, grids)
     if isinstance(result, Refuse):
-        # Optional: phrase refusal reason in natural language via Gemini
-        loop = asyncio.get_event_loop()
-        try:
-            formatted_reason = await asyncio.wait_for(
-                loop.run_in_executor(
-                    _get_format_executor(),
-                    lambda: format_refusal(
-                        req.question,
-                        len(units),
-                        len(bijections),
-                        len(grids),
+        content: dict[str, Any] = result.model_dump()
+        content["formatting_source"] = "verified_raw"
+        if req.include_formatted_answer:
+            loop = asyncio.get_event_loop()
+            try:
+                formatted_reason = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        _get_format_executor(),
+                        lambda: format_refusal(
+                            req.question,
+                            len(units),
+                            len(bijections),
+                            len(grids),
+                        ),
                     ),
-                ),
-                timeout=_FORMAT_TIMEOUT,
-            )
-            if formatted_reason and formatted_reason.strip():
-                result = Refuse(reason=formatted_reason.strip())
-        except (asyncio.TimeoutError, Exception):
-            pass
-        return JSONResponse(content=result.model_dump())
-    # AnswerWithProof: always return answer + proof; optionally add formatted_answer
+                    timeout=_FORMAT_TIMEOUT,
+                )
+                if formatted_reason and formatted_reason.strip():
+                    content["reason"] = formatted_reason.strip()
+                    content["formatting_source"] = "gemini_rephrase"
+            except (asyncio.TimeoutError, OSError, RuntimeError, ValueError) as exc:
+                logger.debug("Refusal formatting failed (non-critical): %s", exc)
+        return JSONResponse(content=content)
     content: dict[str, Any] = result.model_dump()
+    content["formatting_source"] = "verified_raw"
+    if result.confidence:
+        content["confidence_tier"] = result.confidence.tier
     if req.include_formatted_answer and isinstance(result, AnswerWithProof):
         coordinates = _proof_to_coordinates(result.proof)
         loop = asyncio.get_event_loop()
@@ -398,7 +478,10 @@ async def query(
                 timeout=_FORMAT_TIMEOUT,
             )
             content["formatted_answer"] = formatted
-        except (asyncio.TimeoutError, Exception):
+            if formatted:
+                content["formatting_source"] = "gemini_rephrase"
+        except (asyncio.TimeoutError, OSError, RuntimeError, ValueError) as exc:
+            logger.debug("Answer formatting failed (non-critical): %s", exc)
             content["formatted_answer"] = None
     return JSONResponse(content=content)
 
@@ -422,9 +505,13 @@ async def delete_document(
     _validate_doc_id(doc_id)
     store = get_store()
     store.delete_document(doc_id)
-    dest = _docs_dir() / f"{doc_id}.pdf"
-    if dest.is_file():
-        dest.unlink()
+    # Delete file only after DB transaction succeeds to avoid inconsistent state
+    try:
+        dest = _docs_dir() / f"{doc_id}.pdf"
+        if dest.is_file():
+            dest.unlink()
+    except OSError:
+        logger.warning("Failed to delete PDF file for doc_id=%s", doc_id)
     return JSONResponse(content={"doc_id": doc_id, "deleted": True})
 
 
@@ -464,7 +551,7 @@ async def get_canonical(
             "label": getattr(u, "label", None),
             "value": getattr(u, "value", None),
             "unit_of_measure": getattr(u, "unit_of_measure", None),
-            "context": getattr(u, "context", None),
+            "context": u.context,
             "origin": {
                 "x": getattr(getattr(u, "origin", None), "x", 0),
                 "y": getattr(getattr(u, "origin", None), "y", 0),
@@ -508,7 +595,191 @@ async def get_canonical(
     )
 
 
+class CompareRequest(BaseModel):
+    doc_ids: list[str] = Field(..., description="2+ document IDs to compare")
+    question: str = Field(..., description="What to compare (e.g. 'Compare max voltage')")
+
+
+@app.post("/compare")
+async def compare_docs(
+    req: CompareRequest,
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
+    """Compare parameters across multiple documents."""
+    if len(req.doc_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 doc_ids required")
+    store = get_store()
+    docs = store.list_documents()
+    doc_name_map = {d["doc_id"]: d.get("filename", d["doc_id"]) for d in docs}
+
+    doc_units: dict[str, tuple[str, list]] = {}
+    for did in req.doc_ids:
+        _validate_doc_id(did)
+        units = store.get_units_by_doc(did)
+        name = doc_name_map.get(did, did)
+        doc_units[did] = (name, units)
+
+    results = compare_documents(req.question, doc_units)
+    return JSONResponse(content=format_comparison_response(results))
+
+
 @app.get("/health")
 async def health() -> dict:
     """Health check."""
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# B5: Human-in-the-Loop Review / Corrections
+# ---------------------------------------------------------------------------
+
+_correction_store: CorrectionStore | None = None
+_correction_store_lock = threading.Lock()
+
+
+def get_correction_store() -> CorrectionStore:
+    global _correction_store
+    if _correction_store is None:
+        with _correction_store_lock:
+            if _correction_store is None:
+                db_path = config.DB_PATH
+                _correction_store = CorrectionStore(db_path=Path(db_path))
+    return _correction_store
+
+
+CanonicalType = Literal["unit", "bijection", "grid", "range", "conditional_unit"]
+CorrectionAction = Literal["confirm", "correct"]
+
+
+class CorrectionRequest(BaseModel):
+    doc_id: str
+    canonical_id: str
+    canonical_type: CanonicalType
+    action: CorrectionAction
+    original_value: str = Field(..., max_length=10000)
+    corrected_value: str | None = Field(None, max_length=10000)
+    corrected_by: str | None = Field(None, max_length=500)
+    notes: str | None = Field(None, max_length=5000)
+
+
+@app.post("/corrections")
+async def submit_correction(
+    req: CorrectionRequest,
+    user: dict = Depends(get_current_user),
+) -> JSONResponse:
+    """Submit a human correction or confirmation for a canonical fact."""
+    if req.action not in ("confirm", "correct"):
+        raise HTTPException(status_code=400, detail="action must be 'confirm' or 'correct'")
+    if req.action == "correct" and not req.corrected_value:
+        raise HTTPException(status_code=400, detail="corrected_value required for 'correct' action")
+
+    cs = get_correction_store()
+    correction_id = cs.add_correction(
+        doc_id=req.doc_id,
+        canonical_id=req.canonical_id,
+        canonical_type=req.canonical_type,
+        action=req.action,
+        original_value=req.original_value,
+        corrected_value=req.corrected_value,
+        corrected_by=req.corrected_by or user.get("uid"),
+        notes=req.notes,
+    )
+    return JSONResponse(content={"correction_id": correction_id, "status": "recorded"})
+
+
+@app.get("/corrections/{doc_id}")
+async def get_corrections(
+    doc_id: str,
+    user: dict = Depends(get_current_user),
+) -> JSONResponse:
+    """Get all corrections for a document."""
+    cs = get_correction_store()
+    corrections = cs.get_corrections_by_doc(doc_id)
+    return JSONResponse(content={
+        "doc_id": doc_id,
+        "corrections": [
+            {
+                "id": c.id,
+                "canonical_id": c.canonical_id,
+                "canonical_type": c.canonical_type,
+                "action": c.action,
+                "original_value": c.original_value,
+                "corrected_value": c.corrected_value,
+                "corrected_by": c.corrected_by,
+                "notes": c.notes,
+                "created_at": c.created_at,
+            }
+            for c in corrections
+        ],
+    })
+
+
+@app.get("/corrections/stats/{doc_id}")
+async def correction_stats(
+    doc_id: str,
+    user: dict = Depends(get_current_user),
+) -> JSONResponse:
+    """Get correction statistics for a document."""
+    cs = get_correction_store()
+    stats = cs.get_correction_stats(doc_id)
+    return JSONResponse(content=stats)
+
+
+# ---------------------------------------------------------------------------
+# C4: Correction Pattern Analysis & Learning
+# ---------------------------------------------------------------------------
+
+
+@app.get("/patterns")
+async def get_patterns(
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
+    """Analyze correction patterns across all documents."""
+    analyzer = PatternAnalyzer(get_correction_store())
+    stats = analyzer.get_pattern_stats()
+    return JSONResponse(content=stats)
+
+
+@app.get("/patterns/{doc_id}")
+async def get_doc_patterns(
+    doc_id: str,
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
+    """Analyze correction patterns for a specific document."""
+    _validate_doc_id(doc_id)
+    analyzer = PatternAnalyzer(get_correction_store())
+    patterns = analyzer.analyze_by_doc(doc_id)
+    return JSONResponse(content={
+        "doc_id": doc_id,
+        "patterns": [
+            {
+                "id": p.pattern_id,
+                "description": p.description,
+                "category": p.category,
+                "occurrences": p.occurrences,
+                "auto_correctable": p.auto_correctable,
+                "confidence": p.confidence,
+            }
+            for p in patterns
+        ],
+    })
+
+
+class SuggestCorrectionRequest(BaseModel):
+    canonical_type: CanonicalType
+    original_value: str = Field(..., max_length=10000)
+
+
+@app.post("/patterns/suggest")
+async def suggest_correction(
+    req: SuggestCorrectionRequest,
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
+    """Suggest an auto-correction based on learned patterns."""
+    analyzer = PatternAnalyzer(get_correction_store())
+    suggestion = analyzer.suggest_correction(req.canonical_type, req.original_value)
+    return JSONResponse(content={
+        "original_value": req.original_value,
+        "suggested_correction": suggestion,
+        "has_suggestion": suggestion is not None,
+    })

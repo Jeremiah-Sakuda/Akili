@@ -8,18 +8,23 @@ require Authorization: Bearer <id_token> and verify the token with Firebase Admi
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Annotated
 
+from akili import config
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+logger = logging.getLogger(__name__)
 
 _http_bearer = HTTPBearer(auto_error=False)
 
 
 def _init_firebase() -> bool:
     """Initialize Firebase Admin if auth is required and project is set. Returns True if active."""
-    if os.environ.get("AKILI_REQUIRE_AUTH", "").strip() not in ("1", "true", "yes"):
+    if not config.REQUIRE_AUTH:
         return False
     project_id = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("VITE_FIREBASE_PROJECT_ID")
     if not project_id or not project_id.strip():
@@ -36,7 +41,8 @@ def _init_firebase() -> bool:
             cred = credentials.ApplicationDefault()
             firebase_admin.initialize_app(cred, options={"projectId": project_id.strip()})
         return True
-    except Exception:
+    except Exception as exc:
+        logger.warning("Firebase initialization failed: %s", exc)
         return False
 
 
