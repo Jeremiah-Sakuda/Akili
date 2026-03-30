@@ -25,7 +25,7 @@ const Header: React.FC = () => {
               <path d="M2 12L12 17L22 12" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
             </svg>
           </div>
-          <h1 className="text-gray-900 dark:text-gray-100 text-base font-semibold tracking-tight">Akili</h1>
+          <h1 className="text-gray-900 dark:text-gray-100 text-base font-heading tracking-tight">Akili</h1>
         </div>
         <div className="h-4 w-px bg-gray-300 dark:bg-[#30363d]" />
         <nav className="flex items-center text-xs hidden md:flex">

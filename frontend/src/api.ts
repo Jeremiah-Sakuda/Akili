@@ -74,6 +74,18 @@ export interface ProofPoint {
   source_type?: string | null;
 }
 
+/** Indicates whether the response text is the raw verified output or was rephrased by an LLM */
+export type FormattingSource = 'verified_raw' | 'gemini_rephrase';
+
+export type ConfidenceTier = 'verified' | 'review' | 'refused';
+
+export interface ConfidenceScore {
+  extraction_agreement: number;
+  canonical_validation: number;
+  verification_strength: number;
+  overall: number;
+}
+
 export interface AnswerWithProof {
   status: 'answer';
   answer: string;
@@ -82,11 +94,15 @@ export interface AnswerWithProof {
   source_type?: string | null;
   /** When requested (include_formatted_answer), 1-sentence natural-language phrasing from Gemini; null on failure or timeout. */
   formatted_answer?: string | null;
+  formatting_source?: FormattingSource;
+  confidence?: ConfidenceScore | null;
+  confidence_tier?: ConfidenceTier;
 }
 
 export interface Refuse {
   status: 'refuse';
   reason: string;
+  formatting_source?: FormattingSource;
 }
 
 export type QueryResponse = AnswerWithProof | Refuse;
@@ -237,7 +253,7 @@ export async function query(
     body: JSON.stringify({
       doc_id: docId,
       question,
-      include_formatted_answer: options?.includeFormattedAnswer ?? true,
+      include_formatted_answer: options?.includeFormattedAnswer ?? false,
     }),
   });
   if (!res.ok) {
@@ -312,4 +328,170 @@ export async function getDocumentFile(docId: string): Promise<string> {
   }
   const blob = await res.blob();
   return URL.createObjectURL(blob);
+}
+
+// ---------------------------------------------------------------------------
+// Corrections / Human-in-the-Loop Review
+// ---------------------------------------------------------------------------
+
+export interface CorrectionRecord {
+  id: number;
+  canonical_id: string;
+  canonical_type: string;
+  action: 'confirm' | 'correct';
+  original_value: string;
+  corrected_value: string | null;
+  corrected_by: string | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+export interface CorrectionStats {
+  total: number;
+  confirmations: number;
+  corrections: number;
+  correction_rate: number;
+}
+
+export interface SubmitCorrectionRequest {
+  doc_id: string;
+  canonical_id: string;
+  canonical_type: string;
+  action: 'confirm' | 'correct';
+  original_value: string;
+  corrected_value?: string;
+  notes?: string;
+}
+
+export async function submitCorrection(req: SubmitCorrectionRequest): Promise<{ correction_id: number }> {
+  const headers = await authHeaders({ 'Content-Type': 'application/json' });
+  const res = await fetch(`${API_BASE}/corrections`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    await handle401(res);
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? 'Failed to submit correction');
+  }
+  return res.json();
+}
+
+export async function getCorrections(docId: string): Promise<CorrectionRecord[]> {
+  const res = await fetch(`${API_BASE}/corrections/${encodeURIComponent(docId)}`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Failed to fetch corrections');
+  }
+  const data = await res.json();
+  return data.corrections ?? [];
+}
+
+export async function getCorrectionStats(docId: string): Promise<CorrectionStats> {
+  const res = await fetch(`${API_BASE}/corrections/stats/${encodeURIComponent(docId)}`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Failed to fetch correction stats');
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// C3: Cross-Document Comparison
+// ---------------------------------------------------------------------------
+
+export interface ComparisonRow {
+  doc_id: string;
+  doc_name: string;
+  value: number | string | null;
+  unit_of_measure: string | null;
+  source_unit_id: string | null;
+  page: number | null;
+}
+
+export interface ComparisonParameter {
+  parameter: string;
+  direction: string;
+  best_doc_id: string | null;
+  best_value: number | string | null;
+  summary: string;
+  rows: ComparisonRow[];
+}
+
+export interface ComparisonResponse {
+  comparisons: ComparisonParameter[];
+}
+
+export async function compareDocuments(
+  docIds: string[],
+  question: string,
+): Promise<ComparisonResponse> {
+  const headers = await authHeaders({ 'Content-Type': 'application/json' });
+  const res = await fetch(`${API_BASE}/compare`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ doc_ids: docIds, question }),
+  });
+  if (!res.ok) {
+    await handle401(res);
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? 'Failed to compare documents');
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// C4: Correction Patterns / Learning
+// ---------------------------------------------------------------------------
+
+export interface PatternStats {
+  total_patterns: number;
+  auto_correctable: number;
+  reliable_patterns: number;
+  categories: Record<string, number>;
+  top_patterns: Array<{
+    id: string;
+    description: string;
+    occurrences: number;
+    auto_correctable: boolean;
+  }>;
+}
+
+export async function getPatternStats(): Promise<PatternStats> {
+  const res = await fetch(`${API_BASE}/patterns`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Failed to fetch patterns');
+  }
+  return res.json();
+}
+
+export interface CorrectionSuggestion {
+  original_value: string;
+  suggested_correction: string | null;
+  has_suggestion: boolean;
+}
+
+export async function suggestCorrection(
+  canonicalType: string,
+  originalValue: string,
+): Promise<CorrectionSuggestion> {
+  const headers = await authHeaders({ 'Content-Type': 'application/json' });
+  const res = await fetch(`${API_BASE}/patterns/suggest`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ canonical_type: canonicalType, original_value: originalValue }),
+  });
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Failed to get suggestion');
+  }
+  return res.json();
 }

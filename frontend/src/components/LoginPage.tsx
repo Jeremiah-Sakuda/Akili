@@ -27,7 +27,7 @@ const LoginPage: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-slate-100 font-sans">
         <div className="max-w-md w-full border border-gray-200 dark:border-gray-600 p-6 text-center rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-          <h1 className="font-semibold mb-2 text-2xl">Akili</h1>
+          <h1 className="font-heading mb-2 text-2xl">Akili</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Firebase is not configured. Set VITE_FIREBASE_* in .env to enable sign-in.
           </p>
@@ -38,7 +38,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-slate-50 dark:bg-gray-900 text-slate-900 dark:text-slate-100 font-sans">
-      <div className="max-w-sm w-full border border-slate-200 dark:border-gray-600 p-8 flex flex-col items-center rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+      <div className="max-w-sm w-full border border-slate-200 dark:border-gray-600 p-8 flex flex-col items-center rounded-lg bg-white dark:bg-gray-800 shadow-sm reveal visible">
         {/* Logo + title — matches Header branding */}
         <div className="flex items-center gap-3 mb-2">
           <div className="size-10 rounded-lg flex items-center justify-center text-white bg-primary">
@@ -66,7 +66,7 @@ const LoginPage: React.FC = () => {
               />
             </svg>
           </div>
-          <h1 className="font-semibold tracking-tight text-2xl">Akili</h1>
+          <h1 className="font-heading tracking-tight text-2xl">Akili</h1>
         </div>
         <p className="text-center mb-6 text-sm text-slate-500 dark:text-slate-400">
           Verification workspace. Sign in to continue.

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AppState, DocumentFile } from '../types';
 import type { CanonicalResponse } from '../api';
 import { getCanonical } from '../api';
+import { useReveal } from '../hooks/useReveal';
 
 type CanonicalTab = 'units' | 'bijections' | 'grids';
 
@@ -13,6 +14,18 @@ interface SidebarLeftProps {
   loading?: boolean;
   onSelectFile: (docId: string) => void;
   onDeleteDocument?: (docId: string) => void;
+}
+
+function SkeletonRow() {
+  return (
+    <div className="flex items-start gap-2.5 p-2.5">
+      <div className="skeleton w-5 h-5 shrink-0 rounded" />
+      <div className="flex-1 space-y-1.5">
+        <div className="skeleton h-3.5 w-3/4 rounded" />
+        <div className="skeleton h-2.5 w-1/2 rounded" />
+      </div>
+    </div>
+  );
 }
 
 const SidebarLeft: React.FC<SidebarLeftProps> = ({
@@ -27,6 +40,7 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
   const [canonicalTab, setCanonicalTab] = useState<CanonicalTab>('units');
   const [canonical, setCanonical] = useState<CanonicalResponse | null>(null);
   const [canonicalLoading, setCanonicalLoading] = useState(false);
+  const { revealClass } = useReveal('reveal-left', 80);
 
   const fetchCanonical = useCallback(async (docId: string) => {
     setCanonicalLoading(true);
@@ -54,11 +68,11 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
   };
 
   return (
-    <aside className="w-[280px] bg-white dark:bg-[#0d1117] border-r border-gray-200 dark:border-[#30363d] flex flex-col z-20 shrink-0 h-full">
+    <aside className={`sidebar-left w-[280px] bg-white dark:bg-[#0d1117] border-r border-gray-200 dark:border-[#30363d] flex flex-col z-20 shrink-0 h-full ${revealClass}`}>
       <div className="p-3 border-b border-gray-200 dark:border-[#30363d]">
         <h2 className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Documents</h2>
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Project Files</span>
+          <span className="font-heading text-sm text-gray-900 dark:text-gray-100">Project Files</span>
           <button
             type="button"
             onClick={() => onStateChange(AppState.UPLOAD)}
@@ -69,16 +83,20 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0 stagger">
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-gray-500 dark:text-gray-400 text-sm">Loading…</div>
+          <>
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </>
         ) : files.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm reveal visible">
             <p>No documents yet.</p>
             <p className="mt-1">Upload a PDF to get started.</p>
           </div>
         ) : (
-          files.map((file) => (
+          files.map((file, i) => (
             <div
               key={file.id}
               role="button"
@@ -86,11 +104,12 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
               onClick={() => handleFileClick(file)}
               onKeyDown={(e) => e.key === 'Enter' && handleFileClick(file)}
               className={`
-                group flex items-start gap-2.5 p-2.5 cursor-pointer transition-colors border
+                reveal visible group flex items-start gap-2.5 p-2.5 cursor-pointer transition-all border
                 ${file.active
                   ? 'bg-primary/5 dark:bg-primary/10 border-l-2 border-primary relative'
                   : 'hover:bg-gray-50 dark:hover:bg-[#161b22] border-transparent hover:border-gray-200 dark:hover:border-[#30363d]'}
               `}
+              style={{ transitionDelay: `${i * 0.04}s` }}
             >
               <span
                 className={`material-symbols-outlined mt-0.5 shrink-0 text-[18px] ${file.active ? 'text-primary' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300'}`}
@@ -140,9 +159,16 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
               </button>
             ))}
           </div>
-          <div className="flex-1 overflow-y-auto p-2 text-xs font-mono min-h-0">
+          <div className="flex-1 overflow-y-auto p-2 text-xs font-mono min-h-0 stagger">
             {canonicalLoading ? (
-              <div className="py-4 text-center text-gray-500 dark:text-gray-400">Loading…</div>
+              <div className="space-y-1.5">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="p-2 space-y-1">
+                    <div className="skeleton h-3 w-full rounded" />
+                    <div className="skeleton h-2.5 w-2/3 rounded" />
+                  </div>
+                ))}
+              </div>
             ) : canonical ? (
               canonicalTab === 'units' ? (
                 <ul className="space-y-1.5">
@@ -150,7 +176,7 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
                     <li className="text-gray-500 dark:text-gray-400">No units</li>
                   ) : (
                     canonical.units.map((u, i) => (
-                      <li key={`unit-${i}`} className="p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]">
+                      <li key={`unit-${i}`} className="reveal visible p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]" style={{ transitionDelay: `${i * 0.03}s` }}>
                         <span className="text-gray-600 dark:text-gray-400">{u.id}</span> {u.label ?? ''} {String(u.value)}{u.unit_of_measure ? ` ${u.unit_of_measure}` : ''}
                         <br />
                         <span className="text-gray-500 dark:text-gray-500">p{u.page} (x:{u.origin.x.toFixed(2)}, y:{u.origin.y.toFixed(2)})</span>
@@ -164,7 +190,7 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
                     <li className="text-gray-500 dark:text-gray-400">No bijections</li>
                   ) : (
                     canonical.bijections.map((b, i) => (
-                      <li key={`bijection-${i}`} className="p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]">
+                      <li key={`bijection-${i}`} className="reveal visible p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]" style={{ transitionDelay: `${i * 0.03}s` }}>
                         <span className="text-gray-600 dark:text-gray-400">{b.id}</span> {Object.entries(b.mapping).slice(0, 3).map(([k, v]) => `${k}→${v}`).join(', ')}
                         {Object.keys(b.mapping).length > 3 ? '…' : ''}
                         <br />
@@ -179,7 +205,7 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
                     <li className="text-gray-500 dark:text-gray-400">No grids</li>
                   ) : (
                     canonical.grids.map((g, i) => (
-                      <li key={`grid-${i}`} className="p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]">
+                      <li key={`grid-${i}`} className="reveal visible p-2 bg-gray-50 dark:bg-[#161b22] border border-gray-200 dark:border-[#30363d]" style={{ transitionDelay: `${i * 0.03}s` }}>
                         <span className="text-gray-600 dark:text-gray-400">{g.id}</span> {g.rows}×{g.cols} ({g.cells_count} cells)
                         <br />
                         <span className="text-gray-500 dark:text-gray-500">p{g.page} (x:{g.origin.x.toFixed(2)}, y:{g.origin.y.toFixed(2)})</span>

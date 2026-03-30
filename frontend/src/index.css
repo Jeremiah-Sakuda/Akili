@@ -8,7 +8,7 @@
   --color-background-dark: #0d1117;
   --color-border: #d1d5db;
   --color-border-dark: #30363d;
-  --font-display: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", monospace;
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -16,10 +16,20 @@
 
 :root {
   font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  font-size: 14px;
+  font-size: clamp(13px, 1.1vw, 15px);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --heading-size: clamp(1rem, 2vw, 1.5rem);
+  --subheading-size: clamp(0.85rem, 1.5vw, 1.1rem);
+  --body-size: clamp(0.8rem, 1.2vw, 0.9rem);
+  --mono-size: clamp(0.7rem, 1vw, 0.8125rem);
+  --small-size: clamp(0.6rem, 0.9vw, 0.75rem);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-normal: 0.5s;
+  --duration-fast: 0.3s;
 }
 
 body {
@@ -28,20 +38,23 @@ body {
   color: #1f2937;
 }
 
-/* Dark mode: applied when html has .dark (set by ThemeContext) */
+/* =========================================
+   DARK MODE
+   ========================================= */
 .dark body {
   background: var(--color-background-dark);
   color: #e5e7eb;
 }
 
-/* Center panel: grid on main (placeholder for doc view) */
 .dark main {
   background-color: #0d1117 !important;
   background-image: linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px) !important;
   background-size: 20px 20px !important;
 }
 
-/* Very dark mode: every section gets darker backgrounds */
+/* =========================================
+   VERY-DARK MODE — refined gradient mesh
+   ========================================= */
 [data-theme="very-dark"] body,
 .dark.very-dark body {
   background: #010409 !important;
@@ -68,24 +81,23 @@ body {
 [data-theme="very-dark"] main,
 .dark.very-dark main {
   background-color: #010409 !important;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px) !important;
-  background-size: 20px 20px !important;
+  background-image:
+    radial-gradient(ellipse at 20% 80%, rgba(0, 102, 204, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(13, 123, 76, 0.03) 0%, transparent 50%) !important;
+  background-size: 100% 100% !important;
 }
 
-/* Toolbar under main */
 [data-theme="very-dark"] main > div.h-10,
 .dark.very-dark main > div.h-10 {
   background: #010409 !important;
   border-color: #21262d;
 }
 
-/* Document viewer container */
 [data-theme="very-dark"] main .flex-1.overflow-y-auto,
 .dark.very-dark main .flex-1.overflow-y-auto {
   background: #010409 !important;
 }
 
-/* Right sidebar: header bar, form areas, result cards, footer */
 [data-theme="very-dark"] aside > div.p-4,
 [data-theme="very-dark"] aside > div.p-3,
 .dark.very-dark aside > div.p-4,
@@ -94,13 +106,11 @@ body {
   border-color: #21262d;
 }
 
-/* Left sidebar: document list header, canonical tabs, footer */
 [data-theme="very-dark"] aside > div.p-3,
 .dark.very-dark aside > div.p-3 {
   background: #010409 !important;
 }
 
-/* File uploader drop zone and status cards */
 [data-theme="very-dark"] .group.relative.w-full.border-2,
 .dark.very-dark .group.relative.w-full.border-2 {
   background: #0d1117 !important;
@@ -113,14 +123,12 @@ body {
   border-color: #21262d;
 }
 
-/* Dropdowns and popovers (header menu, theme menu) */
 [data-theme="very-dark"] header [class*="absolute"][class*="py-1"],
 .dark.very-dark header [class*="absolute"][class*="py-1"] {
   background: #0d1117 !important;
   border-color: #21262d;
 }
 
-/* Sidebar inner sections: any div with dark-panel-style background */
 [data-theme="very-dark"] aside div.flex.gap-1,
 [data-theme="very-dark"] aside div.flex-1.overflow-y-auto,
 .dark.very-dark aside div.flex.gap-1,
@@ -128,20 +136,17 @@ body {
   background: #010409 !important;
 }
 
-/* Sidebar list item cards */
 [data-theme="very-dark"] aside li[class*="p-2"],
 .dark.very-dark aside li[class*="p-2"] {
   background: #0d1117 !important;
   border-color: #21262d;
 }
 
-/* Auth loading / App loading screen */
 [data-theme="very-dark"] .min-h-screen.flex.items-center.justify-center,
 .dark.very-dark .min-h-screen.flex.items-center.justify-center {
   background: #010409 !important;
 }
 
-/* Scrollbars for very-dark */
 .dark.very-dark ::-webkit-scrollbar-track,
 [data-theme="very-dark"] ::-webkit-scrollbar-track {
   background: #0d1117;
@@ -156,3 +161,212 @@ body {
   background: #30363d;
 }
 
+/* =========================================
+   DISPLAY FONT FOR HEADINGS
+   ========================================= */
+.font-heading {
+  font-family: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* =========================================
+   ENTRANCE ANIMATIONS (reveal pattern)
+   ========================================= */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity var(--duration-normal) var(--ease-out-expo),
+    transform var(--duration-normal) var(--ease-out-expo);
+}.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}.reveal-scale {
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity var(--duration-normal) var(--ease-out-expo),
+    transform var(--duration-normal) var(--ease-out-expo);
+}
+
+.reveal-scale.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.reveal-left {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition:
+    opacity var(--duration-normal) var(--ease-out-expo),
+    transform var(--duration-normal) var(--ease-out-expo);
+}
+
+.reveal-left.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Stagger children */
+.stagger > .reveal:nth-child(1),
+.stagger > .reveal-scale:nth-child(1),
+.stagger > .reveal-left:nth-child(1) { transition-delay: 0.04s; }
+.stagger > .reveal:nth-child(2),
+.stagger > .reveal-scale:nth-child(2),
+.stagger > .reveal-left:nth-child(2) { transition-delay: 0.08s; }
+.stagger > .reveal:nth-child(3),
+.stagger > .reveal-scale:nth-child(3),
+.stagger > .reveal-left:nth-child(3) { transition-delay: 0.12s; }
+.stagger > .reveal:nth-child(4),
+.stagger > .reveal-scale:nth-child(4),
+.stagger > .reveal-left:nth-child(4) { transition-delay: 0.16s; }
+.stagger > .reveal:nth-child(5),
+.stagger > .reveal-scale:nth-child(5),
+.stagger > .reveal-left:nth-child(5) { transition-delay: 0.20s; }
+.stagger > .reveal:nth-child(6),
+.stagger > .reveal-scale:nth-child(6),
+.stagger > .reveal-left:nth-child(6) { transition-delay: 0.24s; }
+.stagger > .reveal:nth-child(7),
+.stagger > .reveal-scale:nth-child(7),
+.stagger > .reveal-left:nth-child(7) { transition-delay: 0.28s; }
+.stagger > .reveal:nth-child(8),
+.stagger > .reveal-scale:nth-child(8),
+.stagger > .reveal-left:nth-child(8) { transition-delay: 0.32s; }
+
+/* =========================================
+   CONFIDENCE BADGE ANIMATIONS
+   ========================================= */
+.badge-verified {
+  box-shadow: 0 0 10px rgba(13, 123, 76, 0.25);
+  animation: pulse-glow-green 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-glow-green {
+  from { box-shadow: 0 0 6px rgba(13, 123, 76, 0.15); }
+  to   { box-shadow: 0 0 14px rgba(13, 123, 76, 0.35); }
+}.badge-review {
+  animation: pulse-glow-yellow 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-glow-yellow {
+  from { box-shadow: 0 0 6px rgba(180, 83, 0, 0.1); }
+  to   { box-shadow: 0 0 12px rgba(180, 83, 0, 0.25); }
+}
+
+.badge-refused {
+  animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+
+/* =========================================
+   LOADING SKELETONS
+   ========================================= */
+.skeleton {
+  background: linear-gradient(90deg,
+    #e5e7eb 25%,
+    #f3f4f6 50%,
+    #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg,
+    #21262d 25%,
+    #30363d 50%,
+    #21262d 75%);
+  background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Typing indicator dots */
+.typing-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* =========================================
+   RESPONSIVE BREAKPOINTS
+   ========================================= */
+@media (max-width: 1280px) {
+  .sidebar-left { width: clamp(220px, 22vw, 280px) !important; }
+  .sidebar-right { width: clamp(300px, 30vw, 400px) !important; }
+}
+
+@media (max-width: 1024px) {
+  .sidebar-left { width: 240px !important; }
+  .sidebar-right { width: 320px !important; }
+}
+
+@media (max-width: 768px) {
+  .layout-desktop { flex-direction: column !important; }
+  .sidebar-left,
+  .sidebar-right {
+    width: 100% !important;
+    max-height: 40vh;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .dark .sidebar-left,
+  .dark .sidebar-right {
+    border-color: #30363d;
+  }
+}
+
+/* =========================================
+   REDUCED MOTION
+   ========================================= */
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal-scale,
+  .reveal-left {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .badge-verified,
+  .badge-review {
+    animation: none;
+  }
+  .badge-refused {
+    animation: none;
+  }
+  .skeleton {
+    animation: none;
+  }
+  .typing-dots span {
+    animation: none;
+    opacity: 0.6;
+  }
+}

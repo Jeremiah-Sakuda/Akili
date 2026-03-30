@@ -153,8 +153,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
             Back
           </button>
         )}
-        <div className="mb-8 text-center">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 tracking-tight">Upload Technical Document</h2>
+        <div className="mb-8 text-center reveal visible">
+          <h2 className="text-xl font-heading text-gray-900 dark:text-gray-100 tracking-tight">Upload Technical Document</h2>
           <p className="text-gray-600 dark:text-gray-400 mt-2 text-sm">Ingest PDFs for verification analysis</p>
         </div>
 
@@ -303,23 +303,23 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
           </div>
         )}
 
-        <div className="mt-8 grid grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-[#161b22] p-4 border border-gray-200 dark:border-[#30363d] flex items-start gap-3">
-            <div className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+        <div className="mt-8 grid grid-cols-2 gap-4 stagger">
+          <div className="reveal visible bg-white dark:bg-[#161b22] p-4 border border-gray-200 dark:border-[#30363d] flex items-start gap-3 rounded-lg transition-all hover:shadow-sm">
+            <div className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded">
               <span className="material-symbols-outlined text-[18px]">check_circle</span>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">System Status</p>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Ready for Ingest</p>
+              <p className="text-sm font-heading text-gray-900 dark:text-gray-100">Ready for Ingest</p>
             </div>
           </div>
-          <div className="bg-white dark:bg-[#161b22] p-4 border border-gray-200 dark:border-[#30363d] flex items-start gap-3">
-            <div className="p-1.5 bg-primary/10 dark:bg-primary/20 text-primary">
+          <div className="reveal visible bg-white dark:bg-[#161b22] p-4 border border-gray-200 dark:border-[#30363d] flex items-start gap-3 rounded-lg transition-all hover:shadow-sm" style={{ transitionDelay: '0.08s' }}>
+            <div className="p-1.5 bg-primary/10 dark:bg-primary/20 text-primary rounded">
               <span className="material-symbols-outlined text-[18px]">api</span>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">API</p>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Akili Backend</p>
+              <p className="text-sm font-heading text-gray-900 dark:text-gray-100">Akili Backend</p>
             </div>
           </div>
         </div>
