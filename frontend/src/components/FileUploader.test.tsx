@@ -11,8 +11,8 @@ describe('FileUploader', () => {
   it('renders upload prompt in idle state', () => {
     render(<FileUploader onSuccess={vi.fn()} />);
     expect(screen.getByText('Upload Technical Document')).toBeInTheDocument();
-    expect(screen.getByText(/Drag & drop a PDF here/)).toBeInTheDocument();
-    expect(screen.getByText('SUPPORTED: PDF')).toBeInTheDocument();
+    expect(screen.getByText(/Drag & drop PDFs here/)).toBeInTheDocument();
+    expect(screen.getByText('SUPPORTED: PDF (single or multiple)')).toBeInTheDocument();
   });
 
   it('shows error for non-PDF file via drag-and-drop', () => {
@@ -22,7 +22,7 @@ describe('FileUploader', () => {
     const file = new File(['hello'], 'test.txt', { type: 'text/plain' });
     fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
 
-    expect(screen.getByText('Please upload a PDF file.')).toBeInTheDocument();
+    expect(screen.getByText(/is not a PDF/)).toBeInTheDocument();
   });
 
   it('renders back button when onBack is provided', async () => {

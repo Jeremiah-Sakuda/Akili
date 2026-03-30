@@ -4,12 +4,13 @@ import SidebarLeft from './components/SidebarLeft';
 import SidebarRight from './components/SidebarRight';
 import DocumentViewer from './components/DocumentViewer';
 import FileUploader from './components/FileUploader';
+import IngestSummary from './components/IngestSummary';
 import LoginPage from './components/LoginPage';
 import ToastContainer from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
 import { AppState } from './types';
-import type { ChatMessage, DocumentSummary, ProofPoint, QueryResponse } from './api';
+import type { ChatMessage, DocumentSummary, IngestResponse, ProofPoint, QueryResponse } from './api';
 import { deleteDocument as apiDeleteDocument, getDocuments, query as apiQuery, isRefuse } from './api';
 
 const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [overlayProof, setOverlayProof] = useState<ProofPoint[] | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [queryLoading, setQueryLoading] = useState(false);
+  const [lastIngestResult, setLastIngestResult] = useState<IngestResponse | null>(null);
 
   const refreshDocuments = useCallback(async () => {
     setLoadingDocs(true);
@@ -55,8 +57,9 @@ const App: React.FC = () => {
     if (state !== AppState.UPLOAD) setMessages([]);
   };
 
-  const handleIngestSuccess = (newDocId: string) => {
+  const handleIngestSuccess = (newDocId: string, ingestResult?: IngestResponse) => {
     setSelectedDocId(newDocId);
+    if (ingestResult) setLastIngestResult(ingestResult);
     refreshDocuments().then(() => setViewState(AppState.VERIFIED));
     setMessages([]);
   };
@@ -158,6 +161,15 @@ const App: React.FC = () => {
                     : 'Select a document'}
                 </span>
               </div>
+
+              {lastIngestResult && (
+                <div className="p-3 border-b border-gray-200 dark:border-[#30363d]">
+                  <IngestSummary
+                    result={lastIngestResult}
+                    onDismiss={() => setLastIngestResult(null)}
+                  />
+                </div>
+              )}
 
               <DocumentViewer
                 docId={selectedDocId}
