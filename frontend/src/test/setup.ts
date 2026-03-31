@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 // Mock firebase module globally — components import from firebase/auth
 vi.mock('../firebase', () => ({
   getFirebaseAuth: vi.fn(() => null),
+  logEvent: vi.fn(),
 }));
 
 // Mock IntersectionObserver (used by useScrollReveal)

@@ -155,7 +155,9 @@ export async function ingest(file: File): Promise<IngestResponse> {
     console.error('[Akili ingest]', res.status, message);
     throw new Error(message);
   }
-  return res.json();
+  const data: IngestResponse = await res.json();
+  logEvent('document_uploaded', { doc_id: data.doc_id, units: data.units_count, bijections: data.bijections_count, grids: data.grids_count });
+  return data;
 }
 
 /** Server-sent progress event from POST /ingest/stream */
@@ -238,6 +240,7 @@ export async function ingestStream(
     }
   }
   if (!result) throw new Error('Ingest stream ended without done event');
+  logEvent('document_uploaded', { doc_id: result.doc_id, units: result.units_count, bijections: result.bijections_count, grids: result.grids_count });
   return result;
 }
 
@@ -260,7 +263,10 @@ export async function query(
     await handle401(res);
     throw new Error('Query failed');
   }
-  return res.json();
+  logEvent('query_asked', { doc_id: docId });
+  const data: QueryResponse = await res.json();
+  logEvent('query_answered', { doc_id: docId, status: data.status });
+  return data;
 }
 
 export function isRefuse(r: QueryResponse): r is Refuse {

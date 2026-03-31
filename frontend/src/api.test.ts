@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock firebase before importing api module
 vi.mock('./firebase', () => ({
   getFirebaseAuth: vi.fn(() => null),
+  logEvent: vi.fn(),
 }));
 
 // Must import after mocks are set up
