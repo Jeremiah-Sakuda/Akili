@@ -139,6 +139,9 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-[#0d1117]">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-1 focus:left-1 focus:z-[60] focus:px-3 focus:py-1.5 focus:bg-primary focus:text-white focus:rounded focus:text-sm">
+        Skip to main content
+      </a>
       <Header />
       <ToastContainer />
       {!onboardingComplete && <Onboarding step={onboardingStep} onNext={onboardingNext} onSkip={onboardingSkip} />}
@@ -154,7 +157,7 @@ const App: React.FC = () => {
           onDeleteDocument={handleDeleteDocument}
         />
 
-        <main className="flex-1 bg-gray-50 dark:bg-[#0d1117] relative flex flex-col overflow-hidden">
+        <main id="main-content" className="flex-1 bg-gray-50 dark:bg-[#0d1117] relative flex flex-col overflow-hidden">
           {viewState === AppState.UPLOAD ? (
             <FileUploader onSuccess={handleIngestSuccess} onBack={() => handleStateChange(AppState.VERIFIED)} />
           ) : (

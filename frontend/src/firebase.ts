@@ -32,3 +32,11 @@ export function getFirebaseAuth(): Auth | null {
 }
 
 export { auth, analytics };
+
+/** Log a custom analytics event (no-op if analytics is not initialized). */
+export function logEvent(eventName: string, params?: Record<string, string | number | boolean>): void {
+  if (!analytics) return;
+  import('firebase/analytics').then(({ logEvent: fbLogEvent }) => {
+    fbLogEvent(analytics!, eventName, params);
+  }).catch(() => {});
+}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme, type Theme } from '../contexts/ThemeContext';
 
@@ -14,6 +14,17 @@ const Header: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        setThemeMenuOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
   return (
     <header className="h-12 bg-white dark:bg-[#0d1117] border-b border-gray-200 dark:border-[#30363d] flex items-center justify-between px-4 shrink-0 z-30 relative">
       <div className="flex items-center gap-3">
@@ -28,7 +39,7 @@ const Header: React.FC = () => {
           <h1 className="text-gray-900 dark:text-gray-100 text-base font-heading tracking-tight">Akili</h1>
         </div>
         <div className="h-4 w-px bg-gray-300 dark:bg-[#30363d]" />
-        <nav className="flex items-center text-xs hidden md:flex">
+        <nav aria-label="Main navigation" className="flex items-center text-xs hidden md:flex">
           <span className="text-gray-700 dark:text-gray-300 font-medium px-2 py-0.5 text-xs uppercase tracking-wider">Verification</span>
         </nav>
       </div>

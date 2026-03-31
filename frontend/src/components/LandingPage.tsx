@@ -28,8 +28,11 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-[#f0f2f5] overflow-x-hidden">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[60] focus:px-4 focus:py-2 focus:bg-[#0066CC] focus:text-white focus:rounded-md">
+        Skip to main content
+      </a>
       {/* Nav */}
-      <nav className="fixed top-0 inset-x-0 z-50 px-6 py-4 flex items-center justify-between bg-gradient-to-b from-[#0a0f1c]/95 to-transparent backdrop-blur-sm">
+      <nav aria-label="Landing page navigation" className="fixed top-0 inset-x-0 z-50 px-6 py-4 flex items-center justify-between bg-gradient-to-b from-[#0a0f1c]/95 to-transparent backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-[#0066CC] rounded-md flex items-center justify-center">
             <svg fill="none" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
@@ -52,7 +55,7 @@ const LandingPage: React.FC = () => {
       </nav>
 
       {/* Hero */}
-      <section className="min-h-screen flex flex-col justify-center px-6 md:px-12 lg:px-20 relative">
+      <section id="main-content" aria-label="Hero" className="min-h-screen flex flex-col justify-center px-6 md:px-12 lg:px-20 relative">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px] pointer-events-none" />
         <div className="relative z-10 max-w-3xl">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 border border-[#0066CC]/30 rounded-full font-mono text-sm text-[#0066CC] bg-[#0066CC]/8 mb-6">

@@ -77,6 +77,8 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
             type="button"
             onClick={() => onStateChange(AppState.UPLOAD)}
             className={`p-1.5 transition-colors ${currentState === AppState.UPLOAD ? 'bg-primary text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#161b22]'}`}
+            aria-label="Upload new document"
+            title="Upload new document"
           >
             <span className="material-symbols-outlined text-[16px]">add</span>
           </button>
@@ -147,11 +149,13 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
 
       {selectedDocId && (
         <div className="border-t border-gray-200 dark:border-[#30363d] flex flex-col min-h-0 shrink-0" style={{ maxHeight: '40%' }}>
-          <div className="p-1.5 border-b border-gray-200 dark:border-[#30363d] flex gap-1 bg-gray-50 dark:bg-[#161b22]">
+          <div className="p-1.5 border-b border-gray-200 dark:border-[#30363d] flex gap-1 bg-gray-50 dark:bg-[#161b22]" role="tablist" aria-label="Canonical object types">
             {(['units', 'bijections', 'grids'] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
+                role="tab"
+                aria-selected={canonicalTab === tab}
                 onClick={() => setCanonicalTab(tab)}
                 className={`px-2 py-1 text-xs font-medium capitalize transition-colors ${canonicalTab === tab ? 'bg-primary text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#0d1117]'}`}
               >

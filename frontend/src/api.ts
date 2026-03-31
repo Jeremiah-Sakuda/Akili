@@ -6,7 +6,7 @@
  */
 
 import { signOut } from 'firebase/auth';
-import { getFirebaseAuth } from './firebase';
+import { getFirebaseAuth, logEvent } from './firebase';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
