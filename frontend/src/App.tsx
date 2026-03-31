@@ -5,10 +5,13 @@ import SidebarRight from './components/SidebarRight';
 import DocumentViewer from './components/DocumentViewer';
 import FileUploader from './components/FileUploader';
 import IngestSummary from './components/IngestSummary';
+import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
+import Onboarding from './components/Onboarding';
 import ToastContainer from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
+import { useOnboarding } from './hooks/useOnboarding';
 import { AppState } from './types';
 import type { ChatMessage, DocumentSummary, IngestResponse, ProofPoint, QueryResponse } from './api';
 import { deleteDocument as apiDeleteDocument, getDocuments, query as apiQuery, isRefuse } from './api';
@@ -24,6 +27,7 @@ const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
 const App: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const { addToast } = useToast();
+  const { step: onboardingStep, next: onboardingNext, skip: onboardingSkip, isComplete: onboardingComplete } = useOnboarding();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [viewState, setViewState] = useState<AppState>(AppState.UPLOAD);
@@ -130,13 +134,14 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-    return <LoginPage />;
+    return <LandingPage />;
   }
 
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-[#0d1117]">
       <Header />
       <ToastContainer />
+      {!onboardingComplete && <Onboarding step={onboardingStep} onNext={onboardingNext} onSkip={onboardingSkip} />}
 
       <div className="layout-desktop flex flex-1 overflow-hidden">
         <SidebarLeft

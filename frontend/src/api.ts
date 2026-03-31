@@ -331,6 +331,32 @@ export async function getDocumentFile(docId: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Free Tier Usage
+// ---------------------------------------------------------------------------
+
+export interface UsageBucket {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+export interface UsageSummary {
+  documents: UsageBucket;
+  queries: UsageBucket;
+}
+
+export async function getUsage(): Promise<UsageSummary> {
+  const res = await fetch(`${API_BASE}/usage`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) {
+    await handle401(res);
+    throw new Error('Failed to fetch usage');
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 // Corrections / Human-in-the-Loop Review
 // ---------------------------------------------------------------------------
 

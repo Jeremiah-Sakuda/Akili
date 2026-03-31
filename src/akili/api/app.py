@@ -30,6 +30,7 @@ from akili.ingest.pipeline import ingest_document
 from akili.store import Store, create_store
 from akili.learn.pattern_analyzer import PatternAnalyzer
 from akili.store.corrections import CorrectionStore
+from akili.store.usage import UsageStore
 from akili.verify import AnswerWithProof, Refuse, verify_and_answer
 from akili.verify.compare import compare_documents, format_comparison_response
 
@@ -185,6 +186,20 @@ def get_store() -> Store:
     return _store
 
 
+_usage_store: UsageStore | None = None
+_usage_store_lock = threading.Lock()
+
+
+def get_usage_store() -> UsageStore:
+    global _usage_store
+    if _usage_store is None:
+        with _usage_store_lock:
+            if _usage_store is None:
+                db_url = os.environ.get("DATABASE_URL", "")
+                _usage_store = UsageStore(db_url=db_url or None)
+    return _usage_store
+
+
 def _docs_dir() -> Path:
     """Directory where ingested PDFs are stored (next to DB)."""
     db_path = config.DB_PATH
@@ -221,6 +236,16 @@ async def ingest(
     Upload a PDF; run ingestion pipeline; persist canonical objects.
     Returns doc_id and counts of units, bijections, grids.
     """
+    # Free-tier usage limit check
+    user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
+    usage = get_usage_store()
+    allowed, used, limit = usage.check_limit(user_id, "ingest")
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Free tier limit reached: {used}/{limit} documents. Contact us to upgrade.",
+        )
+
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="File must be a PDF")
     content = await file.read()
@@ -291,6 +316,8 @@ async def ingest(
             f"{pages_failed} page(s) were skipped (often due to rate limits). "
             "Try increasing AKILI_GEMINI_PAGE_DELAY_SECONDS in .env (e.g. 4) and re-upload."
         )
+    # Record usage after successful ingest
+    usage.record(user_id, "ingest")
     return JSONResponse(content=content)
 
 
@@ -300,6 +327,8 @@ def _run_ingest_with_progress(
     progress_queue: queue.Queue,
     filename: str,
     docs_dir: Path,
+    usage_store: UsageStore | None = None,
+    user_id: str | None = None,
 ) -> None:
     """Run ingest in a thread; put progress events into queue. Adds filename to final 'done'."""
     result_holder: list[dict] = []
@@ -318,6 +347,9 @@ def _run_ingest_with_progress(
         docs_dir.mkdir(parents=True, exist_ok=True)
         dest = docs_dir / f"{doc_id}.pdf"
         shutil.copy2(tmp_path, dest)
+        # Record usage after successful ingest
+        if usage_store and user_id:
+            usage_store.record(user_id, "ingest")
         done = result_holder[0] if result_holder else {}
         done["filename"] = filename or "upload.pdf"
         progress_queue.put(done)
@@ -339,6 +371,16 @@ async def ingest_stream(
     Streams progress events: rendering, extracting (page/total), canonicalizing, storing, done.
     Final event is done with doc_id, filename, counts. On error, event has phase 'error'.
     """
+    # Free-tier usage limit check
+    user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
+    usage = get_usage_store()
+    allowed, used, limit = usage.check_limit(user_id, "ingest")
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Free tier limit reached: {used}/{limit} documents. Contact us to upgrade.",
+        )
+
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="File must be a PDF")
     content = await file.read()
@@ -364,7 +406,7 @@ async def ingest_stream(
     filename = file.filename or "upload.pdf"
     thread = threading.Thread(
         target=_run_ingest_with_progress,
-        args=(tmp_path, store, progress_queue, filename, docs_dir),
+        args=(tmp_path, store, progress_queue, filename, docs_dir, usage, user_id),
     )
     thread.start()
 
@@ -436,11 +478,23 @@ async def query(
     If include_formatted_answer is true and the answer is verified, also requests a 1-sentence
     natural-language phrasing from Gemini (best-effort; response still includes raw answer).
     """
+    # Free-tier usage limit check
+    user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
+    usage = get_usage_store()
+    allowed, used, limit = usage.check_limit(user_id, "query")
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Free tier limit reached: {used}/{limit} queries. Contact us to upgrade.",
+        )
+
     store = get_store()
     units = store.get_units_by_doc(req.doc_id)
     bijections = store.get_bijections_by_doc(req.doc_id)
     grids = store.get_grids_by_doc(req.doc_id)
     result = verify_and_answer(req.question, units, bijections, grids)
+    # Record query usage
+    usage.record(user_id, "query")
     if isinstance(result, Refuse):
         content: dict[str, Any] = result.model_dump()
         content["formatting_source"] = "verified_raw"
@@ -630,6 +684,18 @@ async def compare_docs(
 async def health() -> dict:
     """Health check."""
     return {"status": "ok"}
+
+
+@app.get("/usage")
+async def get_usage(
+    request: Request,
+    _user: dict[str, Any] | None = Depends(get_current_user),
+) -> JSONResponse:
+    """Get usage summary for the current user (free tier limits)."""
+    user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
+    usage = get_usage_store()
+    summary = usage.get_usage_summary(user_id)
+    return JSONResponse(content=summary)
 
 
 # ---------------------------------------------------------------------------

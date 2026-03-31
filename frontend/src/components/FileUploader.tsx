@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { ingestStream, type IngestResponse, type IngestProgressEvent } from '../api';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ingestStream, getUsage, type IngestResponse, type IngestProgressEvent, type UsageSummary } from '../api';
 
 type UploadPhase =
   | 'idle'
@@ -58,6 +58,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
   const [batchFiles, setBatchFiles] = useState<FileProgress[]>([]);
   const [batchIndex, setBatchIndex] = useState(-1);
   const isBatch = batchFiles.length > 1;
+
+  // Usage limits
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+
+  useEffect(() => {
+    getUsage().then(setUsage).catch(() => {});
+  }, []);
 
   const clearProgressInterval = useCallback(() => {
     if (progressIntervalRef.current !== null) {
@@ -144,6 +151,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
         const data = await ingestSingleFile(pdfFiles[0]);
         setResult(data);
         onSuccess(data.doc_id, data);
+        getUsage().then(setUsage).catch(() => {});
       } catch (e) {
         clearProgressInterval();
         setProgress(0);
@@ -194,6 +202,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
       setProgress(100);
       setLoading(false);
       setBatchIndex(-1);
+      getUsage().then(setUsage).catch(() => {});
     }
   };
 
@@ -234,6 +243,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
         <div className="mb-8 text-center reveal visible">
           <h2 className="text-xl font-heading text-gray-900 dark:text-gray-100 tracking-tight">Upload Technical Document</h2>
           <p className="text-gray-600 dark:text-gray-400 mt-2 text-sm">Ingest PDFs for verification analysis</p>
+          {usage && (
+            <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400 font-mono">
+              <span>{usage.documents.used}/{usage.documents.limit} documents</span>
+              <span className="text-gray-300 dark:text-gray-600">|</span>
+              <span>{usage.queries.used}/{usage.queries.limit} queries</span>
+              {usage.documents.remaining === 0 && (
+                <span className="text-amber-600 dark:text-amber-400 font-medium ml-1">Limit reached</span>
+              )}
+            </div>
+          )}
         </div>
 
         <div

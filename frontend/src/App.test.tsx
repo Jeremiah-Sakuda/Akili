@@ -8,6 +8,7 @@ vi.mock('./components/SidebarLeft', () => ({ default: (props: any) => <div data-
 vi.mock('./components/SidebarRight', () => ({ default: () => <div data-testid="sidebar-right">SidebarRight</div> }));
 vi.mock('./components/DocumentViewer', () => ({ default: () => <div data-testid="doc-viewer">DocViewer</div> }));
 vi.mock('./components/FileUploader', () => ({ default: () => <div data-testid="file-uploader">FileUploader</div> }));
+vi.mock('./components/LandingPage', () => ({ default: () => <div data-testid="landing-page">LandingPage</div> }));
 vi.mock('./components/LoginPage', () => ({ default: () => <div data-testid="login-page">LoginPage</div> }));
 vi.mock('./components/Toast', () => ({ default: () => null }));
 
@@ -40,9 +41,9 @@ describe('App', () => {
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
 
-  it('shows login page when user is null', () => {
+  it('shows landing page when user is null', () => {
     render(<App />);
-    expect(screen.getByTestId('login-page')).toBeInTheDocument();
+    expect(screen.getByTestId('landing-page')).toBeInTheDocument();
   });
 
   it('shows main layout when user is authenticated', async () => {

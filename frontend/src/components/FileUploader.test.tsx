@@ -5,6 +5,7 @@ import FileUploader from './FileUploader';
 
 vi.mock('../api', () => ({
   ingestStream: vi.fn(),
+  getUsage: vi.fn(() => Promise.resolve({ documents: { used: 1, limit: 5, remaining: 4 }, queries: { used: 3, limit: 50, remaining: 47 } })),
 }));
 
 describe('FileUploader', () => {

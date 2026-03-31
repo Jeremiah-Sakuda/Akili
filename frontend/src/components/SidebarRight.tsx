@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState } from '../types';
-import type { DocumentSummary, ProofPoint, QueryResponse } from '../api';
-import { isRefuse } from '../api';
+import type { DocumentSummary, ProofPoint, QueryResponse, UsageSummary } from '../api';
+import { isRefuse, getUsage } from '../api';
 import type { ChatMessage } from '../api';
 import { useReveal } from '../hooks/useReveal';
 
@@ -51,6 +51,11 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isUpload = currentState === AppState.UPLOAD;
   const { revealClass } = useReveal('reveal', 120);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+
+  useEffect(() => {
+    getUsage().then(setUsage).catch(() => {});
+  }, [messages.length]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -255,7 +260,19 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
       </div>
 
       <div className="p-2 border-t border-gray-200 dark:border-[#30363d] bg-gray-50 dark:bg-[#161b22] text-center shrink-0">
-        <p className="text-xs text-gray-500 dark:text-gray-500 font-mono">Akili • Coordinate-grounded verification</p>
+        {usage ? (
+          <p className="text-[10px] text-gray-500 dark:text-gray-500 font-mono">
+            {usage.queries.used}/{usage.queries.limit} queries
+            {usage.queries.remaining === 0 && (
+              <span className="text-amber-600 dark:text-amber-400 font-medium ml-1">• Limit reached</span>
+            )}
+            {usage.queries.remaining > 0 && (
+              <span className="text-gray-400 dark:text-gray-600"> • {usage.queries.remaining} remaining</span>
+            )}
+          </p>
+        ) : (
+          <p className="text-[10px] text-gray-500 dark:text-gray-500 font-mono">Akili • Coordinate-grounded verification</p>
+        )}
       </div>
     </aside>
   );
