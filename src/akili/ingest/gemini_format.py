@@ -63,7 +63,7 @@ def format_answer(question: str, verified_fact: str, coordinates: str) -> str | 
         if not text or UNABLE_TO_PHRASE in text.upper():
             return None
         return text
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, KeyError) as e:
         logger.warning("Gemini format_answer failed (silent fallback): %s", e)
         return None
 

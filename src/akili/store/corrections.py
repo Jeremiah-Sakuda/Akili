@@ -13,12 +13,13 @@ Supports both SQLite (local dev) and PostgreSQL (production via DATABASE_URL).
 from __future__ import annotations
 
 import logging
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("akili")
+from akili.store.connection import ConnectionManager
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -43,42 +44,19 @@ class CorrectionStore:
         self,
         db_path: Path | str = "akili.db",
         db_url: str | None = None,
+        conn_manager: ConnectionManager | None = None,
     ):
-        self._use_pg = False
-        self._dsn: str | None = None
-
-        if db_url and db_url.startswith("postgresql"):
-            try:
-                import psycopg2  # noqa: F401
-                self._use_pg = True
-                self._dsn = db_url
-                logger.info("CorrectionStore using PostgreSQL")
-            except ImportError:
-                logger.warning(
-                    "DATABASE_URL is PostgreSQL but psycopg2 not installed; "
-                    "falling back to SQLite"
-                )
-
-        if not self._use_pg:
-            self.db_path = Path(db_path)
-
+        if conn_manager is not None:
+            self._mgr = conn_manager
+        else:
+            self._mgr = ConnectionManager(db_url=db_url, db_path=db_path)
         self._init_schema()
 
-    def _conn(self) -> Any:
-        if self._use_pg:
-            import psycopg2
-            return psycopg2.connect(self._dsn)
-        return sqlite3.connect(self.db_path)
-
-    def _placeholder(self) -> str:
-        """Return the parameter placeholder for the current backend."""
-        return "%s" if self._use_pg else "?"
-
     def _init_schema(self) -> None:
-        conn = self._conn()
-        try:
+        ph = self._mgr.placeholder()
+        with self._mgr.connection() as conn:
             cur = conn.cursor()
-            if self._use_pg:
+            if self._mgr.is_postgres:
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS corrections (
                         id SERIAL PRIMARY KEY,
@@ -116,9 +94,6 @@ class CorrectionStore:
                     CREATE INDEX IF NOT EXISTS idx_corrections_doc ON corrections(doc_id);
                     CREATE INDEX IF NOT EXISTS idx_corrections_canonical ON corrections(canonical_id);
                 """)
-            conn.commit()
-        finally:
-            conn.close()
 
     def add_correction(
         self,
@@ -132,11 +107,10 @@ class CorrectionStore:
         notes: str | None = None,
     ) -> int:
         """Record a correction or confirmation. Returns the correction id."""
-        ph = self._placeholder()
-        conn = self._conn()
-        try:
+        ph = self._mgr.placeholder()
+        with self._mgr.connection() as conn:
             cur = conn.cursor()
-            if self._use_pg:
+            if self._mgr.is_postgres:
                 cur.execute(
                     f"""INSERT INTO corrections (doc_id, canonical_id, canonical_type,
                        action, original_value, corrected_value, corrected_by, notes)
@@ -146,7 +120,6 @@ class CorrectionStore:
                      original_value, corrected_value, corrected_by, notes),
                 )
                 row = cur.fetchone()
-                conn.commit()
                 return row[0] if row else 0
             else:
                 cur.execute(
@@ -156,16 +129,12 @@ class CorrectionStore:
                     (doc_id, canonical_id, canonical_type, action,
                      original_value, corrected_value, corrected_by, notes),
                 )
-                conn.commit()
                 return cur.lastrowid or 0
-        finally:
-            conn.close()
 
     def get_corrections_by_doc(self, doc_id: str) -> list[Correction]:
         """Get all corrections for a document."""
-        ph = self._placeholder()
-        conn = self._conn()
-        try:
+        ph = self._mgr.placeholder()
+        with self._mgr.connection() as conn:
             cur = conn.cursor()
             cur.execute(
                 f"SELECT id, doc_id, canonical_id, canonical_type, action, "
@@ -174,8 +143,6 @@ class CorrectionStore:
                 (doc_id,),
             )
             rows = cur.fetchall()
-        finally:
-            conn.close()
         return [
             Correction(
                 id=r[0], doc_id=r[1], canonical_id=r[2], canonical_type=r[3],
@@ -188,9 +155,8 @@ class CorrectionStore:
 
     def get_correction_stats(self, doc_id: str | None = None) -> dict[str, Any]:
         """Get correction statistics, optionally filtered by doc."""
-        ph = self._placeholder()
-        conn = self._conn()
-        try:
+        ph = self._mgr.placeholder()
+        with self._mgr.connection() as conn:
             cur = conn.cursor()
             if doc_id:
                 cur.execute(f"SELECT COUNT(*) FROM corrections WHERE doc_id = {ph}", (doc_id,))
@@ -206,8 +172,6 @@ class CorrectionStore:
                 confirms = cur.fetchone()[0]
                 cur.execute("SELECT COUNT(*) FROM corrections WHERE action = 'correct'")
                 corrects = cur.fetchone()[0]
-        finally:
-            conn.close()
         return {
             "total": total,
             "confirmations": confirms,
@@ -221,9 +185,8 @@ class CorrectionStore:
         This is a placeholder that returns corrections metadata; the actual queue
         is assembled at the API layer by cross-referencing confidence tiers.
         """
-        ph = self._placeholder()
-        conn = self._conn()
-        try:
+        ph = self._mgr.placeholder()
+        with self._mgr.connection() as conn:
             cur = conn.cursor()
             if doc_id:
                 cur.execute(
@@ -238,6 +201,4 @@ class CorrectionStore:
                     (limit,),
                 )
             rows = cur.fetchall()
-        finally:
-            conn.close()
         return [{"canonical_id": r[0], "canonical_type": r[1]} for r in rows]

@@ -42,6 +42,10 @@ class Unit(BaseModel):
     doc_id: str = Field(..., description="Source document id")
     page: int = Field(..., ge=0, description="Page number (0-based)")
     bbox: BBox | None = Field(None, description="Optional bounding box")
+    extraction_agreement: float = Field(
+        default=0.5, ge=0.0, le=1.0,
+        description="Consensus agreement score (1.0=full consensus, 0.5=single-pass default)"
+    )
 
 
 class Bijection(BaseModel):

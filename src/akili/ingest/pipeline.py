@@ -15,6 +15,7 @@ from akili import config
 from akili.canonical import Bijection, Grid, Unit
 from akili.ingest.canonicalize import canonicalize_page
 from akili.ingest.consensus import consensus_extract_page, should_use_consensus
+from akili.ingest.errors import is_rate_limit_error as _is_rate_limit_error
 from akili.ingest.gemini_extract import extract_page as gemini_extract_page
 from akili.ingest.multipage import merge_multipage_tables
 from akili.ingest.page_classifier import classify_page, get_extraction_hint
@@ -24,16 +25,12 @@ from akili.store.repository import Store
 logger = logging.getLogger(__name__)
 
 
-def _is_rate_limit_error(e: BaseException) -> bool:
-    msg = (getattr(e, "message", None) or str(e)).lower()
-    return "429" in msg or "resource exhausted" in msg or "resourceexhausted" in msg
-
-
 def ingest_document(
     pdf_path: Path | str,
     doc_id: str | None = None,
     store: Store | None = None,
     progress_callback: Callable[[dict], None] | None = None,
+    uploaded_by: str | None = None,
 ) -> tuple[str, list[Unit | Bijection | Grid], int, int]:
     """
     Ingest a PDF: load pages, extract via Gemini, canonicalize.
@@ -70,14 +67,19 @@ def ingest_document(
         try:
             page_type = classify_page(image_bytes)
             hint = get_extraction_hint(page_type)
+            page_agreement = 0.5  # default for single-pass
             if should_use_consensus(page_type):
-                extraction, _agreement = consensus_extract_page(
+                extraction, page_agreement = consensus_extract_page(
                     page_index, image_bytes, doc_id, page_type_hint=hint,
                 )
             else:
                 extraction = gemini_extract_page(page_index, image_bytes, doc_id, page_type_hint=hint)
             _progress({"phase": "canonicalizing", "page": page_index, "total": total_pages})
             canonical = canonicalize_page(extraction, doc_id, page_index)
+            # Propagate consensus agreement to canonical objects
+            for obj in canonical:
+                if hasattr(obj, "extraction_agreement"):
+                    obj.extraction_agreement = page_agreement
             all_canonical.extend(canonical)
         except Exception as e:
             pages_failed += 1
@@ -114,7 +116,7 @@ def ingest_document(
     if pages_failed > 0:
         logger.info(
             "Ingest: %s of %s page(s) failed (doc_id=%s). Often rate limits; "
-            "try AKILI_GEMINIconfig.GEMINI_PAGE_DELAY_SECONDS=4 or higher.",
+            "try AKILI_GEMINI_PAGE_DELAY_SECONDS=4 or higher.",
             pages_failed,
             total_pages,
             doc_id,
@@ -125,7 +127,7 @@ def ingest_document(
         units = [o for o in all_canonical if isinstance(o, Unit)]
         bijections = [o for o in all_canonical if isinstance(o, Bijection)]
         grids = [o for o in all_canonical if isinstance(o, Grid)]
-        store.store_canonical(doc_id, pdf_path.name, total_pages, units, bijections, grids)
+        store.store_canonical(doc_id, pdf_path.name, total_pages, units, bijections, grids, uploaded_by=uploaded_by)
 
     result: dict = {
         "phase": "done",
@@ -150,7 +152,7 @@ def ingest_document(
         result["extraction_note"] = (
             f"Extracted from {total_pages - pages_failed} of {total_pages} pages. "
             f"{pages_failed} page(s) were skipped (often due to rate limits). "
-            "Try increasing AKILI_GEMINIconfig.GEMINI_PAGE_DELAY_SECONDS in .env and re-upload."
+            "Try increasing AKILI_GEMINI_PAGE_DELAY_SECONDS in .env and re-upload."
         )
     _progress(result)
     return doc_id, all_canonical, total_pages, pages_failed

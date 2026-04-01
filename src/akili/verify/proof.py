@@ -3,6 +3,24 @@ Proof rules: derive answer from canonical facts; deterministic REFUSE if not pro
 
 Rules are registered via the @rule decorator with a priority (lower = tried first).
 verify_and_answer iterates rules in priority order; the first non-None result wins.
+
+Priority band system:
+    100s — Pin/ID lookup: pin_lookup (100), part_number (150), description (160)
+    200s — Absolute maximum ratings: abs_max_voltage (200), abs_max_current (210)
+    300s — Operating maximums: max_voltage (300), max_current (310), max_capacity (320)
+    400s — Ranges & conditions: operating_voltage_range (400), storage_temp (405),
+           operating_temp_range (410), soldering_temp (430)
+    500s — Electrical characteristics: power_dissipation (500), esd_ratings (510),
+           leakage_current (520), threshold_voltage (530)
+    600s — Timing: clock_frequency (600), propagation_delay (610), rise_fall_time (620),
+           setup_hold_time (630)
+    700s — Physical/package: package_type (700), package_dimensions (710),
+           thermal_resistance (720), weight (730), pin_count (740),
+           moisture_sensitivity (750)
+    800+ — Fallback & broad matchers: recommended_operating (800),
+           unit_by_intent (900), grid_cell_lookup (950), unit_lookup (1000)
+
+Lower priority number = tried first. Each rule returns AnswerWithProof or None.
 """
 
 from __future__ import annotations
@@ -99,7 +117,7 @@ def _answer_from_unit(
         answer_str = f"{u.value} {u.unit_of_measure or ''}".strip()
     cq = _unit_canonical_quality(u)
     confidence = ConfidenceScore.compute(
-        extraction_agreement=0.5,
+        extraction_agreement=getattr(u, "extraction_agreement", 0.5),
         canonical_validation=cq,
         verification_strength=verification_strength,
     )

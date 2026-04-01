@@ -41,7 +41,7 @@ def _init_firebase() -> bool:
             cred = credentials.ApplicationDefault()
             firebase_admin.initialize_app(cred, options={"projectId": project_id.strip()})
         return True
-    except Exception as exc:
+    except (ValueError, OSError, RuntimeError) as exc:
         logger.warning("Firebase initialization failed: %s", exc)
         return False
 
@@ -75,14 +75,25 @@ def verify_firebase_token(token: str) -> dict:
         ) from e
 
 
+def _is_production_environment() -> bool:
+    """Return True if the environment looks like production (DATABASE_URL is set)."""
+    return bool(os.environ.get("DATABASE_URL", "").startswith("postgresql"))
+
+
 def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_http_bearer)],
 ) -> dict | None:
     """
     Dependency: when auth is required, verify Bearer token and return claims; otherwise return None.
     Raises 401 if auth is required and token is missing or invalid.
+    In production (DATABASE_URL set), logs ERROR when auth is disabled.
     """
     if not is_auth_required():
+        if _is_production_environment():
+            logger.error(
+                "AUTH DISABLED IN PRODUCTION — request served without authentication. "
+                "Set AKILI_REQUIRE_AUTH=1 and FIREBASE_PROJECT_ID to secure this deployment."
+            )
         return None
     if not credentials or not credentials.credentials:
         raise HTTPException(

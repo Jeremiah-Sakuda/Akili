@@ -30,6 +30,7 @@ class BaseStore(ABC):
         grids: list[Grid],
         ranges: list[Range] | None = None,
         conditional_units: list[ConditionalUnit] | None = None,
+        uploaded_by: str | None = None,
     ) -> None:
         ...
 

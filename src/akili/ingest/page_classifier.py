@@ -17,6 +17,7 @@ from typing import Literal
 import google.generativeai as genai
 
 from akili import config
+from akili.ingest.errors import is_rate_limit_error as _is_rate_limit_error
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +58,11 @@ Respond with ONLY the category name, nothing else."""
 
 
 
-def _is_rate_limit_error(e: BaseException) -> bool:
-    msg = (getattr(e, "message", None) or str(e)).lower()
-    return "429" in msg or "resource exhausted" in msg or "resourceexhausted" in msg
-
-
 def classify_page(image_png_bytes: bytes) -> PageType:
     """Classify a page image into a PageType category.
 
     Returns "other" on any error or when classification is disabled.
-    When AKILI_PAGEconfig.PAGE_CLASSIFY_ENABLED=0 (default), skips the API call.
+    When AKILI_PAGE_CLASSIFY_ENABLED=0 (default), skips the API call.
     """
     if not config.PAGE_CLASSIFY_ENABLED:
         return "other"

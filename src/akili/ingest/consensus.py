@@ -3,7 +3,7 @@ Consensus extraction: run Gemini twice with varied prompts and compare results.
 
 Agreement -> high confidence. Disagreement -> flag for review or tiebreaker.
 Only used for high-risk page types (electrical_specs, absolute_max_ratings)
-when AKILIconfig.CONSENSUS_ENABLED=1.
+when AKILI_CONSENSUS_ENABLED=1.
 """
 
 from __future__ import annotations

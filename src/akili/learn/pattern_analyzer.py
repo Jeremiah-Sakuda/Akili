@@ -142,12 +142,14 @@ class PatternAnalyzer:
 
     def _get_all_corrections(self) -> list[Correction]:
         """Retrieve all corrections from the store."""
-        with self.store._conn() as c:
-            rows = c.execute(
+        with self.store._mgr.connection() as c:
+            cur = c.cursor()
+            cur.execute(
                 "SELECT id, doc_id, canonical_id, canonical_type, action, "
                 "original_value, corrected_value, corrected_by, notes, created_at "
                 "FROM corrections WHERE action = 'correct' ORDER BY created_at",
-            ).fetchall()
+            )
+            rows = cur.fetchall()
         return [
             Correction(
                 id=r[0], doc_id=r[1], canonical_id=r[2], canonical_type=r[3],

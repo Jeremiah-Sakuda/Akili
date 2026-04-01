@@ -17,14 +17,10 @@ import google.generativeai as genai
 from pydantic import ValidationError
 
 from akili import config
+from akili.ingest.errors import is_rate_limit_error as _is_rate_limit_error
 from akili.ingest.extract_schema import PageExtraction
 
 logger = logging.getLogger(__name__)
-
-
-def _is_rate_limit_error(e: BaseException) -> bool:
-    msg = (getattr(e, "message", None) or str(e)).lower()
-    return "429" in msg or "resource exhausted" in msg or "resourceexhausted" in msg
 
 
 EXTRACT_PROMPT = """\

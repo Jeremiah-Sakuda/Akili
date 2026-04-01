@@ -12,6 +12,7 @@ from typing import Any
 from akili.canonical import Bijection, ConditionalUnit, Grid, Range, Unit
 from akili.canonical.models import BBox, GridCell, Point
 from akili.store.base import BaseStore
+from akili.store.connection import ConnectionManager
 
 
 def _point_to_json(p: Point) -> str:
@@ -39,20 +40,26 @@ def _json_to_bbox(s: str | None) -> BBox | None:
 class Store(BaseStore):
     """SQLite-backed store for canonical objects."""
 
-    def __init__(self, db_path: Path | str = "akili.db"):
+    def __init__(self, db_path: Path | str = "akili.db", conn_manager: ConnectionManager | None = None):
         self.db_path = Path(db_path)
+        if conn_manager is not None:
+            self._mgr = conn_manager
+        else:
+            self._mgr = ConnectionManager(db_path=db_path)
         self._init_schema()
 
     def _conn(self) -> sqlite3.Connection:
+        """Legacy helper — returns a new connection. Prefer using self._mgr.connection()."""
         return sqlite3.connect(self.db_path)
 
     def _init_schema(self) -> None:
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             c.executescript("""
                 CREATE TABLE IF NOT EXISTS documents (
                     doc_id TEXT PRIMARY KEY,
                     filename TEXT,
                     page_count INTEGER,
+                    uploaded_by TEXT,
                     created_at TEXT DEFAULT (datetime('now'))
                 );
                 CREATE TABLE IF NOT EXISTS units (
@@ -73,6 +80,11 @@ class Store(BaseStore):
             # Migration: add context column to existing units tables
             try:
                 c.execute("ALTER TABLE units ADD COLUMN context TEXT")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+            # Migration: add uploaded_by column to documents
+            try:
+                c.execute("ALTER TABLE documents ADD COLUMN uploaded_by TEXT")
             except sqlite3.OperationalError:
                 pass  # column already exists
             c.executescript("""
@@ -147,7 +159,7 @@ class Store(BaseStore):
             """)
 
     def _audit(self, action: str, doc_id: str | None, actor: str | None = None, details: dict | None = None) -> None:
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             c.execute(
                 "INSERT INTO audit_log (doc_id, action, actor, details_json) VALUES (?, ?, ?, ?)",
                 (doc_id, action, actor, json.dumps(details) if details else None),
@@ -155,7 +167,7 @@ class Store(BaseStore):
 
     def get_audit_log(self, doc_id: str | None = None, limit: int = 100) -> list[dict]:
         """Return audit log entries, optionally filtered by doc_id."""
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             if doc_id:
                 rows = c.execute(
                     "SELECT id, doc_id, action, actor, details_json, created_at "
@@ -177,11 +189,11 @@ class Store(BaseStore):
             for r in rows
         ]
 
-    def add_document(self, doc_id: str, filename: str | None = None, page_count: int = 0) -> None:
-        with self._conn() as c:
+    def add_document(self, doc_id: str, filename: str | None = None, page_count: int = 0, uploaded_by: str | None = None) -> None:
+        with self._mgr.connection() as c:
             c.execute(
-                "INSERT OR REPLACE INTO documents (doc_id, filename, page_count) VALUES (?, ?, ?)",
-                (doc_id, filename or "", page_count),
+                "INSERT OR REPLACE INTO documents (doc_id, filename, page_count, uploaded_by) VALUES (?, ?, ?, ?)",
+                (doc_id, filename or "", page_count, uploaded_by),
             )
 
     def store_canonical(
@@ -194,12 +206,13 @@ class Store(BaseStore):
         grids: list[Grid],
         ranges: list[Range] | None = None,
         conditional_units: list[ConditionalUnit] | None = None,
+        uploaded_by: str | None = None,
     ) -> None:
         """Persist canonical objects for a document (single transaction)."""
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             c.execute(
-                "INSERT OR REPLACE INTO documents (doc_id, filename, page_count) VALUES (?, ?, ?)",
-                (doc_id, filename or "", page_count),
+                "INSERT OR REPLACE INTO documents (doc_id, filename, page_count, uploaded_by) VALUES (?, ?, ?, ?)",
+                (doc_id, filename or "", page_count, uploaded_by),
             )
             for u in units:
                 c.execute(
@@ -290,7 +303,7 @@ class Store(BaseStore):
         })
 
     def get_units_by_doc(self, doc_id: str) -> list[Unit]:
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             rows = c.execute(
                 "SELECT doc_id, page, unit_id, label, value, unit_of_measure, context, "
                 "origin_json, bbox_json FROM units WHERE doc_id = ?",
@@ -322,7 +335,7 @@ class Store(BaseStore):
         return out
 
     def get_bijections_by_doc(self, doc_id: str) -> list[Bijection]:
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             rows = c.execute(
                 "SELECT doc_id, page, bijection_id, left_set_json, right_set_json, "
                 "mapping_json, origin_json, bbox_json FROM bijections WHERE doc_id = ?",
@@ -345,7 +358,7 @@ class Store(BaseStore):
         return out
 
     def get_grids_by_doc(self, doc_id: str) -> list[Grid]:
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             rows = c.execute(
                 "SELECT doc_id, page, grid_id, rows, cols, cells_json, origin_json, bbox_json "
                 "FROM grids WHERE doc_id = ?",
@@ -382,7 +395,7 @@ class Store(BaseStore):
         return out
 
     def get_ranges_by_doc(self, doc_id: str) -> list[Range]:
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             rows = c.execute(
                 "SELECT doc_id, page, range_id, label, min_val, typ_val, max_val, "
                 "unit, conditions, context, origin_json, bbox_json "
@@ -400,7 +413,7 @@ class Store(BaseStore):
         ]
 
     def get_conditional_units_by_doc(self, doc_id: str) -> list[ConditionalUnit]:
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             rows = c.execute(
                 "SELECT doc_id, page, cunit_id, label, value, unit, "
                 "condition_type, condition_value, derating, context, "
@@ -430,9 +443,17 @@ class Store(BaseStore):
         result.extend(self.get_conditional_units_by_doc(doc_id))
         return result
 
+    def get_document_owner(self, doc_id: str) -> str | None:
+        """Return the uploaded_by field for a document, or None if not set."""
+        with self._mgr.connection() as c:
+            row = c.execute(
+                "SELECT uploaded_by FROM documents WHERE doc_id = ?", (doc_id,)
+            ).fetchone()
+        return row[0] if row else None
+
     def delete_document(self, doc_id: str) -> None:
         """Remove a document and all its canonical objects from the store."""
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             c.execute("DELETE FROM units WHERE doc_id = ?", (doc_id,))
             c.execute("DELETE FROM bijections WHERE doc_id = ?", (doc_id,))
             c.execute("DELETE FROM grids WHERE doc_id = ?", (doc_id,))
@@ -443,7 +464,7 @@ class Store(BaseStore):
 
     def list_documents(self) -> list[dict[str, Any]]:
         """List ingested documents with counts."""
-        with self._conn() as c:
+        with self._mgr.connection() as c:
             rows = c.execute(
                 "SELECT d.doc_id, d.filename, d.page_count, d.created_at, "
                 "(SELECT COUNT(*) FROM units u WHERE u.doc_id = d.doc_id), "
