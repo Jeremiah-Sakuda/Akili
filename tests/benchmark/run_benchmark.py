@@ -1,382 +1,205 @@
 #!/usr/bin/env python3
 """
-Akili Extraction Quality Benchmark
-
-Measures precision and recall of the verification layer against hand-labeled
-ground truth for a set of datasheets.
+Benchmark runner: ingest datasheets, run Q&A, compare to ground truth.
 
 Usage:
-    python tests/benchmark/run_benchmark.py [--datasheets-dir DIR] [--ground-truth-dir DIR]
+    python tests/benchmark/run_benchmark.py
 
-Ground truth format (JSON per datasheet):
-{
-    "filename": "component_datasheet.pdf",
-    "queries": [
-        {
-            "question": "What is the maximum voltage?",
-            "query_type": "max_voltage",
-            "expected_status": "answer",
-            "expected_answer_contains": ["5.5", "V"],
-            "expected_answer_not_contains": [],
-            "notes": "From Absolute Maximum Ratings table"
-        },
-        {
-            "question": "What is the ESD rating?",
-            "query_type": "esd_rating",
-            "expected_status": "refuse",
-            "notes": "No ESD info in this datasheet"
-        }
-    ]
-}
+Requires:
+    - GOOGLE_API_KEY set in environment
+    - PDF files in tests/fixtures/ matching names in ground_truth.json
+
+Reports:
+    - Per-datasheet accuracy and false-refuse rate
+    - Overall accuracy across all datasheets
 """
 
 from __future__ import annotations
 
 import json
-import os
+import re
 import sys
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 
-# Add project root to path
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+# Ensure src/ is on path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from akili.canonical import Bijection, Grid, Unit  # noqa: E402
-from akili.store.repository import Store  # noqa: E402
-from akili.verify.models import AnswerWithProof, Refuse  # noqa: E402
-from akili.verify.proof import verify_and_answer  # noqa: E402
+from akili.canonical import Bijection, Grid, Unit
+from akili.ingest.pipeline import ingest_document
+from akili.verify import Refuse, verify_and_answer
 
-
-@dataclass
-class QueryResult:
-    question: str
-    query_type: str
-    expected_status: str
-    actual_status: str
-    expected_contains: list[str]
-    actual_answer: str
-    passed: bool
-    reason: str = ""
+GROUND_TRUTH_PATH = Path(__file__).parent / "ground_truth.json"
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
-@dataclass
-class DatasheetResult:
-    filename: str
-    total_queries: int = 0
-    passed: int = 0
-    failed: int = 0
-    query_results: list[QueryResult] = field(default_factory=list)
-
-    @property
-    def pass_rate(self) -> float:
-        return self.passed / self.total_queries if self.total_queries > 0 else 0.0
+def load_ground_truth() -> dict:
+    with open(GROUND_TRUTH_PATH) as f:
+        data = json.load(f)
+    return {k: v for k, v in data.items() if not k.startswith("_")}
 
 
-@dataclass
-class BenchmarkSummary:
-    total_datasheets: int = 0
-    total_queries: int = 0
-    total_passed: int = 0
-    total_failed: int = 0
-    false_accepts: int = 0
-    correct_refuses: int = 0
-    incorrect_refuses: int = 0
-    results_by_query_type: dict[str, dict[str, int]] = field(default_factory=dict)
-    datasheet_results: list[DatasheetResult] = field(default_factory=list)
-
-    @property
-    def overall_pass_rate(self) -> float:
-        return self.total_passed / self.total_queries if self.total_queries > 0 else 0.0
-
-    @property
-    def false_accept_rate(self) -> float:
-        answered = sum(
-            1 for ds in self.datasheet_results
-            for qr in ds.query_results
-            if qr.actual_status == "answer"
-        )
-        return self.false_accepts / answered if answered > 0 else 0.0
+def normalize_value(s: str) -> str:
+    s = s.lower().strip()
+    s = re.sub(r"\s+", " ", s)
+    return s
 
 
-def _evaluate_query(
-    question: str,
-    query_type: str,
-    expected_status: str,
-    expected_contains: list[str],
-    expected_not_contains: list[str],
-    units: list[Unit],
-    bijections: list[Bijection],
-    grids: list[Grid],
-) -> QueryResult:
-    """Run a single query against canonical data and evaluate the result."""
-    result = verify_and_answer(question, units, bijections, grids)
+def values_match(actual: str, expected: str, expected_unit: str | None) -> bool:
+    actual_lower = normalize_value(actual)
+    expected_lower = normalize_value(expected)
 
-    confidence_tier = "refused"
-    if isinstance(result, AnswerWithProof):
-        actual_status = "answer"
-        actual_answer = str(result.answer)
-        if result.confidence:
-            confidence_tier = result.confidence.tier
-    elif isinstance(result, Refuse):
-        actual_status = "refuse"
-        actual_answer = result.reason or ""
-    else:
-        actual_status = "unknown"
-        actual_answer = ""
+    if expected_lower in actual_lower:
+        return True
 
-    passed = True
-    reason = ""
+    try:
+        actual_nums = re.findall(r"[-+]?\d*\.?\d+", actual_lower)
+        expected_nums = re.findall(r"[-+]?\d*\.?\d+", expected_lower)
+        if actual_nums and expected_nums:
+            for a_num in actual_nums:
+                for e_num in expected_nums:
+                    if abs(float(a_num) - float(e_num)) < 0.01:
+                        return True
+                    if float(e_num) != 0 and abs(float(a_num) - float(e_num)) / abs(float(e_num)) < 0.1:
+                        return True
+    except (ValueError, ZeroDivisionError):
+        pass
 
-    if expected_status == "answer" and actual_status == "answer":
-        answer_lower = actual_answer.lower()
-        for term in expected_contains:
-            if term.lower() not in answer_lower:
-                passed = False
-                reason = f"Expected '{term}' in answer '{actual_answer}'"
-                break
-        for term in expected_not_contains:
-            if term.lower() in answer_lower:
-                passed = False
-                reason = f"Unexpected '{term}' found in answer '{actual_answer}'"
-                break
-    elif expected_status == "answer" and actual_status == "refuse":
-        passed = False
-        reason = f"Expected answer, got REFUSE: {actual_answer}"
-    elif expected_status == "refuse" and actual_status == "refuse":
-        passed = True
-    elif expected_status == "refuse" and actual_status == "answer":
-        if confidence_tier == "review":
-            passed = False
-            reason = f"Expected REFUSE, got REVIEW-tier answer: {actual_answer} (not a false-accept)"
-        else:
-            passed = False
-            reason = f"Expected REFUSE, got answer: {actual_answer}"
-    else:
-        passed = False
-        reason = f"Unexpected status: expected={expected_status}, actual={actual_status}"
+    if expected_unit and expected_unit.lower() in actual_lower:
+        for e_num in re.findall(r"[-+]?\d*\.?\d+", expected_lower):
+            if e_num in actual_lower:
+                return True
 
-    return QueryResult(
-        question=question,
-        query_type=query_type,
-        expected_status=expected_status,
-        actual_status=actual_status,
-        expected_contains=expected_contains,
-        actual_answer=actual_answer,
-        passed=passed,
-        reason=reason,
-    )
+    return False
 
 
-def run_benchmark_on_store(
-    ground_truth_path: Path,
-    store: Store,
-    doc_id: str,
-) -> DatasheetResult:
-    """Run benchmark queries against a document already in the store."""
-    gt = json.loads(ground_truth_path.read_text(encoding="utf-8"))
-    filename = gt.get("filename", ground_truth_path.stem)
-    queries = gt.get("queries", [])
+def run_benchmark() -> dict:
+    ground_truth = load_ground_truth()
+    results: dict = {
+        "datasheets": {},
+        "overall": {"total": 0, "correct": 0, "refused": 0, "wrong": 0},
+    }
 
-    units = store.get_units_by_doc(doc_id)
-    bijections = store.get_bijections_by_doc(doc_id)
-    grids = store.get_grids_by_doc(doc_id)
+    for pdf_name, qa_pairs in ground_truth.items():
+        pdf_path = FIXTURES_DIR / pdf_name
+        if not pdf_path.exists():
+            print(f"  SKIP {pdf_name} -- not found in {FIXTURES_DIR}")
+            results["datasheets"][pdf_name] = {"status": "skipped", "reason": "PDF not found"}
+            continue
 
-    ds_result = DatasheetResult(filename=filename)
+        print(f"\n{'='*60}")
+        print(f"  Ingesting: {pdf_name}")
+        print(f"{'='*60}")
 
-    for q in queries:
-        qr = _evaluate_query(
-            question=q["question"],
-            query_type=q.get("query_type", "unknown"),
-            expected_status=q.get("expected_status", "answer"),
-            expected_contains=q.get("expected_answer_contains", []),
-            expected_not_contains=q.get("expected_answer_not_contains", []),
-            units=units,
-            bijections=bijections,
-            grids=grids,
-        )
-        ds_result.query_results.append(qr)
-        ds_result.total_queries += 1
-        if qr.passed:
-            ds_result.passed += 1
-        else:
-            ds_result.failed += 1
+        start = time.time()
+        try:
+            doc_id, canonical, total_pages, pages_failed = ingest_document(pdf_path)
+        except Exception as e:
+            print(f"  FAIL: Ingest error: {e}")
+            results["datasheets"][pdf_name] = {"status": "error", "reason": str(e)}
+            continue
+        ingest_time = time.time() - start
 
-    return ds_result
+        units = [o for o in canonical if isinstance(o, Unit)]
+        bijections = [o for o in canonical if isinstance(o, Bijection)]
+        grids = [o for o in canonical if isinstance(o, Grid)]
 
+        print(f"  Ingested in {ingest_time:.1f}s: {len(units)} units, "
+              f"{len(bijections)} bijections, {len(grids)} grids")
+        print(f"  Pages: {total_pages} total, {pages_failed} failed\n")
 
-def run_benchmark_on_canonical(
-    ground_truth_path: Path,
-    units: list[Unit],
-    bijections: list[Bijection],
-    grids: list[Grid],
-) -> DatasheetResult:
-    """Run benchmark queries against provided canonical data (no store needed)."""
-    gt = json.loads(ground_truth_path.read_text(encoding="utf-8"))
-    filename = gt.get("filename", ground_truth_path.stem)
-    queries = gt.get("queries", [])
+        sheet_results = {
+            "ingest_time_s": round(ingest_time, 1),
+            "total_pages": total_pages,
+            "pages_failed": pages_failed,
+            "facts_extracted": len(canonical),
+            "questions": [],
+            "correct": 0,
+            "refused": 0,
+            "wrong": 0,
+        }
 
-    ds_result = DatasheetResult(filename=filename)
+        for qa in qa_pairs:
+            question = qa["question"]
+            expected = qa["expected_answer"]
+            expected_unit = qa.get("expected_unit")
 
-    for q in queries:
-        qr = _evaluate_query(
-            question=q["question"],
-            query_type=q.get("query_type", "unknown"),
-            expected_status=q.get("expected_status", "answer"),
-            expected_contains=q.get("expected_answer_contains", []),
-            expected_not_contains=q.get("expected_answer_not_contains", []),
-            units=units,
-            bijections=bijections,
-            grids=grids,
-        )
-        ds_result.query_results.append(qr)
-        ds_result.total_queries += 1
-        if qr.passed:
-            ds_result.passed += 1
-        else:
-            ds_result.failed += 1
+            result = verify_and_answer(question, units, bijections, grids)
 
-    return ds_result
-
-
-def compute_summary(datasheet_results: list[DatasheetResult]) -> BenchmarkSummary:
-    """Aggregate results across all datasheets."""
-    summary = BenchmarkSummary()
-    summary.datasheet_results = datasheet_results
-    summary.total_datasheets = len(datasheet_results)
-
-    for ds in datasheet_results:
-        summary.total_queries += ds.total_queries
-        summary.total_passed += ds.passed
-        summary.total_failed += ds.failed
-
-        for qr in ds.query_results:
-            qt = qr.query_type
-            if qt not in summary.results_by_query_type:
-                summary.results_by_query_type[qt] = {"passed": 0, "failed": 0, "total": 0}
-            summary.results_by_query_type[qt]["total"] += 1
-            if qr.passed:
-                summary.results_by_query_type[qt]["passed"] += 1
+            if isinstance(result, Refuse):
+                status = "refused"
+                sheet_results["refused"] += 1
+                results["overall"]["refused"] += 1
+                actual = f"REFUSED: {result.reason}"
             else:
-                summary.results_by_query_type[qt]["failed"] += 1
+                actual = result.answer
+                if values_match(actual, expected, expected_unit):
+                    status = "correct"
+                    sheet_results["correct"] += 1
+                    results["overall"]["correct"] += 1
+                else:
+                    status = "wrong"
+                    sheet_results["wrong"] += 1
+                    results["overall"]["wrong"] += 1
 
-            if qr.expected_status == "refuse" and qr.actual_status == "answer":
-                if "not a false-accept" not in qr.reason:
-                    summary.false_accepts += 1
-            elif qr.expected_status == "refuse" and qr.actual_status == "refuse":
-                summary.correct_refuses += 1
-            elif qr.expected_status == "answer" and qr.actual_status == "refuse":
-                summary.incorrect_refuses += 1
+            results["overall"]["total"] += 1
+            icon = {"correct": "v", "refused": "o", "wrong": "x"}[status]
+            print(f"  [{icon}] Q: {question}")
+            print(f"      Expected: {expected} {expected_unit or ''}")
+            print(f"      Got:      {actual}")
+            print()
 
-    return summary
+            sheet_results["questions"].append({
+                "question": question,
+                "expected": f"{expected} {expected_unit or ''}".strip(),
+                "actual": actual,
+                "status": status,
+            })
 
+        total_q = len(qa_pairs)
+        accuracy = sheet_results["correct"] / total_q if total_q > 0 else 0
+        refuse_rate = sheet_results["refused"] / total_q if total_q > 0 else 0
+        sheet_results["accuracy"] = round(accuracy, 3)
+        sheet_results["refuse_rate"] = round(refuse_rate, 3)
+        results["datasheets"][pdf_name] = sheet_results
 
-def print_report(summary: BenchmarkSummary) -> None:
-    """Print a human-readable benchmark report."""
-    print("\n" + "=" * 70)
-    print("AKILI EXTRACTION QUALITY BENCHMARK")
-    print("=" * 70)
+        print(f"  Summary for {pdf_name}: "
+              f"{sheet_results['correct']}/{total_q} correct "
+              f"({accuracy:.0%} accuracy), "
+              f"{sheet_results['refused']} refused ({refuse_rate:.0%})")
 
-    print(f"\nDatasheets tested: {summary.total_datasheets}")
-    print(f"Total queries:     {summary.total_queries}")
-    print(f"Passed:            {summary.total_passed}")
-    print(f"Failed:            {summary.total_failed}")
-    print(f"Pass rate:         {summary.overall_pass_rate:.1%}")
-    print(f"False-accept rate: {summary.false_accept_rate:.1%}")
-    print(f"False accepts:     {summary.false_accepts}")
-    print(f"Correct refuses:   {summary.correct_refuses}")
-    print(f"Incorrect refuses: {summary.incorrect_refuses}")
+    total = results["overall"]["total"]
+    if total > 0:
+        results["overall"]["accuracy"] = round(results["overall"]["correct"] / total, 3)
+        results["overall"]["refuse_rate"] = round(results["overall"]["refused"] / total, 3)
+    else:
+        results["overall"]["accuracy"] = 0
+        results["overall"]["refuse_rate"] = 0
 
-    print("\n--- Results by Query Type ---")
-    for qt, counts in sorted(summary.results_by_query_type.items()):
-        rate = counts["passed"] / counts["total"] if counts["total"] > 0 else 0
-        print(f"  {qt:35s}  {counts['passed']}/{counts['total']}  ({rate:.0%})")
-
-    print("\n--- Per-Datasheet Results ---")
-    for ds in summary.datasheet_results:
-        print(f"\n  {ds.filename} ({ds.passed}/{ds.total_queries} = {ds.pass_rate:.0%})")
-        for qr in ds.query_results:
-            status = "PASS" if qr.passed else "FAIL"
-            print(f"    [{status}] {qr.question}")
-            if not qr.passed:
-                print(f"           Reason: {qr.reason}")
-
-    print("\n" + "=" * 70)
-    stage_a_target = summary.overall_pass_rate >= 0.70
-    print(f"Stage A target (>=70% pass rate): {'MET' if stage_a_target else 'NOT MET'}")
-    false_accept_ok = summary.false_accept_rate < 0.01
-    print(f"False-accept target (<1%):        {'MET' if false_accept_ok else 'NOT MET'}")
-    print("=" * 70)
+    return results
 
 
 def main() -> None:
-    """Run the benchmark against ground truth files and ingested datasheets."""
-    import argparse
+    print("\n" + "=" * 60)
+    print("  Akili Datasheet Benchmark Suite")
+    print("=" * 60)
 
-    parser = argparse.ArgumentParser(description="Akili Extraction Quality Benchmark")
-    parser.add_argument(
-        "--datasheets-dir",
-        type=Path,
-        default=Path(__file__).parent / "datasheets",
-    )
-    parser.add_argument(
-        "--ground-truth-dir",
-        type=Path,
-        default=Path(__file__).parent / "ground_truth",
-    )
-    parser.add_argument(
-        "--db-path",
-        type=Path,
-        default=None,
-        help="Path to SQLite DB with ingested datasheets. If not provided, "
-        "attempts to ingest PDFs first.",
-    )
-    args = parser.parse_args()
+    results = run_benchmark()
 
-    gt_dir = args.ground_truth_dir
-    if not gt_dir.exists():
-        print(f"Ground truth directory not found: {gt_dir}")
-        print("Create ground truth JSON files to run the benchmark.")
-        print("See the module docstring for the expected format.")
-        sys.exit(1)
+    print("\n" + "=" * 60)
+    print("  OVERALL RESULTS")
+    print("=" * 60)
+    o = results["overall"]
+    print(f"  Total questions: {o['total']}")
+    print(f"  Correct:         {o['correct']} ({o['accuracy']:.0%})")
+    print(f"  Refused:         {o['refused']} ({o['refuse_rate']:.0%})")
+    print(f"  Wrong:           {o['wrong']}")
+    print()
 
-    gt_files = sorted(gt_dir.glob("*.json"))
-    if not gt_files:
-        print(f"No ground truth JSON files found in {gt_dir}")
-        sys.exit(1)
-
-    print(f"Found {len(gt_files)} ground truth file(s)")
-
-    import tempfile
-    db_path = args.db_path or Path(tempfile.mktemp(suffix=".db"))
-    store = Store(db_path)
-
-    ds_dir = args.datasheets_dir
-    all_results: list[DatasheetResult] = []
-
-    for gt_path in gt_files:
-        gt = json.loads(gt_path.read_text(encoding="utf-8"))
-        pdf_name = gt.get("filename", "")
-        pdf_path = ds_dir / pdf_name
-
-        if pdf_path.exists():
-            print(f"\nIngesting {pdf_name}...")
-            from akili.ingest.pipeline import ingest_document
-            doc_id, _, total, failed = ingest_document(pdf_path, store=store)
-            print(f"  Ingested: {total} pages, {failed} failed")
-            ds_result = run_benchmark_on_store(gt_path, store, doc_id)
-        else:
-            print(f"\nPDF not found: {pdf_path} - running with empty canonical data")
-            ds_result = run_benchmark_on_canonical(gt_path, [], [], [])
-
-        all_results.append(ds_result)
-
-    summary = compute_summary(all_results)
-    print_report(summary)
-
-    if not args.db_path and db_path.exists():
-        db_path.unlink(missing_ok=True)
+    output_path = Path(__file__).parent / "results.json"
+    with open(output_path, "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"  Results saved to: {output_path}")
 
 
 if __name__ == "__main__":

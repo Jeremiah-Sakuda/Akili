@@ -1,0 +1,63 @@
+{
+  "_comment": "Ground truth Q&A pairs for benchmark datasheets. Each entry maps a PDF filename to 10 Q&A pairs. Place corresponding PDFs in tests/fixtures/.",
+  "LM7805.pdf": [
+    {"question": "What is the output voltage?", "expected_answer": "5", "expected_unit": "V"},
+    {"question": "What is the maximum input voltage?", "expected_answer": "35", "expected_unit": "V"},
+    {"question": "What is the dropout voltage?", "expected_answer": "2", "expected_unit": "V"},
+    {"question": "What is the maximum output current?", "expected_answer": "1.5", "expected_unit": "A"},
+    {"question": "What is the operating temperature range?", "expected_answer": "0 to 125", "expected_unit": "°C"},
+    {"question": "What is the thermal resistance junction to case?", "expected_answer": "5", "expected_unit": "°C/W"},
+    {"question": "What is the line regulation?", "expected_answer": "4", "expected_unit": "mV"},
+    {"question": "What is the quiescent current?", "expected_answer": "6", "expected_unit": "mA"},
+    {"question": "What package type is available?", "expected_answer": "TO-220", "expected_unit": null},
+    {"question": "What is the maximum power dissipation?", "expected_answer": "15", "expected_unit": "W"}
+  ],
+  "NE555.pdf": [
+    {"question": "What is the supply voltage range?", "expected_answer": "4.5 to 16", "expected_unit": "V"},
+    {"question": "What is the maximum output current?", "expected_answer": "200", "expected_unit": "mA"},
+    {"question": "What is the operating temperature range?", "expected_answer": "0 to 70", "expected_unit": "°C"},
+    {"question": "What is the trigger voltage?", "expected_answer": "1.67", "expected_unit": "V"},
+    {"question": "What is the threshold voltage?", "expected_answer": "3.33", "expected_unit": "V"},
+    {"question": "What is the timing accuracy?", "expected_answer": "1", "expected_unit": "%"},
+    {"question": "What is the supply current?", "expected_answer": "3", "expected_unit": "mA"},
+    {"question": "What package type is available?", "expected_answer": "DIP-8", "expected_unit": null},
+    {"question": "What is the maximum clock frequency?", "expected_answer": "500", "expected_unit": "kHz"},
+    {"question": "What is the reset voltage?", "expected_answer": "0.7", "expected_unit": "V"}
+  ],
+  "LM358.pdf": [
+    {"question": "What is the supply voltage range?", "expected_answer": "3 to 32", "expected_unit": "V"},
+    {"question": "What is the input offset voltage?", "expected_answer": "2", "expected_unit": "mV"},
+    {"question": "What is the input bias current?", "expected_answer": "45", "expected_unit": "nA"},
+    {"question": "What is the open loop gain?", "expected_answer": "100", "expected_unit": "dB"},
+    {"question": "What is the unity gain bandwidth?", "expected_answer": "1", "expected_unit": "MHz"},
+    {"question": "What is the slew rate?", "expected_answer": "0.3", "expected_unit": "V/µs"},
+    {"question": "What is the output current?", "expected_answer": "20", "expected_unit": "mA"},
+    {"question": "What is the operating temperature range?", "expected_answer": "0 to 70", "expected_unit": "°C"},
+    {"question": "What package type is available?", "expected_answer": "DIP-8", "expected_unit": null},
+    {"question": "What is the power dissipation?", "expected_answer": "830", "expected_unit": "mW"}
+  ],
+  "STM32F103.pdf": [
+    {"question": "What is the maximum clock frequency?", "expected_answer": "72", "expected_unit": "MHz"},
+    {"question": "What is the supply voltage range?", "expected_answer": "2.0 to 3.6", "expected_unit": "V"},
+    {"question": "What is the flash memory size?", "expected_answer": "64", "expected_unit": "KB"},
+    {"question": "How many GPIO pins are available?", "expected_answer": "37", "expected_unit": null},
+    {"question": "What is the operating temperature range?", "expected_answer": "-40 to 85", "expected_unit": "°C"},
+    {"question": "What is the ADC resolution?", "expected_answer": "12", "expected_unit": "bit"},
+    {"question": "How many USART interfaces?", "expected_answer": "3", "expected_unit": null},
+    {"question": "What is the SRAM size?", "expected_answer": "20", "expected_unit": "KB"},
+    {"question": "What package type is available?", "expected_answer": "LQFP-48", "expected_unit": null},
+    {"question": "What is the maximum power consumption?", "expected_answer": "36", "expected_unit": "mA"}
+  ],
+  "ATmega328P.pdf": [
+    {"question": "What is the maximum clock frequency?", "expected_answer": "20", "expected_unit": "MHz"},
+    {"question": "What is the supply voltage range?", "expected_answer": "1.8 to 5.5", "expected_unit": "V"},
+    {"question": "What is the flash memory size?", "expected_answer": "32", "expected_unit": "KB"},
+    {"question": "How many GPIO pins are available?", "expected_answer": "23", "expected_unit": null},
+    {"question": "What is the operating temperature range?", "expected_answer": "-40 to 85", "expected_unit": "°C"},
+    {"question": "What is the ADC resolution?", "expected_answer": "10", "expected_unit": "bit"},
+    {"question": "How many timers are available?", "expected_answer": "3", "expected_unit": null},
+    {"question": "What is the SRAM size?", "expected_answer": "2", "expected_unit": "KB"},
+    {"question": "What is the EEPROM size?", "expected_answer": "1", "expected_unit": "KB"},
+    {"question": "What package type is available?", "expected_answer": "DIP-28", "expected_unit": null}
+  ]
+}

@@ -56,3 +56,7 @@ exclude = [".git", "__pycache__", ".venv", "build", "dist"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: live Gemini API tests (require GOOGLE_API_KEY)",
+]

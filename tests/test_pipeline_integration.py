@@ -104,7 +104,7 @@ class TestPipelineIntegration:
 
         import os
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.ingest.pipeline._PAGE_DELAY", 0):
+            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 doc_id, canonical, total_pages, pages_failed = ingest_document(
                     synthetic_pdf, store=tmp_store
                 )
@@ -135,7 +135,7 @@ class TestPipelineIntegration:
 
         import os
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.ingest.pipeline._PAGE_DELAY", 0):
+            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 doc_id, _, _, _ = ingest_document(
                     synthetic_pdf, store=tmp_store
                 )
@@ -164,7 +164,7 @@ class TestPipelineIntegration:
 
         import os
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.ingest.pipeline._PAGE_DELAY", 0):
+            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 doc_id, canonical, _, _ = ingest_document(synthetic_pdf, store=tmp_store)
 
         units = [o for o in canonical if isinstance(o, Unit)]
@@ -193,7 +193,7 @@ class TestPipelineIntegration:
 
         import os
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.ingest.pipeline._PAGE_DELAY", 0):
+            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 doc_id, canonical, total_pages, pages_failed = ingest_document(
                     synthetic_pdf, store=tmp_store
                 )
@@ -218,7 +218,7 @@ class TestPipelineIntegration:
 
         import os
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.ingest.pipeline._PAGE_DELAY", 0):
+            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 ingest_document(
                     synthetic_pdf,
                     store=tmp_store,
@@ -249,8 +249,8 @@ class TestPipelineIntegration:
 
         import os
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.ingest.pipeline._PAGE_DELAY", 0):
-                with patch("akili.ingest.pipeline._429_COOLDOWN", 0):
+            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
+                with patch("akili.config.GEMINI_429_COOLDOWN", 0):
                     doc_id, canonical, total_pages, pages_failed = ingest_document(
                         synthetic_pdf, store=tmp_store
                     )

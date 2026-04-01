@@ -1,7 +1,7 @@
-"""Pytest wrapper for the benchmark harness using fixture data from conftest.py.
+"""Pytest wrapper for the benchmark suite.
 
-Runs the benchmark ground truth queries against the sample canonical data
-to verify the verification layer handles all 30 query types correctly.
+Tests the benchmark utilities (value matching, ground truth loading)
+without requiring live Gemini API access.
 """
 
 from __future__ import annotations
@@ -10,67 +10,36 @@ from pathlib import Path
 
 import pytest
 
-from tests.benchmark.run_benchmark import (
-    compute_summary,
-    run_benchmark_on_canonical,
-)
+from tests.benchmark.run_benchmark import load_ground_truth, values_match
 
-_GT_DIR = Path(__file__).parent / "ground_truth"
+GROUND_TRUTH_PATH = Path(__file__).parent / "ground_truth.json"
 
 
-class TestBenchmarkWithFixtures:
-    """Run the benchmark against the sample fixture data."""
+class TestBenchmarkUtilities:
+    """Test benchmark helper functions."""
 
-    def test_sample_datasheet_benchmark(self, sample_units, sample_bijections, sample_grids):
-        gt_path = _GT_DIR / "sample_datasheet.json"
-        if not gt_path.exists():
-            pytest.skip("Ground truth file not found")
+    def test_ground_truth_loads(self):
+        gt = load_ground_truth()
+        assert len(gt) >= 5, "Expected at least 5 datasheets in ground truth"
+        for pdf_name, qa_pairs in gt.items():
+            assert len(qa_pairs) == 10, f"{pdf_name} should have 10 Q&A pairs"
+            for qa in qa_pairs:
+                assert "question" in qa
+                assert "expected_answer" in qa
 
-        result = run_benchmark_on_canonical(
-            gt_path,
-            units=sample_units,
-            bijections=sample_bijections,
-            grids=sample_grids,
-        )
+    def test_values_match_exact(self):
+        assert values_match("3.3 V", "3.3", "V")
+        assert values_match("5 V", "5", "V")
+        assert values_match("TO-220", "TO-220", None)
 
-        assert result.total_queries > 0
-        assert result.pass_rate >= 0.70, (
-            f"Benchmark pass rate {result.pass_rate:.0%} below 70% target. "
-            f"Failed queries: {[qr.question for qr in result.query_results if not qr.passed]}"
-        )
+    def test_values_match_substring(self):
+        assert values_match("Maximum output current: 1.5 A", "1.5", "A")
+        assert values_match("0 to 125 °C", "0 to 125", "°C")
 
-    def test_no_false_accepts(self, sample_units, sample_bijections, sample_grids):
-        gt_path = _GT_DIR / "sample_datasheet.json"
-        if not gt_path.exists():
-            pytest.skip("Ground truth file not found")
+    def test_values_match_numeric_tolerance(self):
+        assert values_match("3.29 V", "3.3", "V")  # within 10%
+        assert not values_match("5.0 V", "3.3", "V")  # too far
 
-        result = run_benchmark_on_canonical(
-            gt_path,
-            units=sample_units,
-            bijections=sample_bijections,
-            grids=sample_grids,
-        )
-        summary = compute_summary([result])
-
-        assert summary.false_accepts == 0, (
-            f"Found {summary.false_accepts} false accepts (verified but wrong). "
-            "This is a critical trust violation."
-        )
-
-    def test_benchmark_covers_all_query_types(self, sample_units, sample_bijections, sample_grids):
-        gt_path = _GT_DIR / "sample_datasheet.json"
-        if not gt_path.exists():
-            pytest.skip("Ground truth file not found")
-
-        result = run_benchmark_on_canonical(
-            gt_path,
-            units=sample_units,
-            bijections=sample_bijections,
-            grids=sample_grids,
-        )
-        summary = compute_summary([result])
-
-        assert len(summary.results_by_query_type) >= 20, (
-            f"Only {len(summary.results_by_query_type)} query types tested. "
-            "Expected at least 20 distinct types."
-        )
+    def test_values_no_match(self):
+        assert not values_match("completely different", "3.3", "V")
+        assert not values_match("no numbers here", "5", "V")

@@ -89,7 +89,7 @@ class TestPageClassifier:
         result = classify_page(b"fake_image_bytes")
         assert result == "other"
 
-    @patch("akili.ingest.page_classifier._CLASSIFY_ENABLED", True)
+    @patch("akili.config.PAGE_CLASSIFY_ENABLED", True)
     @patch("akili.ingest.page_classifier.genai")
     def test_classify_returns_valid_type(self, mock_genai):
         mock_response = MagicMock()
@@ -103,7 +103,7 @@ class TestPageClassifier:
             result = classify_page(b"fake_image_bytes")
         assert result == "electrical_specs"
 
-    @patch("akili.ingest.page_classifier._CLASSIFY_ENABLED", True)
+    @patch("akili.config.PAGE_CLASSIFY_ENABLED", True)
     @patch("akili.ingest.page_classifier.genai")
     def test_classify_invalid_response_returns_other(self, mock_genai):
         mock_response = MagicMock()
@@ -120,7 +120,7 @@ class TestPageClassifier:
     def test_classify_no_api_key_returns_other(self):
         import os
         with patch.dict(os.environ, {}, clear=True):
-            with patch("akili.ingest.page_classifier._CLASSIFY_ENABLED", True):
+            with patch("akili.config.PAGE_CLASSIFY_ENABLED", True):
                 result = classify_page(b"fake_image_bytes")
         assert result == "other"
 
