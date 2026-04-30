@@ -194,8 +194,35 @@ class PostgresStore(BaseStore):
                         details_json TEXT,
                         created_at TIMESTAMPTZ DEFAULT NOW()
                     );
+                    CREATE TABLE IF NOT EXISTS public_corpus (
+                        content_hash TEXT PRIMARY KEY,
+                        mpn TEXT NOT NULL,
+                        chip_name TEXT NOT NULL,
+                        datasheet_url TEXT,
+                        canonical_data JSONB,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                    CREATE TABLE IF NOT EXISTS shared_answers (
+                        question_id TEXT PRIMARY KEY,
+                        doc_id TEXT NOT NULL,
+                        question TEXT NOT NULL,
+                        answer TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'VERIFIED',
+                        confidence DOUBLE PRECISION,
+                        proof_data JSONB,
+                        source_page INTEGER,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
                     CREATE INDEX IF NOT EXISTS idx_audit_log_doc ON audit_log(doc_id);
                     CREATE INDEX IF NOT EXISTS idx_audit_log_org ON audit_log(org_id);
+                    CREATE INDEX IF NOT EXISTS idx_corpus_mpn ON public_corpus(mpn);
+                    CREATE INDEX IF NOT EXISTS idx_corpus_chip ON public_corpus(chip_name);
+                    CREATE INDEX IF NOT EXISTS idx_shared_doc ON shared_answers(doc_id);
+                    CREATE INDEX IF NOT EXISTS idx_units_doc_id ON units(doc_id);
+                    CREATE INDEX IF NOT EXISTS idx_bijections_doc_id ON bijections(doc_id);
+                    CREATE INDEX IF NOT EXISTS idx_grids_doc_id ON grids(doc_id);
+                    CREATE INDEX IF NOT EXISTS idx_ranges_doc_id ON ranges(doc_id);
+                    CREATE INDEX IF NOT EXISTS idx_conditional_units_doc_id ON conditional_units(doc_id);
                 """)
 
     def _audit(self, action: str, doc_id: str | None, actor: str | None = None, details: dict | None = None) -> None:
@@ -227,6 +254,7 @@ class PostgresStore(BaseStore):
         grids: list[Grid],
         ranges: list[Range] | None = None,
         conditional_units: list[ConditionalUnit] | None = None,
+        uploaded_by: str | None = None,
     ) -> None:
         self.add_document(doc_id, filename, page_count)
         with self._conn() as conn:
@@ -302,7 +330,7 @@ class PostgresStore(BaseStore):
                          cu.value, cu.unit, cu.condition_type, cu.condition_value,
                          cu.derating, cu.context, _point_dict(cu.origin), _bbox_dict(cu.bbox)),
                     )
-        self._audit("store_canonical", doc_id, details={
+        self._audit("store_canonical", doc_id, actor=uploaded_by, details={
             "units": len(units), "bijections": len(bijections), "grids": len(grids),
             "ranges": len(ranges or []), "conditional_units": len(conditional_units or []),
         })
@@ -443,10 +471,16 @@ class PostgresStore(BaseStore):
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT d.doc_id, d.filename, d.page_count, d.created_at,
-                       (SELECT COUNT(*) FROM units u WHERE u.doc_id = d.doc_id AND u.org_id = d.org_id),
-                       (SELECT COUNT(*) FROM bijections b WHERE b.doc_id = d.doc_id AND b.org_id = d.org_id),
-                       (SELECT COUNT(*) FROM grids g WHERE g.doc_id = d.doc_id AND g.org_id = d.org_id)
-                       FROM documents d WHERE d.org_id = %s""",
+                       COUNT(DISTINCT u.id) as units_count,
+                       COUNT(DISTINCT b.id) as bijections_count,
+                       COUNT(DISTINCT g.id) as grids_count
+                       FROM documents d
+                       LEFT JOIN units u ON u.doc_id = d.doc_id AND u.org_id = d.org_id
+                       LEFT JOIN bijections b ON b.doc_id = d.doc_id AND b.org_id = d.org_id
+                       LEFT JOIN grids g ON g.doc_id = d.doc_id AND g.org_id = d.org_id
+                       WHERE d.org_id = %s
+                       GROUP BY d.doc_id, d.filename, d.page_count, d.created_at
+                       ORDER BY d.created_at DESC""",
                     (self._org_id,),
                 )
                 rows = cur.fetchall()
@@ -485,3 +519,145 @@ class PostgresStore(BaseStore):
             }
             for r in rows
         ]
+
+    # -------------------------------------------------------------------------
+    # Public Corpus methods (FR-CORP-1, FR-CORP-2)
+    # -------------------------------------------------------------------------
+
+    def get_corpus_entry(self, content_hash: str) -> dict | None:
+        """Look up a corpus entry by PDF content hash."""
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT content_hash, mpn, chip_name, datasheet_url, canonical_data, created_at "
+                    "FROM public_corpus WHERE content_hash = %s",
+                    (content_hash,),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "content_hash": row[0],
+            "mpn": row[1],
+            "chip_name": row[2],
+            "datasheet_url": row[3],
+            "canonical_data": row[4],
+            "created_at": str(row[5]) if row[5] else None,
+        }
+
+    def get_corpus_by_mpn(self, mpn: str) -> dict | None:
+        """Look up a corpus entry by manufacturer part number."""
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT content_hash, mpn, chip_name, datasheet_url, canonical_data, created_at "
+                    "FROM public_corpus WHERE LOWER(mpn) = LOWER(%s)",
+                    (mpn,),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "content_hash": row[0],
+            "mpn": row[1],
+            "chip_name": row[2],
+            "datasheet_url": row[3],
+            "canonical_data": row[4],
+            "created_at": str(row[5]) if row[5] else None,
+        }
+
+    def store_corpus_entry(
+        self,
+        content_hash: str,
+        mpn: str,
+        chip_name: str,
+        canonical_data: dict,
+        datasheet_url: str | None = None,
+    ) -> None:
+        """Store a pre-canonicalized corpus entry."""
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO public_corpus (content_hash, mpn, chip_name, datasheet_url, canonical_data)
+                       VALUES (%s, %s, %s, %s, %s)
+                       ON CONFLICT (content_hash) DO UPDATE SET
+                       mpn=EXCLUDED.mpn, chip_name=EXCLUDED.chip_name,
+                       datasheet_url=EXCLUDED.datasheet_url, canonical_data=EXCLUDED.canonical_data""",
+                    (content_hash, mpn, chip_name, datasheet_url, json.dumps(canonical_data)),
+                )
+        self._audit("store_corpus", None, details={"mpn": mpn, "chip_name": chip_name})
+
+    def list_corpus(self) -> list[dict]:
+        """List all public corpus entries (FR-CORP-3)."""
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT content_hash, mpn, chip_name, datasheet_url, created_at "
+                    "FROM public_corpus ORDER BY chip_name ASC",
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "content_hash": r[0],
+                "mpn": r[1],
+                "chip_name": r[2],
+                "datasheet_url": r[3],
+                "created_at": str(r[4]) if r[4] else None,
+            }
+            for r in rows
+        ]
+
+    # -------------------------------------------------------------------------
+    # Shared Answers methods (FR-SHARE-1, FR-SHARE-2)
+    # -------------------------------------------------------------------------
+
+    def store_shared_answer(
+        self,
+        question_id: str,
+        doc_id: str,
+        question: str,
+        answer: str,
+        status: str = "VERIFIED",
+        confidence: float | None = None,
+        proof_data: dict | None = None,
+        source_page: int | None = None,
+    ) -> None:
+        """Store a shared answer for permalink access."""
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO shared_answers
+                       (question_id, doc_id, question, answer, status, confidence, proof_data, source_page)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (question_id) DO UPDATE SET
+                       answer=EXCLUDED.answer, status=EXCLUDED.status,
+                       confidence=EXCLUDED.confidence, proof_data=EXCLUDED.proof_data""",
+                    (question_id, doc_id, question, answer, status, confidence,
+                     json.dumps(proof_data) if proof_data else None, source_page),
+                )
+        self._audit("share_answer", doc_id, details={"question_id": question_id})
+
+    def get_shared_answer(self, question_id: str) -> dict | None:
+        """Get a shared answer by question ID (public, no auth)."""
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT question_id, doc_id, question, answer, status, confidence, "
+                    "proof_data, source_page, created_at "
+                    "FROM shared_answers WHERE question_id = %s",
+                    (question_id,),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "question_id": row[0],
+            "doc_id": row[1],
+            "question": row[2],
+            "answer": row[3],
+            "status": row[4],
+            "confidence": row[5],
+            "proof_data": row[6],
+            "source_page": row[7],
+            "created_at": str(row[8]) if row[8] else None,
+        }
