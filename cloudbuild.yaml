@@ -1,0 +1,163 @@
+# Google Cloud Build configuration for AKILI
+# Builds and deploys both backend (API) and frontend to Cloud Run
+#
+# Required substitutions (set in Cloud Build trigger or command line):
+#   _REGION: Cloud Run region (e.g., us-central1)
+#   _API_SERVICE: Backend service name (e.g., akili-api)
+#   _FRONTEND_SERVICE: Frontend service name (e.g., akili-frontend)
+#   _VITE_API_URL: Backend URL for frontend (e.g., https://akili-api-xxx.run.app)
+#
+# Required secrets (configured in Secret Manager):
+#   GOOGLE_API_KEY: Gemini API key
+#   DATABASE_URL: PostgreSQL connection string
+#   FIREBASE_PROJECT_ID: Firebase project for auth
+#
+# Usage:
+#   gcloud builds submit --config=cloudbuild.yaml \
+#     --substitutions=_REGION=us-central1,_API_SERVICE=akili-api,_FRONTEND_SERVICE=akili-frontend
+
+substitutions:
+  _REGION: us-central1
+  _API_SERVICE: akili-api
+  _FRONTEND_SERVICE: akili-frontend
+  _VITE_API_URL: ''
+
+steps:
+  # ============================================================================
+  # Backend (API)
+  # ============================================================================
+
+  # Build backend Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-api'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_API_SERVICE}:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_API_SERVICE}:latest'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+
+  # Push backend image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-api'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_API_SERVICE}:$COMMIT_SHA'
+    waitFor: ['build-api']
+
+  # Deploy backend to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-api'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_API_SERVICE}'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/${_API_SERVICE}:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '300'
+      - '--concurrency'
+      - '80'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '10'
+      - '--set-secrets'
+      - 'GOOGLE_API_KEY=GOOGLE_API_KEY:latest,DATABASE_URL=DATABASE_URL:latest,FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest'
+      - '--set-env-vars'
+      - 'AKILI_REQUIRE_AUTH=1,AKILI_RATE_LIMIT=1'
+    waitFor: ['push-api']
+
+  # ============================================================================
+  # Frontend
+  # ============================================================================
+
+  # Build frontend Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-frontend'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_FRONTEND_SERVICE}:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_FRONTEND_SERVICE}:latest'
+      - '-f'
+      - 'frontend/Dockerfile.prod'
+      - '--build-arg'
+      - 'VITE_API_URL=${_VITE_API_URL}'
+      - '--build-arg'
+      - 'VITE_FIREBASE_API_KEY=${_VITE_FIREBASE_API_KEY}'
+      - '--build-arg'
+      - 'VITE_FIREBASE_AUTH_DOMAIN=${_VITE_FIREBASE_AUTH_DOMAIN}'
+      - '--build-arg'
+      - 'VITE_FIREBASE_PROJECT_ID=${_VITE_FIREBASE_PROJECT_ID}'
+      - '--build-arg'
+      - 'VITE_FIREBASE_STORAGE_BUCKET=${_VITE_FIREBASE_STORAGE_BUCKET}'
+      - '--build-arg'
+      - 'VITE_FIREBASE_MESSAGING_SENDER_ID=${_VITE_FIREBASE_MESSAGING_SENDER_ID}'
+      - '--build-arg'
+      - 'VITE_FIREBASE_APP_ID=${_VITE_FIREBASE_APP_ID}'
+      - '--build-arg'
+      - 'VITE_FIREBASE_MEASUREMENT_ID=${_VITE_FIREBASE_MEASUREMENT_ID}'
+      - 'frontend'
+    waitFor: ['-']  # Start immediately, parallel with backend
+
+  # Push frontend image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-frontend'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_FRONTEND_SERVICE}:$COMMIT_SHA'
+    waitFor: ['build-frontend']
+
+  # Deploy frontend to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-frontend'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_FRONTEND_SERVICE}'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/${_FRONTEND_SERVICE}:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '256Mi'
+      - '--cpu'
+      - '1'
+      - '--concurrency'
+      - '200'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '5'
+    waitFor: ['push-frontend']
+
+images:
+  - 'gcr.io/$PROJECT_ID/${_API_SERVICE}:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/${_API_SERVICE}:latest'
+  - 'gcr.io/$PROJECT_ID/${_FRONTEND_SERVICE}:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/${_FRONTEND_SERVICE}:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+timeout: '1200s'
