@@ -243,13 +243,13 @@ if hasattr(limiter, "init_app"):
 # Include routers
 # ---------------------------------------------------------------------------
 
-from akili.api.routers.documents import router as documents_router
-from akili.api.routers.ingest import router as ingest_router
-from akili.api.routers.query import router as query_router
-from akili.api.routers.corrections import router as corrections_router
-from akili.api.routers.compare import router as compare_router
-from akili.api.routers.library import router as library_router
-from akili.api.routers.share import router as share_router
+from akili.api.routers.documents import router as documents_router  # noqa: E402
+from akili.api.routers.ingest import router as ingest_router  # noqa: E402
+from akili.api.routers.query import router as query_router  # noqa: E402
+from akili.api.routers.corrections import router as corrections_router  # noqa: E402
+from akili.api.routers.compare import router as compare_router  # noqa: E402
+from akili.api.routers.library import router as library_router  # noqa: E402
+from akili.api.routers.share import router as share_router  # noqa: E402
 
 app.include_router(documents_router)
 app.include_router(ingest_router)

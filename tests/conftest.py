@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from akili.canonical import Bijection, ConditionalUnit, Grid, Range, Unit
-from akili.canonical.models import BBox, GridCell, Point
+from akili.canonical import Bijection, Grid, Unit
+from akili.canonical.models import GridCell, Point
 from akili.store.repository import Store
 
 

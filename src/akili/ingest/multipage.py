@@ -18,7 +18,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from akili.canonical import Bijection, Grid, Unit
-from akili.canonical.models import BBox, GridCell, Point
+from akili.canonical.models import BBox, GridCell
 
 logger = logging.getLogger(__name__)
 

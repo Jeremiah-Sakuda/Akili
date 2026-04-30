@@ -1,5 +1,12 @@
 import { useCallback, useRef, useEffect } from 'react';
 
+// Google Analytics gtag type declaration
+declare global {
+  interface Window {
+    gtag?: (command: string, action: string, params?: Record<string, unknown>) => void;
+  }
+}
+
 const STORAGE_KEY_FIRST_VISIT = 'akili-first-visit-ts';
 const STORAGE_KEY_FIRST_ANSWER = 'akili-first-answer-ts';
 const STORAGE_KEY_FIRST_QUERY_USED = 'akili-first-query-used';
@@ -41,8 +48,8 @@ export function useOnboardingMetrics() {
         localStorage.setItem(STORAGE_KEY_FIRST_ANSWER, elapsed.toString());
 
         // Send to analytics if available
-        if (typeof (window as any).gtag === 'function') {
-          (window as any).gtag('event', 'time_to_first_answer', {
+        if (typeof window.gtag === 'function') {
+          window.gtag('event', 'time_to_first_answer', {
             value: elapsedSeconds,
             event_category: 'onboarding',
           });
@@ -73,8 +80,8 @@ export function useOnboardingMetrics() {
     // Log to analytics
     console.log('[Onboarding] First free query used');
 
-    if (typeof (window as any).gtag === 'function') {
-      (window as any).gtag('event', 'first_query_used', {
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'first_query_used', {
         event_category: 'onboarding',
       });
     }
@@ -89,8 +96,8 @@ export function useOnboardingMetrics() {
 
     console.log('[Onboarding] Query path:', pathType, 'Duration:', durationSeconds, 'seconds');
 
-    if (typeof (window as any).gtag === 'function') {
-      (window as any).gtag('event', 'query_path', {
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'query_path', {
         path_type: pathType,
         duration_seconds: durationSeconds,
         event_category: 'performance',

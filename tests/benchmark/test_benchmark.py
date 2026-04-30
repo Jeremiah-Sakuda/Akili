@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from tests.benchmark.run_benchmark import load_ground_truth, values_match
 

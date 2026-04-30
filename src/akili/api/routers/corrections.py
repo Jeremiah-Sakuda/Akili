@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -32,9 +32,6 @@ class CorrectionRequest(BaseModel):
     corrected_value: str | None = Field(None, max_length=10000)
     corrected_by: str | None = Field(None, max_length=500)
     notes: str | None = Field(None, max_length=5000)
-
-
-from fastapi import HTTPException
 
 
 @router.post("/corrections")

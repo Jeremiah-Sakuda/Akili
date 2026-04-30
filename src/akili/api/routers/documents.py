@@ -7,12 +7,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from akili.api.auth import get_current_user, is_auth_required
 from akili.api.deps import docs_dir, get_store, validate_doc_id
-from akili.canonical import Bijection, Grid, Unit
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +44,6 @@ async def delete_document(
     except OSError:
         logger.warning("Failed to delete PDF file for doc_id=%s", doc_id)
     return JSONResponse(content={"doc_id": doc_id, "deleted": True})
-
-
-from fastapi import HTTPException
 
 
 @router.get("/documents/{doc_id}/file")

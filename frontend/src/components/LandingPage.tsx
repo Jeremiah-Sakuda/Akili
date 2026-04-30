@@ -1,7 +1,8 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useScrollReveal } from '../hooks/useReveal';
-import { BenchmarkTable, DEFAULT_BENCHMARK_DATA } from './BenchmarkTable';
+import { BenchmarkTable } from './BenchmarkTable';
+import { DEFAULT_BENCHMARK_DATA } from './benchmarkData';
 
 function RevealSection({ children, className = '', id, ariaLabel }: {
   children: React.ReactNode; className?: string; id?: string; ariaLabel?: string;

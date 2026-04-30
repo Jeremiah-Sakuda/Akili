@@ -50,7 +50,7 @@ const SharedAnswer: React.FC = () => {
 
         const result = await response.json();
         setData(result);
-      } catch (err) {
+      } catch {
         setError('Failed to load the shared answer.');
       } finally {
         setLoading(false);

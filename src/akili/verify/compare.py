@@ -11,11 +11,10 @@ All queries are executed via SQL JOINs across doc_id — no graph database neede
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 
 from akili.canonical import Unit
-from akili.verify.models import ConfidenceScore, ProofPoint, ProofPointBBox
+from akili.verify.models import ProofPoint, ProofPointBBox
 
 
 @dataclass

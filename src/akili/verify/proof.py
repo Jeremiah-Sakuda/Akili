@@ -35,13 +35,10 @@ from akili.verify.matchers import (
     keyword_overlap,
     parse_capacity,
     parse_current,
-    parse_dimension,
     parse_frequency,
     parse_power,
     parse_temperature,
-    parse_time,
     parse_voltage,
-    parse_weight,
 )
 from akili.verify.models import (
     AnswerWithProof,

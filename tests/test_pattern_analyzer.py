@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from akili.learn.pattern_analyzer import (
-    CorrectionPattern,
     PatternAnalyzer,
     _extract_number,
     _extract_unit,

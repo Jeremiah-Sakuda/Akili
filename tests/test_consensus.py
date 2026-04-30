@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from akili.ingest.consensus import (
     _match_units,
@@ -12,8 +11,6 @@ from akili.ingest.consensus import (
     should_use_consensus,
 )
 from akili.ingest.extract_schema import (
-    BijectionExtract,
-    GridExtract,
     PageExtraction,
     PointSchema,
     UnitExtract,

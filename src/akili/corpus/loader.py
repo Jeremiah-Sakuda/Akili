@@ -8,7 +8,6 @@ matches an existing corpus entry before running full ingestion.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path

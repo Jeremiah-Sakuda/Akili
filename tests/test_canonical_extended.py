@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from akili.canonical import ConditionalUnit, Range
 from akili.canonical.models import BBox, Point

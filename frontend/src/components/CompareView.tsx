@@ -28,8 +28,8 @@ const CompareView: React.FC<CompareViewProps> = ({ documents }) => {
     try {
       const data = await compareDocuments(selectedDocs, question || 'Compare all parameters');
       setResult(data);
-    } catch (e: any) {
-      setError(e.message || 'Comparison failed');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Comparison failed');
     } finally {
       setLoading(false);
     }

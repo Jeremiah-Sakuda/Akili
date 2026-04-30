@@ -53,7 +53,6 @@ class CorrectionStore:
         self._init_schema()
 
     def _init_schema(self) -> None:
-        ph = self._mgr.placeholder()
         with self._mgr.connection() as conn:
             cur = conn.cursor()
             if self._mgr.is_postgres:

@@ -1,6 +1,5 @@
 """Tests for confidence scoring."""
 
-import os
 
 import pytest
 

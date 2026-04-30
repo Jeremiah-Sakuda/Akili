@@ -6,14 +6,13 @@ import DocumentViewer from './components/DocumentViewer';
 import FileUploader from './components/FileUploader';
 import IngestSummary from './components/IngestSummary';
 import LandingPage from './components/LandingPage';
-import LoginPage from './components/LoginPage';
 import Onboarding from './components/Onboarding';
 import ToastContainer from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
 import { useOnboarding } from './hooks/useOnboarding';
 import { AppState } from './types';
-import type { ChatMessage, DocumentSummary, IngestResponse, ProofPoint, QueryResponse } from './api';
+import type { ChatMessage, DocumentSummary, IngestResponse, ProofPoint } from './api';
 import { deleteDocument as apiDeleteDocument, getDocuments, query as apiQuery, isRefuse } from './api';
 
 const documentToFile = (d: DocumentSummary, activeId: string | null) => ({

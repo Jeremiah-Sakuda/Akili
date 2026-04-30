@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
 
 from akili.canonical import Unit
 from akili.canonical.models import Point
 from akili.verify.compare import (
-    ComparisonResult,
     compare_documents,
     format_comparison_response,
 )

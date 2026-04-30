@@ -9,7 +9,6 @@ import os
 import re
 import threading
 from pathlib import Path
-from typing import Any
 
 from fastapi import HTTPException
 

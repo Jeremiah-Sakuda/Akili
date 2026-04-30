@@ -1,10 +1,9 @@
 """Tests for verification layer: all 30 rules + edge cases."""
 
-import pytest
 
-from akili.canonical import Bijection, Grid, Point, Unit
-from akili.canonical.models import BBox, GridCell
-from akili.verify import AnswerWithProof, Refuse, verify_and_answer
+from akili.canonical import Grid, Point, Unit
+from akili.canonical.models import GridCell
+from akili.verify import Refuse, verify_and_answer
 
 
 # ===================================================================

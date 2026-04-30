@@ -13,9 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from akili.canonical import Bijection, Grid, Unit
-from akili.ingest.extract_schema import PageExtraction
 from akili.ingest.pipeline import ingest_document
-from akili.store.repository import Store
 
 
 @pytest.fixture()

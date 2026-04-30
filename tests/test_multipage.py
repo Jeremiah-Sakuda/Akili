@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from akili.canonical import Grid, Unit
 from akili.canonical.models import BBox, GridCell, Point

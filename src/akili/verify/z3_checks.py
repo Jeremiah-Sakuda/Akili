@@ -12,7 +12,6 @@ Requires z3-solver (pip install z3-solver). Degrades gracefully if not installed
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)

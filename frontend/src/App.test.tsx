@@ -2,14 +2,29 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
+interface MockSidebarProps {
+  files?: { id: string }[];
+}
+
+interface MockQueryResponse {
+  status: string;
+}
+
+interface MockAuthValue {
+  user: { email: string } | null;
+  loading: boolean;
+  signInWithGoogle: ReturnType<typeof vi.fn>;
+  signOut: ReturnType<typeof vi.fn>;
+  authAvailable: boolean;
+}
+
 // Mock all child components to isolate App logic
 vi.mock('./components/Header', () => ({ default: () => <div data-testid="header">Header</div> }));
-vi.mock('./components/SidebarLeft', () => ({ default: (props: any) => <div data-testid="sidebar-left">{props.files?.length ?? 0} docs</div> }));
+vi.mock('./components/SidebarLeft', () => ({ default: (props: MockSidebarProps) => <div data-testid="sidebar-left">{props.files?.length ?? 0} docs</div> }));
 vi.mock('./components/SidebarRight', () => ({ default: () => <div data-testid="sidebar-right">SidebarRight</div> }));
 vi.mock('./components/DocumentViewer', () => ({ default: () => <div data-testid="doc-viewer">DocViewer</div> }));
 vi.mock('./components/FileUploader', () => ({ default: () => <div data-testid="file-uploader">FileUploader</div> }));
 vi.mock('./components/LandingPage', () => ({ default: () => <div data-testid="landing-page">LandingPage</div> }));
-vi.mock('./components/LoginPage', () => ({ default: () => <div data-testid="login-page">LoginPage</div> }));
 vi.mock('./components/Toast', () => ({ default: () => null }));
 
 const mockGetDocuments = vi.fn(() => Promise.resolve([]));
@@ -17,10 +32,10 @@ vi.mock('./api', () => ({
   getDocuments: () => mockGetDocuments(),
   deleteDocument: vi.fn(),
   query: vi.fn(),
-  isRefuse: (r: any) => r.status === 'refuse',
+  isRefuse: (r: MockQueryResponse) => r.status === 'refuse',
 }));
 
-let mockAuthValue = { user: null as any, loading: false, signInWithGoogle: vi.fn(), signOut: vi.fn(), authAvailable: true };
+let mockAuthValue: MockAuthValue = { user: null, loading: false, signInWithGoogle: vi.fn(), signOut: vi.fn(), authAvailable: true };
 vi.mock('./contexts/AuthContext', () => ({
   useAuth: () => mockAuthValue,
 }));
