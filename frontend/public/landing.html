@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Akili — No Citations. Only Proof.</title>
+    <meta name="description" content="Akili is the reasoning control plane for mission-critical engineering. Deterministic verification for technical documentation.">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ===========================================
+           CSS CUSTOM PROPERTIES
+           =========================================== */
+        :root {
+            --bg-primary: #0a0f1c;
+            --bg-secondary: #111827;
+            --bg-card: #161d2e;
+            --text-primary: #f0f2f5;
+            --text-secondary: #8b95a8;
+            --accent: #0066CC;
+            --accent-glow: rgba(0, 102, 204, 0.35);
+            --verified: #2DA66A;
+            --verified-glow: rgba(45, 166, 106, 0.3);
+            --refused: #E89540;
+
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-body: 'IBM Plex Sans', sans-serif;
+            --font-mono: 'IBM Plex Mono', monospace;
+
+            --title-size: clamp(2.2rem, 6vw, 4.5rem);
+            --h2-size: clamp(1.5rem, 3.5vw, 2.5rem);
+            --h3-size: clamp(1.1rem, 2vw, 1.5rem);
+            --body-size: clamp(0.875rem, 1.3vw, 1.125rem);
+            --small-size: clamp(0.75rem, 1vw, 0.875rem);
+
+            --slide-padding: clamp(1.5rem, 5vw, 5rem);
+            --content-gap: clamp(1rem, 2.5vw, 2.5rem);
+
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+            height: 100%;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            height: 100%;
+        }
+
+        /* ===========================================
+           SLIDES
+           =========================================== */
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            padding: var(--slide-padding);
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            max-height: 100%;
+            overflow: hidden;
+        }
+
+        /* ===========================================
+           NAVIGATION
+           =========================================== */
+        .nav-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+            padding: clamp(0.75rem, 2vw, 1.25rem) var(--slide-padding);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(to bottom, rgba(10, 15, 28, 0.95), transparent);
+            backdrop-filter: blur(8px);
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .nav-logo-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+        }
+
+        .nav-logo span {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1.25rem;
+            letter-spacing: -0.02em;
+        }
+
+        .nav-cta {
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 600;
+            padding: 0.6rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s var(--ease-out-expo);
+            text-decoration: none;
+        }
+
+        .nav-cta:hover {
+            box-shadow: 0 0 20px var(--accent-glow);
+            transform: translateY(-1px);
+        }
+
+        /* ===========================================
+           PROGRESS BAR
+           =========================================== */
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 2px;
+            background: var(--accent);
+            z-index: 60;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 8px var(--accent-glow);
+        }
+
+        /* ===========================================
+           HERO
+           =========================================== */
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 1rem;
+            border: 1px solid rgba(0, 102, 204, 0.3);
+            border-radius: 100px;
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--accent);
+            background: rgba(0, 102, 204, 0.08);
+            margin-bottom: var(--content-gap);
+        }
+
+        .hero-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--verified);
+            box-shadow: 0 0 8px var(--verified-glow);
+        }
+
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: var(--title-size);
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            max-width: 800px;
+            margin-bottom: clamp(0.75rem, 2vw, 1.5rem);
+        }
+
+        .hero h1 .accent { color: var(--accent); }
+
+        .hero .subtitle {
+            font-size: var(--body-size);
+            color: var(--text-secondary);
+            max-width: 560px;
+            line-height: 1.6;
+            margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            font-family: var(--font-display);
+            font-size: var(--body-size);
+            font-weight: 600;
+            padding: 0.85rem 2rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s var(--ease-out-expo);
+            text-decoration: none;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 24px var(--accent-glow);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            font-family: var(--font-display);
+            font-size: var(--body-size);
+            font-weight: 500;
+            padding: 0.85rem 2rem;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s var(--ease-out-expo);
+            text-decoration: none;
+        }
+
+        .btn-secondary:hover {
+            border-color: rgba(255, 255, 255, 0.3);
+            color: var(--text-primary);
+        }
+
+        /* ===========================================
+           SECTION HEADERS
+           =========================================== */
+        .section-number {
+            font-family: var(--font-display);
+            font-size: clamp(0.7rem, 1vw, 0.85rem);
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 0.15em;
+            margin-bottom: clamp(0.5rem, 1vw, 1rem);
+        }
+
+        .section-title {
+            font-family: var(--font-display);
+            font-size: var(--h2-size);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+            margin-bottom: clamp(0.5rem, 1.5vw, 1rem);
+        }
+
+        .section-subtitle {
+            font-size: var(--body-size);
+            color: var(--text-secondary);
+            max-width: 550px;
+            line-height: 1.6;
+        }
+
+        /* ===========================================
+           PROBLEM SECTION
+           =========================================== */
+        .problem-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(1rem, 2vw, 2rem);
+            margin-top: clamp(1.5rem, 3vw, 2.5rem);
+        }
+
+        .problem-card {
+            padding: clamp(1rem, 2vw, 1.75rem);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            background: var(--bg-card);
+        }
+
+        .problem-card .icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .problem-card h3 {
+            font-family: var(--font-display);
+            font-size: var(--h3-size);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .problem-card p {
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* ===========================================
+           HOW IT WORKS
+           =========================================== */
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: clamp(1rem, 2vw, 2rem);
+            margin-top: clamp(1.5rem, 3vw, 2.5rem);
+        }
+
+        .step {
+            position: relative;
+            padding: clamp(1.25rem, 2vw, 2rem);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            background: var(--bg-card);
+        }
+
+        .step-number {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 4vw, 3.5rem);
+            font-weight: 700;
+            color: rgba(0, 102, 204, 0.15);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .step h3 {
+            font-family: var(--font-display);
+            font-size: var(--h3-size);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .step p {
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .step-tag {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: clamp(0.6rem, 0.8vw, 0.75rem);
+            color: var(--accent);
+            border: 1px solid rgba(0, 102, 204, 0.3);
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            margin-top: 0.75rem;
+        }
+
+        /* ===========================================
+           DIFFERENTIATORS
+           =========================================== */
+        .diff-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(1rem, 2vw, 1.5rem);
+            margin-top: clamp(1.5rem, 3vw, 2.5rem);
+        }
+
+        .diff-item {
+            display: flex;
+            gap: clamp(0.75rem, 1.5vw, 1.25rem);
+            align-items: flex-start;
+        }
+
+        .diff-icon {
+            flex-shrink: 0;
+            width: clamp(36px, 4vw, 48px);
+            height: clamp(36px, 4vw, 48px);
+            background: rgba(0, 102, 204, 0.1);
+            border: 1px solid rgba(0, 102, 204, 0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .diff-item h3 {
+            font-family: var(--font-display);
+            font-size: clamp(0.9rem, 1.3vw, 1.1rem);
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .diff-item p {
+            font-size: var(--small-size);
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* ===========================================
+           CTA SECTION
+           =========================================== */
+        .cta-section {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .cta-section .section-title {
+            max-width: 600px;
+        }
+
+        .cta-section .section-subtitle {
+            margin: 0 auto clamp(1.5rem, 3vw, 2.5rem);
+        }
+
+        .tech-stack {
+            display: flex;
+            gap: clamp(0.5rem, 1vw, 1rem);
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: clamp(1.5rem, 2vw, 2rem);
+        }
+
+        .tech-tag {
+            font-family: var(--font-mono);
+            font-size: clamp(0.6rem, 0.8vw, 0.75rem);
+            padding: 0.3rem 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+
+        /* ===========================================
+           FOOTER
+           =========================================== */
+        .footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem var(--slide-padding);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .footer p {
+            font-family: var(--font-mono);
+            font-size: clamp(0.6rem, 0.8vw, 0.7rem);
+            color: rgba(255, 255, 255, 0.25);
+        }
+
+        /* ===========================================
+           GRID BACKGROUND
+           =========================================== */
+        .grid-bg {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+        }
+
+        .gradient-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        /* ===========================================
+           ANIMATIONS
+           =========================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.7s var(--ease-out-expo),
+                        transform 0.7s var(--ease-out-expo);
+        }
+
+        .slide.visible .reveal {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .reveal:nth-child(1) { transition-delay: 0.1s; }
+        .reveal:nth-child(2) { transition-delay: 0.2s; }
+        .reveal:nth-child(3) { transition-delay: 0.3s; }
+        .reveal:nth-child(4) { transition-delay: 0.4s; }
+        .reveal:nth-child(5) { transition-delay: 0.5s; }
+
+        /* ===========================================
+           RESPONSIVE
+           =========================================== */
+        @media (max-width: 768px) {
+            .problem-grid,
+            .diff-grid { grid-template-columns: 1fr; }
+            .steps { grid-template-columns: 1fr; }
+            .hero-actions { flex-direction: column; }
+            .btn-primary, .btn-secondary { width: 100%; text-align: center; }
+        }
+
+        @media (max-height: 700px) {
+            :root {
+                --slide-padding: clamp(1rem, 3vw, 2.5rem);
+                --content-gap: clamp(0.5rem, 1.5vw, 1.5rem);
+            }
+        }
+
+        @media (max-height: 600px) {
+            :root {
+                --title-size: clamp(1.5rem, 5vw, 3rem);
+                --h2-size: clamp(1.2rem, 3vw, 2rem);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            .reveal { opacity: 1; transform: none; transition: none; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Progress bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <a href="#" class="nav-logo">
+            <div class="nav-logo-icon">
+                <svg fill="none" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+                    <path d="M2 17L12 22L22 17" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+                    <path d="M2 12L12 17L22 12" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+                </svg>
+            </div>
+            <span>Akili</span>
+        </a>
+        <a href="#cta" class="nav-cta">Request Access</a>
+    </nav>
+
+    <!-- ==================== HERO ==================== -->
+    <section class="slide hero" id="hero">
+        <div class="grid-bg"></div>
+        <div class="gradient-orb" style="width: 500px; height: 500px; background: var(--accent); top: -20%; right: -10%; opacity: 0.08;"></div>
+        <div class="gradient-orb" style="width: 400px; height: 400px; background: var(--verified); bottom: -15%; left: -5%; opacity: 0.06;"></div>
+
+        <div class="slide-content">
+            <div class="hero-badge reveal">Verification Engine</div>
+            <h1 class="reveal">No citations.<br><span class="accent">Only proof.</span></h1>
+            <p class="subtitle reveal">
+                Akili is the reasoning control plane for mission-critical engineering.
+                Every answer is tied to exact coordinates on your source documents — or the system refuses.
+            </p>
+            <div class="hero-actions reveal">
+                <a href="#cta" class="btn-primary">Request Access</a>
+                <a href="#how" class="btn-secondary">See How It Works</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== PROBLEM ==================== -->
+    <section class="slide" id="problem">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <div class="section-number reveal">01 — THE PROBLEM</div>
+            <h2 class="section-title reveal">"Mostly right" isn't enough.</h2>
+            <p class="section-subtitle reveal">
+                In mission-critical engineering, a wrong answer from a datasheet costs more than no answer at all.
+            </p>
+            <div class="problem-grid">
+                <div class="problem-card reveal">
+                    <div class="icon">⚡</div>
+                    <h3>LLMs guess</h3>
+                    <p>Language models generate plausible answers even when they lack grounding. Citations point to pages — not proof.</p>
+                </div>
+                <div class="problem-card reveal">
+                    <div class="icon">🎯</div>
+                    <h3>Engineers need certainty</h3>
+                    <p>Pinout tables, voltage ratings, thermal limits. One wrong value can cascade into hardware failure.</p>
+                </div>
+                <div class="problem-card reveal">
+                    <div class="icon">📄</div>
+                    <h3>Documents are dense</h3>
+                    <p>Datasheets, schematics, and spec sheets bury critical facts in hundreds of pages of structured data.</p>
+                </div>
+                <div class="problem-card reveal">
+                    <div class="icon">🔍</div>
+                    <h3>No audit trail</h3>
+                    <p>Typical AI tools can't show where an answer came from at the coordinate level. There's no way to verify.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== HOW IT WORKS ==================== -->
+    <section class="slide" id="how">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <div class="section-number reveal">02 — HOW IT WORKS</div>
+            <h2 class="section-title reveal">Three steps to verified truth.</h2>
+            <p class="section-subtitle reveal">
+                Akili doesn't ask the AI for an answer. It forces the AI to prove the answer.
+            </p>
+            <div class="steps">
+                <div class="step reveal">
+                    <div class="step-number">01</div>
+                    <h3>Ingest</h3>
+                    <p>Upload technical PDFs. Akili extracts typed facts and their exact (x, y) coordinates on each page.</p>
+                    <span class="step-tag">PDF → Structured Facts</span>
+                </div>
+                <div class="step reveal">
+                    <div class="step-number">02</div>
+                    <h3>Store</h3>
+                    <p>Only validated, coordinate-grounded facts enter the canonical truth store. No free-text beliefs — only structural facts.</p>
+                    <span class="step-tag">Units · Bijections · Grids</span>
+                </div>
+                <div class="step reveal">
+                    <div class="step-number">03</div>
+                    <h3>Query & Verify</h3>
+                    <p>Ask a question. Get an answer with proof locations — or a clear refusal. No hedging.</p>
+                    <span class="step-tag">Answer + Proof | REFUSE</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== DIFFERENTIATORS ==================== -->
+    <section class="slide" id="diff">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <div class="section-number reveal">03 — WHY AKILI</div>
+            <h2 class="section-title reveal">Proof over citations.<br>Refusal over guessing.</h2>
+            <div class="diff-grid">
+                <div class="diff-item reveal">
+                    <div class="diff-icon">📍</div>
+                    <div>
+                        <h3>Coordinate-level grounding</h3>
+                        <p>Every answer tied to precise (x, y) locations — not "page 3" or a vague citation.</p>
+                    </div>
+                </div>
+                <div class="diff-item reveal">
+                    <div class="diff-icon">🛑</div>
+                    <div>
+                        <h3>Deterministic refusal</h3>
+                        <p>If an answer can't be mathematically derived from ingested facts, Akili refuses instead of guessing.</p>
+                    </div>
+                </div>
+                <div class="diff-item reveal">
+                    <div class="diff-icon">🧱</div>
+                    <div>
+                        <h3>Structural canonicalization</h3>
+                        <p>Raw content becomes typed objects (units, bijections, grids). Ambiguous extractions are rejected at ingestion.</p>
+                    </div>
+                </div>
+                <div class="diff-item reveal">
+                    <div class="diff-icon">✅</div>
+                    <div>
+                        <h3>Show the work</h3>
+                        <p>The system forces the model to show its work against a verifiable map of the truth.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== CTA ==================== -->
+    <section class="slide" id="cta">
+        <div class="grid-bg"></div>
+        <div class="gradient-orb" style="width: 600px; height: 600px; background: var(--accent); top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.06;"></div>
+
+        <div class="slide-content cta-section">
+            <div class="section-number reveal">04 — GET STARTED</div>
+            <h2 class="section-title reveal">Where AI shows its work.</h2>
+            <p class="section-subtitle reveal">
+                Built for engineering teams in aerospace, medical devices, automotive, and defense who need to trust answers from documentation.
+            </p>
+            <div class="hero-actions reveal" style="justify-content: center;">
+                <a href="mailto:hello@akili.dev" class="btn-primary">Request Access</a>
+            </div>
+            <div class="tech-stack reveal">
+                <span class="tech-tag">Gemini</span>
+                <span class="tech-tag">FastAPI</span>
+                <span class="tech-tag">React</span>
+                <span class="tech-tag">Typed Canonical Store</span>
+                <span class="tech-tag">Z3 Solver</span>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2026 Akili</p>
+            <p>No citations. Only proof.</p>
+        </div>
+    </section>
+
+    <script>
+        /* ===========================================
+           INTERSECTION OBSERVER — reveal on scroll
+           =========================================== */
+        const slides = document.querySelectorAll('.slide');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.2 });
+
+        slides.forEach(slide => observer.observe(slide));
+
+        /* ===========================================
+           PROGRESS BAR
+           =========================================== */
+        const progressBar = document.getElementById('progressBar');
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+            progressBar.style.width = progress + '%';
+        });
+
+        /* ===========================================
+           KEYBOARD NAVIGATION
+           =========================================== */
+        document.addEventListener('keydown', (e) => {
+            const slideEls = [...document.querySelectorAll('.slide')];
+            const currentIndex = slideEls.findIndex(s => {
+                const rect = s.getBoundingClientRect();
+                return rect.top >= -100 && rect.top < window.innerHeight / 2;
+            });
+
+            if (e.key === 'ArrowDown' || e.key === ' ') {
+                e.preventDefault();
+                const next = slideEls[Math.min(currentIndex + 1, slideEls.length - 1)];
+                next?.scrollIntoView({ behavior: 'smooth' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const prev = slideEls[Math.max(currentIndex - 1, 0)];
+                prev?.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    </script>
+</body>
+</html>

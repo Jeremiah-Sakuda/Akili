@@ -23,10 +23,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -45,16 +45,10 @@ jobs:
       - name: Ruff (format check)
         run: ruff format --check src tests
 
-      - name: Pytest
-        run: pytest tests -v --tb=short
-        env:
-          # Tests may need a dummy key if any code path reads it
-          GOOGLE_API_KEY: dummy
-
       - name: Pytest with coverage
-        run: pytest tests -v --tb=short --cov=src/akili --cov-report=xml --cov-report=term-missing
+        run: pytest tests -v --tb=short --cov=src/akili --cov-report=xml --cov-report=term-missing --cov-fail-under=50
         env:
-          GOOGLE_API_KEY: dummy
+          GOOGLE_API_KEY: ""
 
       - name: Upload backend coverage (optional)
         uses: codecov/codecov-action@v4
@@ -69,7 +63,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -94,7 +88,6 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          # Build without real Firebase config (env vars can be empty)
           VITE_FIREBASE_API_KEY: ''
           VITE_FIREBASE_AUTH_DOMAIN: ''
           VITE_FIREBASE_PROJECT_ID: ''

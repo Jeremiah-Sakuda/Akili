@@ -1,10 +1,14 @@
 /* eslint-disable react-refresh/only-export-components -- entry point: no exports */
-import React from 'react';
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import './index.css';
+
+const SharedAnswer = React.lazy(() => import('./pages/SharedAnswer'));
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -48,11 +52,22 @@ function AppWithErrorBoundary() {
   return (
     <React.StrictMode>
       <ErrorBoundary>
-        <ThemeProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </ThemeProvider>
+        <BrowserRouter>
+          <ThemeProvider>
+            <AuthProvider>
+              <ToastProvider>
+                <Routes>
+                  <Route path="/q/:questionId" element={
+                    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#0a0f1c]"><div className="text-gray-400 text-sm">Loading...</div></div>}>
+                      <SharedAnswer />
+                    </Suspense>
+                  } />
+                  <Route path="*" element={<App />} />
+                </Routes>
+              </ToastProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </BrowserRouter>
       </ErrorBoundary>
     </React.StrictMode>
   );

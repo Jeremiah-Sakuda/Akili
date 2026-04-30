@@ -4,10 +4,16 @@ import SidebarLeft from './components/SidebarLeft';
 import SidebarRight from './components/SidebarRight';
 import DocumentViewer from './components/DocumentViewer';
 import FileUploader from './components/FileUploader';
+import IngestSummary from './components/IngestSummary';
+import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
+import Onboarding from './components/Onboarding';
+import ToastContainer from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
+import { useToast } from './contexts/ToastContext';
+import { useOnboarding } from './hooks/useOnboarding';
 import { AppState } from './types';
-import type { DocumentSummary, ProofPoint, QueryResponse } from './api';
+import type { ChatMessage, DocumentSummary, IngestResponse, ProofPoint, QueryResponse } from './api';
 import { deleteDocument as apiDeleteDocument, getDocuments, query as apiQuery, isRefuse } from './api';
 
 const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
@@ -20,13 +26,16 @@ const documentToFile = (d: DocumentSummary, activeId: string | null) => ({
 
 const App: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
+  const { addToast } = useToast();
+  const { step: onboardingStep, next: onboardingNext, skip: onboardingSkip, isComplete: onboardingComplete } = useOnboarding();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [viewState, setViewState] = useState<AppState>(AppState.UPLOAD);
-  const [messages, setMessages] = useState<import('./api').ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [overlayProof, setOverlayProof] = useState<ProofPoint[] | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [queryLoading, setQueryLoading] = useState(false);
+  const [lastIngestResult, setLastIngestResult] = useState<IngestResponse | null>(null);
 
   const refreshDocuments = useCallback(async () => {
     setLoadingDocs(true);
@@ -35,12 +44,13 @@ const App: React.FC = () => {
       setDocuments(list);
       if (list.length === 0) setSelectedDocId(null);
       else setSelectedDocId((prev) => (prev && list.some((d) => d.doc_id === prev) ? prev : list[0].doc_id));
-    } catch {
+    } catch (err) {
       setDocuments([]);
+      addToast(err instanceof Error ? err.message : 'Failed to load documents');
     } finally {
       setLoadingDocs(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     refreshDocuments();
@@ -51,8 +61,9 @@ const App: React.FC = () => {
     if (state !== AppState.UPLOAD) setMessages([]);
   };
 
-  const handleIngestSuccess = (newDocId: string) => {
+  const handleIngestSuccess = (newDocId: string, ingestResult?: IngestResponse) => {
     setSelectedDocId(newDocId);
+    if (ingestResult) setLastIngestResult(ingestResult);
     refreshDocuments().then(() => setViewState(AppState.VERIFIED));
     setMessages([]);
   };
@@ -74,11 +85,11 @@ const App: React.FC = () => {
           setOverlayProof(null);
           setMessages([]);
         }
-      } catch {
-        // Error could be shown via toast; for now rely on refreshDocuments not updating
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'Failed to delete document');
       }
     },
-    [refreshDocuments, selectedDocId]
+    [refreshDocuments, selectedDocId, addToast]
   );
 
   const handleShowProof = useCallback((proof: ProofPoint[] | null) => {
@@ -123,14 +134,19 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-    return <LoginPage />;
+    return <LandingPage />;
   }
 
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-[#0d1117]">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-1 focus:left-1 focus:z-[60] focus:px-3 focus:py-1.5 focus:bg-primary focus:text-white focus:rounded focus:text-sm">
+        Skip to main content
+      </a>
       <Header />
+      <ToastContainer />
+      {!onboardingComplete && <Onboarding step={onboardingStep} onNext={onboardingNext} onSkip={onboardingSkip} />}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="layout-desktop flex flex-1 overflow-hidden">
         <SidebarLeft
           currentState={displayState}
           onStateChange={handleStateChange}
@@ -141,40 +157,27 @@ const App: React.FC = () => {
           onDeleteDocument={handleDeleteDocument}
         />
 
-        <main className="flex-1 bg-gray-50 dark:bg-[#0d1117] relative flex flex-col overflow-hidden">
+        <main id="main-content" className="flex-1 bg-gray-50 dark:bg-[#0d1117] relative flex flex-col overflow-hidden">
           {viewState === AppState.UPLOAD ? (
             <FileUploader onSuccess={handleIngestSuccess} onBack={() => handleStateChange(AppState.VERIFIED)} />
           ) : (
             <>
-              <div className="h-10 bg-white dark:bg-[#161b22] border-b border-gray-200 dark:border-[#30363d] flex items-center justify-between px-4 z-10">
-                <div className="flex items-center gap-2">
-                  <button className="p-1 hover:bg-gray-100 dark:hover:bg-[#0d1117] text-gray-600 dark:text-gray-400" type="button">
-                    <span className="material-symbols-outlined text-[18px]">menu</span>
-                  </button>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {selectedDocId
-                      ? documents.find((d) => d.doc_id === selectedDocId)?.filename ?? selectedDocId
-                      : 'Select a document'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#0d1117] border border-gray-200 dark:border-[#30363d] p-0.5">
-                  <button className="p-1 hover:bg-white dark:hover:bg-[#161b22] transition-colors text-gray-700 dark:text-gray-300" type="button">
-                    <span className="material-symbols-outlined text-[16px]">remove</span>
-                  </button>
-                  <span className="text-xs font-medium px-2 text-gray-700 dark:text-gray-300 font-mono">100%</span>
-                  <button className="p-1 hover:bg-white dark:hover:bg-[#161b22] transition-colors text-gray-700 dark:text-gray-300" type="button">
-                    <span className="material-symbols-outlined text-[16px]">add</span>
-                  </button>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-[#0d1117] text-gray-600 dark:text-gray-400" type="button">
-                    <span className="material-symbols-outlined text-[18px]">download</span>
-                  </button>
-                  <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-[#0d1117] text-gray-600 dark:text-gray-400" type="button">
-                    <span className="material-symbols-outlined text-[18px]">print</span>
-                  </button>
-                </div>
+              <div className="h-10 bg-white dark:bg-[#161b22] border-b border-gray-200 dark:border-[#30363d] flex items-center px-4 z-10">
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {selectedDocId
+                    ? documents.find((d) => d.doc_id === selectedDocId)?.filename ?? selectedDocId
+                    : 'Select a document'}
+                </span>
               </div>
+
+              {lastIngestResult && (
+                <div className="p-3 border-b border-gray-200 dark:border-[#30363d]">
+                  <IngestSummary
+                    result={lastIngestResult}
+                    onDismiss={() => setLastIngestResult(null)}
+                  />
+                </div>
+              )}
 
               <DocumentViewer
                 docId={selectedDocId}

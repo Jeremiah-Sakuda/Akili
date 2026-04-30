@@ -13,7 +13,10 @@ export interface DocumentFile {
   active?: boolean;
 }
 
+/** Indicates whether the response text is the raw verified output or was rephrased by an LLM */
+export type FormattingSource = 'verified_raw' | 'gemini_rephrase';
+
 /** Query result from API: answer + proof or refuse */
 export type QueryResult =
-  | { status: 'answer'; answer: string; proof: Array<{ x: number; y: number; source_id?: string | null; source_type?: string | null }> }
-  | { status: 'refuse'; reason: string };
+  | { status: 'answer'; answer: string; proof: Array<{ x: number; y: number; source_id?: string | null; source_type?: string | null }>; formatting_source?: FormattingSource }
+  | { status: 'refuse'; reason: string; formatting_source?: FormattingSource };
