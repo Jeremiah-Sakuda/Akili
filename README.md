@@ -303,11 +303,28 @@ cd frontend && npm test
 
 ## Deployment
 
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full Google Cloud deployment guide.
+
+### Quick Deploy to Google Cloud Run
+
+```bash
+# Initial setup (enables APIs, creates secrets)
+./scripts/deploy-gcp.sh --setup
+
+# Set your secrets
+echo 'your-gemini-key' | gcloud secrets versions add GOOGLE_API_KEY --data-file=-
+echo 'postgresql://...' | gcloud secrets versions add DATABASE_URL --data-file=-
+
+# Deploy both services
+./scripts/deploy-gcp.sh
+```
+
 | Component | Platform | Config |
 |-----------|----------|--------|
-| **Frontend** | Vercel | `frontend/vercel.json`, env: `VITE_API_URL`, `VITE_FIREBASE_*` |
-| **Backend** | Cloud Run | `Dockerfile`, env: `GOOGLE_API_KEY`, `DATABASE_URL`, `FIREBASE_PROJECT_ID` |
-| **Database** | Supabase | PostgreSQL via `DATABASE_URL` |
+| **Frontend** | Cloud Run | `frontend/Dockerfile.prod`, nginx serving React SPA |
+| **Backend** | Cloud Run | `Dockerfile`, FastAPI + Gunicorn |
+| **Database** | Supabase / Cloud SQL | PostgreSQL via `DATABASE_URL` |
+| **CI/CD** | Cloud Build | `cloudbuild.yaml` |
 
 The frontend detects `VITE_API_URL` at build time (falls back to `/api` for local dev proxy). The backend auto-detects `DATABASE_URL` to switch between SQLite and PostgreSQL.
 
