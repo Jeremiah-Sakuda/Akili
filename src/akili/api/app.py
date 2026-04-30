@@ -4,14 +4,18 @@ FastAPI app factory: creates app, mounts routers, configures CORS/middleware.
 
 from __future__ import annotations
 
+import json as _json_mod
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from akili import config
 
@@ -19,15 +23,45 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# CORS
+# Structured logging (Phase 3: Observability)
 # ---------------------------------------------------------------------------
 
-_DEFAULT_CORS_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3001",
-]
+class _JSONFormatter(logging.Formatter):
+    """Emit log records as single-line JSON for structured log pipelines."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            "ts": self.formatTime(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[0] is not None:
+            log_entry["exc"] = self.formatException(record.exc_info)
+        return _json_mod.dumps(log_entry, default=str)
+
+
+def _configure_logging() -> None:
+    """Configure root logger based on AKILI_LOG_FORMAT."""
+    root = logging.getLogger()
+    if not root.handlers:
+        handler = logging.StreamHandler()
+        if config.LOG_FORMAT == "json":
+            handler.setFormatter(_JSONFormatter())
+        else:
+            handler.setFormatter(logging.Formatter(
+                "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
+            ))
+        root.addHandler(handler)
+        root.setLevel(logging.INFO)
+
+
+_configure_logging()
+
+
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
 
 _ALLOWED_CORS_METHODS = ["GET", "POST", "DELETE", "OPTIONS"]
 _ALLOWED_CORS_HEADERS = [
@@ -40,19 +74,17 @@ _ALLOWED_CORS_HEADERS = [
 
 
 def _cors_origins() -> list[str]:
-    origins = config.CORS_ORIGINS
-    if not origins:
-        return _DEFAULT_CORS_ORIGINS
+    """Validate CORS origins from centralized config (already parsed in config.py)."""
     validated = []
-    for origin in origins:
+    for origin in config.CORS_ORIGINS:
         if origin == "*":
             logger.warning("Wildcard CORS origin '*' is insecure with credentials; skipping")
             continue
-        if origin.startswith("http://") or origin.startswith("https://"):
-            validated.append(origin)
-        else:
+        if not (origin.startswith("http://") or origin.startswith("https://")):
             logger.warning("Skipping invalid CORS origin (must start with http/https): %s", origin)
-    return validated or _DEFAULT_CORS_ORIGINS
+            continue
+        validated.append(origin)
+    return validated or config.CORS_ORIGINS
 
 
 # ---------------------------------------------------------------------------
@@ -104,59 +136,44 @@ except ImportError:
         )
 
 # ---------------------------------------------------------------------------
-# App creation
+# Security headers middleware
 # ---------------------------------------------------------------------------
 
-app = FastAPI(
-    title="Akili",
-    description=(
-        "The Reasoning Control Plane for Mission-Critical Engineering — "
-        "deterministic verification for technical documentation"
-    ),
-    version="0.1.0",
-)
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to every response."""
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins(),
-    allow_credentials=True,
-    allow_methods=_ALLOWED_CORS_METHODS,
-    allow_headers=_ALLOWED_CORS_HEADERS,
-)
+    _HEADERS = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+        "Content-Security-Policy": (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob:; "
+            "connect-src 'self'"
+        ),
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    }
 
-# Mount rate limiter if available
-if hasattr(limiter, "init_app"):
-    app.state.limiter = limiter
-    try:
-        from slowapi.errors import RateLimitExceeded
-        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
-    except ImportError:
-        pass
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        response: Response = await call_next(request)
+        for header, value in self._HEADERS.items():
+            response.headers[header] = value
+        return response
+
 
 # ---------------------------------------------------------------------------
-# Include routers
+# Lifespan (replaces deprecated @app.on_event("startup"))
 # ---------------------------------------------------------------------------
 
-from akili.api.routers.documents import router as documents_router
-from akili.api.routers.ingest import router as ingest_router
-from akili.api.routers.query import router as query_router
-from akili.api.routers.corrections import router as corrections_router
-from akili.api.routers.compare import router as compare_router
-
-app.include_router(documents_router)
-app.include_router(ingest_router)
-app.include_router(query_router)
-app.include_router(corrections_router)
-app.include_router(compare_router)
-
-# ---------------------------------------------------------------------------
-# Top-level endpoints (health, status, startup)
-# ---------------------------------------------------------------------------
-
-
-@app.on_event("startup")
-def _log_env() -> None:
-    key = os.environ.get("GOOGLE_API_KEY")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup / shutdown lifecycle for the FastAPI app."""
+    # -- startup --
+    key = config.GOOGLE_API_KEY
     if key and key.strip():
         logger.info("GOOGLE_API_KEY is set (ingest will call Gemini)")
     else:
@@ -176,12 +193,81 @@ def _log_env() -> None:
                 "Authentication is DISABLED — all endpoints are public. "
                 "Set AKILI_REQUIRE_AUTH=1 and FIREBASE_PROJECT_ID to enable auth in production."
             )
+    yield
+    # -- shutdown -- (nothing to clean up currently)
+
+
+# ---------------------------------------------------------------------------
+# App creation
+# ---------------------------------------------------------------------------
+
+app = FastAPI(
+    title="Akili",
+    description=(
+        "The Reasoning Control Plane for Mission-Critical Engineering — "
+        "deterministic verification for technical documentation"
+    ),
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+# Warn if using a preview model
+if "preview" in config.GEMINI_MODEL.lower():
+    logger.warning(
+        "Running with preview Gemini model '%s'. Pin to a stable release "
+        "for production (set AKILI_GEMINI_MODEL).",
+        config.GEMINI_MODEL,
+    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=_ALLOWED_CORS_METHODS,
+    allow_headers=_ALLOWED_CORS_HEADERS,
+)
+
+app.add_middleware(_SecurityHeadersMiddleware)
+
+# Mount rate limiter if available
+if hasattr(limiter, "init_app"):
+    app.state.limiter = limiter
+    try:
+        from slowapi.middleware import SlowAPIMiddleware
+        from slowapi.errors import RateLimitExceeded
+        app.add_middleware(SlowAPIMiddleware)
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+    except ImportError:
+        pass
+
+# ---------------------------------------------------------------------------
+# Include routers
+# ---------------------------------------------------------------------------
+
+from akili.api.routers.documents import router as documents_router
+from akili.api.routers.ingest import router as ingest_router
+from akili.api.routers.query import router as query_router
+from akili.api.routers.corrections import router as corrections_router
+from akili.api.routers.compare import router as compare_router
+from akili.api.routers.library import router as library_router
+from akili.api.routers.share import router as share_router
+
+app.include_router(documents_router)
+app.include_router(ingest_router)
+app.include_router(query_router)
+app.include_router(corrections_router)
+app.include_router(compare_router)
+app.include_router(library_router)
+app.include_router(share_router)
+
+# ---------------------------------------------------------------------------
+# Top-level endpoints (health, status, startup)
+# ---------------------------------------------------------------------------
 
 
 @app.get("/status")
 def status() -> JSONResponse:
     """Check API and env without running ingest."""
-    key = os.environ.get("GOOGLE_API_KEY")
+    key = config.GOOGLE_API_KEY
     key_set = bool(key and key.strip())
     db_url = os.environ.get("DATABASE_URL", "")
     using_pg = db_url.startswith("postgresql")
