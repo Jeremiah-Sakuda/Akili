@@ -1,18 +1,22 @@
 """
 Orchestrate ingestion: PDF → load pages → Gemini extract → canonicalize → return/store.
 Adds a short delay between pages to reduce 429 rate-limit hits (one Gemini call per page).
+
+Supports corpus matching: if an uploaded PDF matches a pre-canonicalized entry in the
+public corpus, the canonical data is loaded directly (FR-CORP-2), skipping Gemini calls.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
 from typing import Callable
 
 from akili import config
-from akili.canonical import Bijection, Grid, Unit
+from akili.canonical import Bijection, ConditionalUnit, Grid, Range, Unit
 from akili.ingest.canonicalize import canonicalize_page
 from akili.ingest.consensus import consensus_extract_page, should_use_consensus
 from akili.ingest.errors import is_rate_limit_error as _is_rate_limit_error
@@ -23,6 +27,56 @@ from akili.ingest.pdf_loader import load_pdf_pages
 from akili.store.repository import Store
 
 logger = logging.getLogger(__name__)
+
+
+def _check_corpus(pdf_path: Path, store: Store | None) -> tuple[bool, dict | None]:
+    """
+    Check if PDF matches a corpus entry (FR-CORP-2).
+
+    Returns (is_match, corpus_entry) where corpus_entry contains canonical data.
+    """
+    if store is None or not hasattr(store, "get_corpus_entry"):
+        return False, None
+
+    try:
+        from akili.corpus.loader import compute_pdf_hash
+
+        pdf_hash = compute_pdf_hash(pdf_path)
+        entry = store.get_corpus_entry(pdf_hash)
+        if entry:
+            logger.info("Corpus match found for %s (hash=%s...)", pdf_path.name, pdf_hash[:12])
+            return True, entry
+    except Exception as e:
+        logger.debug("Corpus check failed: %s", e)
+
+    return False, None
+
+
+def _load_canonical_from_corpus(
+    corpus_entry: dict,
+    doc_id: str,
+) -> list[Unit | Bijection | Grid | Range | ConditionalUnit]:
+    """Load canonical objects from corpus entry."""
+    from akili.corpus.loader import load_from_corpus, CorpusEntry
+
+    entry = CorpusEntry(
+        content_hash=corpus_entry["content_hash"],
+        mpn=corpus_entry["mpn"],
+        chip_name=corpus_entry["chip_name"],
+        datasheet_url=corpus_entry.get("datasheet_url"),
+        canonical_data=corpus_entry.get("canonical_data") or {},
+    )
+
+    units, bijections, grids, ranges, conditional_units = load_from_corpus(entry, doc_id)
+
+    result: list[Unit | Bijection | Grid | Range | ConditionalUnit] = []
+    result.extend(units)
+    result.extend(bijections)
+    result.extend(grids)
+    result.extend(ranges)
+    result.extend(conditional_units)
+
+    return result
 
 
 def ingest_document(
@@ -48,13 +102,67 @@ def ingest_document(
             progress_callback(msg)
 
     doc_id = doc_id or str(uuid.uuid4())
-    pdf_path = Path(pdf_path)
+    pdf_path = Path(pdf_path).resolve()
+
+    # CRITICAL-1: Validate path is within allowed directory to prevent traversal
+    allowed_base = Path(os.environ.get("AKILI_DOCS_DIR", config.DOCS_DIR)).resolve()
+    if not str(pdf_path).startswith(str(allowed_base)):
+        raise ValueError(
+            f"Path outside allowed directory: {pdf_path} "
+            f"(allowed base: {allowed_base})"
+        )
+
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+    # FR-CORP-2: Check corpus before ingestion for instant results
+    _progress({"phase": "checking_corpus"})
+    corpus_match, corpus_entry = _check_corpus(pdf_path, store)
+
+    if corpus_match and corpus_entry:
+        logger.info("Loading from corpus (skipping Gemini extraction): %s", corpus_entry.get("chip_name"))
+        _progress({"phase": "loading_corpus", "chip": corpus_entry.get("chip_name")})
+
+        all_canonical = _load_canonical_from_corpus(corpus_entry, doc_id)
+
+        if store is not None:
+            _progress({"phase": "storing", "total_pages": 1, "from_corpus": True})
+            units = [o for o in all_canonical if isinstance(o, Unit)]
+            bijections = [o for o in all_canonical if isinstance(o, Bijection)]
+            grids = [o for o in all_canonical if isinstance(o, Grid)]
+            ranges = [o for o in all_canonical if isinstance(o, Range)]
+            conditional_units = [o for o in all_canonical if isinstance(o, ConditionalUnit)]
+            store.store_canonical(
+                doc_id, pdf_path.name, 1, units, bijections, grids,
+                ranges=ranges, conditional_units=conditional_units,
+                uploaded_by=uploaded_by,
+            )
+
+        result = {
+            "phase": "done",
+            "doc_id": doc_id,
+            "total_pages": 1,
+            "pages_failed": 0,
+            "units_count": len([o for o in all_canonical if isinstance(o, Unit)]),
+            "bijections_count": len([o for o in all_canonical if isinstance(o, Bijection)]),
+            "grids_count": len([o for o in all_canonical if isinstance(o, Grid)]),
+            "from_corpus": True,
+            "chip_name": corpus_entry.get("chip_name"),
+        }
+        _progress(result)
+        return doc_id, all_canonical, 1, 0
 
     _progress({"phase": "rendering"})
     pages = load_pdf_pages(pdf_path)
     total_pages = len(pages)
+
+    # HIGH-2: Enforce max page limit to prevent memory exhaustion
+    if total_pages > config.MAX_PAGES:
+        raise ValueError(
+            f"PDF has {total_pages} pages, exceeds maximum {config.MAX_PAGES}. "
+            "Set AKILI_MAX_PAGES to override."
+        )
+
     _progress({"phase": "rendering_done", "total_pages": total_pages})
 
     all_canonical: list[Unit | Bijection | Grid] = []
