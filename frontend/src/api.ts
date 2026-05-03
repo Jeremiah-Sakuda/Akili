@@ -26,8 +26,9 @@ async function authHeaders(init?: HeadersInit): Promise<HeadersInit> {
     try {
       const token = await auth.currentUser.getIdToken();
       if (token) headers.set('Authorization', `Bearer ${token}`);
-    } catch {
-      // ignore token errors
+    } catch (err) {
+      // A5: Log token errors for debugging (non-blocking)
+      console.error('Failed to get auth token:', err);
     }
   }
   return headers;
@@ -115,20 +116,38 @@ export interface ChatMessage {
   response?: QueryResponse | null;
 }
 
-export async function getDocuments(): Promise<DocumentSummary[]> {
-  const res = await fetch(`${API_BASE}/documents`, { headers: await authHeaders() });
+async function apiFetch<T>(
+  url: string,
+  options?: RequestInit & { errorMessage?: string },
+): Promise<T> {
+  const { errorMessage = 'Request failed', ...init } = options ?? {};
+  const headers = init.headers
+    ? await authHeaders(init.headers)
+    : await authHeaders();
+  const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
     await handle401(res);
-    throw new Error('Failed to fetch documents');
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    const detail = err.detail;
+    const message = Array.isArray(detail) ? detail.join(' ') : detail ?? errorMessage;
+    throw new Error(message);
   }
-  const data = await res.json();
+  return res.json();
+}
+
+export async function getDocuments(): Promise<DocumentSummary[]> {
+  const data = await apiFetch<{ documents: DocumentSummary[] }>(
+    `${API_BASE}/documents`,
+    { errorMessage: 'Failed to fetch documents' },
+  );
   return data.documents ?? [];
 }
 
 export async function deleteDocument(docId: string): Promise<void> {
+  const headers = await authHeaders();
   const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}`, {
     method: 'DELETE',
-    headers: await authHeaders(),
+    headers,
   });
   if (!res.ok) {
     await handle401(res);
@@ -137,27 +156,6 @@ export async function deleteDocument(docId: string): Promise<void> {
     const message = Array.isArray(detail) ? detail.join(' ') : detail ?? 'Delete failed';
     throw new Error(message);
   }
-}
-
-export async function ingest(file: File): Promise<IngestResponse> {
-  const form = new FormData();
-  form.append('file', file);
-  const res = await fetch(`${API_BASE}/ingest`, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: form,
-  });
-  if (!res.ok) {
-    await handle401(res);
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    const detail = err.detail;
-    const message = Array.isArray(detail) ? detail.join(' ') : detail ?? 'Ingest failed';
-    console.error('[Akili ingest]', res.status, message);
-    throw new Error(message);
-  }
-  const data: IngestResponse = await res.json();
-  logEvent('document_uploaded', { doc_id: data.doc_id, units: data.units_count, bijections: data.bijections_count, grids: data.grids_count });
-  return data;
 }
 
 /** Server-sent progress event from POST /ingest/stream */
@@ -249,32 +247,23 @@ export async function query(
   question: string,
   options?: { includeFormattedAnswer?: boolean }
 ): Promise<QueryResponse> {
-  const headers = await authHeaders({ 'Content-Type': 'application/json' });
-  const res = await fetch(`${API_BASE}/query`, {
+  logEvent('query_asked', { doc_id: docId });
+  const data = await apiFetch<QueryResponse>(`${API_BASE}/query`, {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       doc_id: docId,
       question,
       include_formatted_answer: options?.includeFormattedAnswer ?? false,
     }),
+    errorMessage: 'Query failed',
   });
-  if (!res.ok) {
-    await handle401(res);
-    throw new Error('Query failed');
-  }
-  logEvent('query_asked', { doc_id: docId });
-  const data: QueryResponse = await res.json();
   logEvent('query_answered', { doc_id: docId, status: data.status });
   return data;
 }
 
 export function isRefuse(r: QueryResponse): r is Refuse {
   return r.status === 'refuse';
-}
-
-export function isAnswer(r: QueryResponse): r is AnswerWithProof {
-  return r.status === 'answer';
 }
 
 export interface CanonicalUnit {
@@ -313,14 +302,10 @@ export interface CanonicalResponse {
 }
 
 export async function getCanonical(docId: string): Promise<CanonicalResponse> {
-  const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/canonical`, {
-    headers: await authHeaders(),
-  });
-  if (!res.ok) {
-    await handle401(res);
-    throw new Error('Failed to fetch canonical');
-  }
-  return res.json();
+  return apiFetch<CanonicalResponse>(
+    `${API_BASE}/documents/${encodeURIComponent(docId)}/canonical`,
+    { errorMessage: 'Failed to fetch canonical' },
+  );
 }
 
 /** Fetch PDF file for a document (for viewer / Show on document). Returns blob URL; caller must revoke when done. */
@@ -352,178 +337,9 @@ export interface UsageSummary {
 }
 
 export async function getUsage(): Promise<UsageSummary> {
-  const res = await fetch(`${API_BASE}/usage`, {
-    headers: await authHeaders(),
-  });
-  if (!res.ok) {
-    await handle401(res);
-    throw new Error('Failed to fetch usage');
-  }
-  return res.json();
+  return apiFetch<UsageSummary>(
+    `${API_BASE}/usage`,
+    { errorMessage: 'Failed to fetch usage' },
+  );
 }
 
-// ---------------------------------------------------------------------------
-// Corrections / Human-in-the-Loop Review
-// ---------------------------------------------------------------------------
-
-export interface CorrectionRecord {
-  id: number;
-  canonical_id: string;
-  canonical_type: string;
-  action: 'confirm' | 'correct';
-  original_value: string;
-  corrected_value: string | null;
-  corrected_by: string | null;
-  notes: string | null;
-  created_at: string | null;
-}
-
-export interface CorrectionStats {
-  total: number;
-  confirmations: number;
-  corrections: number;
-  correction_rate: number;
-}
-
-export interface SubmitCorrectionRequest {
-  doc_id: string;
-  canonical_id: string;
-  canonical_type: string;
-  action: 'confirm' | 'correct';
-  original_value: string;
-  corrected_value?: string;
-  notes?: string;
-}
-
-export async function submitCorrection(req: SubmitCorrectionRequest): Promise<{ correction_id: number }> {
-  const headers = await authHeaders({ 'Content-Type': 'application/json' });
-  const res = await fetch(`${API_BASE}/corrections`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) {
-    await handle401(res);
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? 'Failed to submit correction');
-  }
-  return res.json();
-}
-
-export async function getCorrections(docId: string): Promise<CorrectionRecord[]> {
-  const res = await fetch(`${API_BASE}/corrections/${encodeURIComponent(docId)}`, {
-    headers: await authHeaders(),
-  });
-  if (!res.ok) {
-    await handle401(res);
-    throw new Error('Failed to fetch corrections');
-  }
-  const data = await res.json();
-  return data.corrections ?? [];
-}
-
-export async function getCorrectionStats(docId: string): Promise<CorrectionStats> {
-  const res = await fetch(`${API_BASE}/corrections/stats/${encodeURIComponent(docId)}`, {
-    headers: await authHeaders(),
-  });
-  if (!res.ok) {
-    await handle401(res);
-    throw new Error('Failed to fetch correction stats');
-  }
-  return res.json();
-}
-
-// ---------------------------------------------------------------------------
-// C3: Cross-Document Comparison
-// ---------------------------------------------------------------------------
-
-export interface ComparisonRow {
-  doc_id: string;
-  doc_name: string;
-  value: number | string | null;
-  unit_of_measure: string | null;
-  source_unit_id: string | null;
-  page: number | null;
-}
-
-export interface ComparisonParameter {
-  parameter: string;
-  direction: string;
-  best_doc_id: string | null;
-  best_value: number | string | null;
-  summary: string;
-  rows: ComparisonRow[];
-}
-
-export interface ComparisonResponse {
-  comparisons: ComparisonParameter[];
-}
-
-export async function compareDocuments(
-  docIds: string[],
-  question: string,
-): Promise<ComparisonResponse> {
-  const headers = await authHeaders({ 'Content-Type': 'application/json' });
-  const res = await fetch(`${API_BASE}/compare`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ doc_ids: docIds, question }),
-  });
-  if (!res.ok) {
-    await handle401(res);
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? 'Failed to compare documents');
-  }
-  return res.json();
-}
-
-// ---------------------------------------------------------------------------
-// C4: Correction Patterns / Learning
-// ---------------------------------------------------------------------------
-
-export interface PatternStats {
-  total_patterns: number;
-  auto_correctable: number;
-  reliable_patterns: number;
-  categories: Record<string, number>;
-  top_patterns: Array<{
-    id: string;
-    description: string;
-    occurrences: number;
-    auto_correctable: boolean;
-  }>;
-}
-
-export async function getPatternStats(): Promise<PatternStats> {
-  const res = await fetch(`${API_BASE}/patterns`, {
-    headers: await authHeaders(),
-  });
-  if (!res.ok) {
-    await handle401(res);
-    throw new Error('Failed to fetch patterns');
-  }
-  return res.json();
-}
-
-export interface CorrectionSuggestion {
-  original_value: string;
-  suggested_correction: string | null;
-  has_suggestion: boolean;
-}
-
-export async function suggestCorrection(
-  canonicalType: string,
-  originalValue: string,
-): Promise<CorrectionSuggestion> {
-  const headers = await authHeaders({ 'Content-Type': 'application/json' });
-  const res = await fetch(`${API_BASE}/patterns/suggest`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ canonical_type: canonicalType, original_value: originalValue }),
-  });
-  if (!res.ok) {
-    await handle401(res);
-    throw new Error('Failed to get suggestion');
-  }
-  return res.json();
-}
