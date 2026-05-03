@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from akili import config
 from akili.api.auth import get_current_user
-from akili.api.deps import get_store, get_usage_store
+from akili.api.deps import get_store, get_usage_store, require_doc_access, validate_doc_id
 from akili.ingest.gemini_format import format_answer, format_refusal
 from akili.verify import AnswerWithProof, Refuse, verify_and_answer
 
@@ -68,6 +68,9 @@ async def query(
     """
     Submit a question for a document. Returns coordinate-grounded answer + proof, or REFUSE.
     """
+    validate_doc_id(req.doc_id)  # A4: strict UUID validation
+    require_doc_access(req.doc_id, _user)  # A2: ownership check
+
     user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
     usage = get_usage_store()
     allowed, used, limit = usage.check_limit(user_id, "query")

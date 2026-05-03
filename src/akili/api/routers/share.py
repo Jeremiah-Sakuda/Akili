@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from akili.api.auth import get_current_user
-from akili.api.deps import get_store, validate_doc_id
+from akili.api.deps import get_store, require_doc_access, validate_doc_id
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ async def create_share_link(
     Returns a unique URL that can be shared publicly.
     """
     validate_doc_id(req.doc_id)
+    require_doc_access(req.doc_id, user)  # A2: ownership check
     store = get_store()
 
     # Generate unique question ID from content hash

@@ -233,3 +233,69 @@ class TestFailClosedAuth:
 
         # Should not raise - explicit override allows open access
         asyncio.run(run_lifespan())
+
+
+class TestDocumentAccess:
+    """A2: Tests for document authorization (cross-user access denied)."""
+
+    @patch("akili.api.auth.is_auth_required")
+    @patch("akili.api.deps.get_store")
+    def test_cross_user_pdf_access_denied(self, mock_get_store, mock_is_auth_required):
+        """A second user with a valid token cannot read documents owned by user A."""
+        from unittest.mock import MagicMock
+
+        from akili.api.deps import require_doc_access
+
+        import pytest
+
+        # Auth is required
+        mock_is_auth_required.return_value = True
+
+        # Document is owned by user A
+        mock_store = MagicMock()
+        mock_store.get_document_owner.return_value = "user-a-uid"
+        mock_get_store.return_value = mock_store
+
+        # User B tries to access
+        user_b = {"uid": "user-b-uid"}
+
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            require_doc_access("test-doc-id", user_b)
+
+        assert exc_info.value.status_code == 403
+        assert "Not authorized" in exc_info.value.detail
+
+    @patch("akili.api.auth.is_auth_required")
+    @patch("akili.api.deps.get_store")
+    def test_owner_can_access_own_document(self, mock_get_store, mock_is_auth_required):
+        """Document owner should be able to access their own document."""
+        from unittest.mock import MagicMock
+
+        from akili.api.deps import require_doc_access
+
+        # Auth is required
+        mock_is_auth_required.return_value = True
+
+        # Document is owned by user A
+        mock_store = MagicMock()
+        mock_store.get_document_owner.return_value = "user-a-uid"
+        mock_get_store.return_value = mock_store
+
+        # User A tries to access
+        user_a = {"uid": "user-a-uid"}
+
+        # Should not raise
+        require_doc_access("test-doc-id", user_a)
+
+    @patch("akili.api.auth.is_auth_required")
+    def test_auth_disabled_allows_access(self, mock_is_auth_required):
+        """When auth is disabled, access should be allowed."""
+        from akili.api.deps import require_doc_access
+
+        # Auth is not required
+        mock_is_auth_required.return_value = False
+
+        # Should not raise even without user
+        require_doc_access("test-doc-id", None)

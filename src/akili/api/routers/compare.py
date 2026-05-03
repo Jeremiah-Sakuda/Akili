@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from akili.api.auth import get_current_user
-from akili.api.deps import get_store, validate_doc_id
+from akili.api.deps import get_store, require_doc_access, validate_doc_id
 from akili.verify.compare import compare_documents, format_comparison_response
 
 router = APIRouter(tags=["compare"])
@@ -30,13 +30,18 @@ async def compare_docs(
     """Compare parameters across multiple documents."""
     if len(req.doc_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 doc_ids required")
+
+    # A2: validate and check ownership for all documents upfront
+    for did in req.doc_ids:
+        validate_doc_id(did)
+        require_doc_access(did, _user)
+
     store = get_store()
     docs = store.list_documents()
     doc_name_map = {d["doc_id"]: d.get("filename", d["doc_id"]) for d in docs}
 
     doc_units: dict[str, tuple[str, list]] = {}
     for did in req.doc_ids:
-        validate_doc_id(did)
         units = store.get_units_by_doc(did)
         name = doc_name_map.get(did, did)
         doc_units[did] = (name, units)
