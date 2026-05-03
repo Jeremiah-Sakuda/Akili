@@ -1,10 +1,8 @@
 """Tests for verification layer: all 30 rules + edge cases."""
 
-import pytest
-
-from akili.canonical import Bijection, Grid, Point, Unit
-from akili.canonical.models import BBox, GridCell
-from akili.verify import AnswerWithProof, Refuse, verify_and_answer
+from akili.canonical import Grid, Point, Unit
+from akili.canonical.models import GridCell
+from akili.verify import Refuse, verify_and_answer
 
 
 # ===================================================================
@@ -20,8 +18,9 @@ class TestCoreBehavior:
 
     def test_determinism(self, sample_units, sample_bijections, sample_grids):
         """Same inputs produce the same output every time."""
-        r1 = verify_and_answer("What is the maximum voltage?", sample_units, sample_bijections, sample_grids)
-        r2 = verify_and_answer("What is the maximum voltage?", sample_units, sample_bijections, sample_grids)
+        q = "What is the maximum voltage?"
+        r1 = verify_and_answer(q, sample_units, sample_bijections, sample_grids)
+        r2 = verify_and_answer(q, sample_units, sample_bijections, sample_grids)
         assert r1 == r2
 
 
@@ -38,7 +37,9 @@ class TestPinLookup:
 
     def test_pin_lookup_via_grid(self):
         g = Grid(
-            id="pinout", rows=3, cols=2,
+            id="pinout",
+            rows=3,
+            cols=2,
             cells=[
                 GridCell(row=0, col=0, value="Pin", origin=Point(x=0.1, y=0.1)),
                 GridCell(row=0, col=1, value="Name", origin=Point(x=0.5, y=0.1)),
@@ -47,7 +48,9 @@ class TestPinLookup:
                 GridCell(row=2, col=0, value="6", origin=Point(x=0.1, y=0.3)),
                 GridCell(row=2, col=1, value="GND", origin=Point(x=0.5, y=0.3)),
             ],
-            origin=Point(x=0, y=0), doc_id="doc1", page=0,
+            origin=Point(x=0, y=0),
+            doc_id="doc1",
+            page=0,
         )
         result = verify_and_answer("What is pin 5?", [], [], [g])
         assert not isinstance(result, Refuse)
@@ -120,8 +123,12 @@ class TestGenericMax:
 
     def test_max_voltage_from_text_fallback(self):
         u = Unit(
-            id="u1", value="Charge: CC-CV 4A, 4.2V, 100mA cut-off at 23℃",
-            unit_of_measure=None, origin=Point(x=0.37, y=0.20), doc_id="d", page=5,
+            id="u1",
+            value="Charge: CC-CV 4A, 4.2V, 100mA cut-off at 23℃",
+            unit_of_measure=None,
+            origin=Point(x=0.37, y=0.20),
+            doc_id="d",
+            page=5,
         )
         result = verify_and_answer("What is the max voltage?", [u], [], [])
         assert not isinstance(result, Refuse)
@@ -134,8 +141,13 @@ class TestGenericMax:
 
     def test_max_capacity(self):
         u = Unit(
-            id="cap1", value=3000, unit_of_measure="mAh",
-            context="nominal capacity", origin=Point(x=0.1, y=0.1), doc_id="d", page=0,
+            id="cap1",
+            value=3000,
+            unit_of_measure="mAh",
+            context="nominal capacity",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d",
+            page=0,
         )
         result = verify_and_answer("What is the maximum capacity?", [u], [], [])
         assert not isinstance(result, Refuse)
@@ -172,7 +184,8 @@ class TestOperatingRanges:
         assert "-65" in result.answer or "150" in result.answer
 
     def test_soldering_temperature(self, sample_units):
-        result = verify_and_answer("What is the reflow soldering temperature?", sample_units, [], [])
+        q = "What is the reflow soldering temperature?"
+        result = verify_and_answer(q, sample_units, [], [])
         assert not isinstance(result, Refuse)
         assert "260" in result.answer
 
@@ -241,7 +254,7 @@ class TestPhysicalPackage:
         assert "TQFP-48" in result.answer
 
     def test_package_dimensions(self, sample_units):
-        result = verify_and_answer("What are the package dimensions?", sample_units, [], [])
+        result = verify_and_answer("What is the component length dimension?", sample_units, [], [])
         assert not isinstance(result, Refuse)
         assert "7.0" in result.answer or "mm" in result.answer
 
@@ -273,7 +286,8 @@ class TestPhysicalPackage:
 
 class TestRecommendedOperating:
     def test_recommended_operating(self, sample_grids):
-        result = verify_and_answer("What are the recommended operating conditions?", [], [], sample_grids)
+        q = "What are the recommended operating conditions?"
+        result = verify_and_answer(q, [], [], sample_grids)
         assert not isinstance(result, Refuse)
         assert "See table" in result.answer
 
@@ -286,9 +300,13 @@ class TestRecommendedOperating:
 class TestUnitByIntent:
     def test_charge_voltage(self):
         u = Unit(
-            id="u1", value="Charge: CC-CV 4A, 4.2V, 100mA cut-off",
-            label=None, unit_of_measure=None,
-            origin=Point(x=0.37, y=0.20), doc_id="d", page=5,
+            id="u1",
+            value="Charge: CC-CV 4A, 4.2V, 100mA cut-off",
+            label=None,
+            unit_of_measure=None,
+            origin=Point(x=0.37, y=0.20),
+            doc_id="d",
+            page=5,
         )
         result = verify_and_answer("What is the charge voltage?", [u], [], [])
         assert not isinstance(result, Refuse)
@@ -323,8 +341,13 @@ class TestGridCellLookup:
 class TestUnitLookup:
     def test_label_match(self):
         u = Unit(
-            id="u1", label="VBAT", value=4.2, unit_of_measure="V",
-            origin=Point(x=0.1, y=0.1), doc_id="d", page=0,
+            id="u1",
+            label="VBAT",
+            value=4.2,
+            unit_of_measure="V",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d",
+            page=0,
         )
         result = verify_and_answer("What is VBAT?", [u], [], [])
         assert not isinstance(result, Refuse)

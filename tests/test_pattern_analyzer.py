@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from akili.learn.pattern_analyzer import (
-    CorrectionPattern,
     PatternAnalyzer,
     _extract_number,
     _extract_unit,
@@ -27,24 +25,33 @@ def populated_store(correction_store: CorrectionStore) -> CorrectionStore:
     # Unit confusion: mV → V (5 times)
     for i in range(5):
         correction_store.add_correction(
-            doc_id=f"doc_{i}", canonical_id=f"u_{i}", canonical_type="unit",
-            action="correct", original_value=f"{3300 + i} mV",
+            doc_id=f"doc_{i}",
+            canonical_id=f"u_{i}",
+            canonical_type="unit",
+            action="correct",
+            original_value=f"{3300 + i} mV",
             corrected_value=f"{3.3 + i * 0.001} V",
         )
 
     # Scaling errors: 10x off (6 times)
     for i in range(6):
         correction_store.add_correction(
-            doc_id=f"doc_{i}", canonical_id=f"s_{i}", canonical_type="unit",
-            action="correct", original_value=f"{(i + 1) * 10} mA",
+            doc_id=f"doc_{i}",
+            canonical_id=f"s_{i}",
+            canonical_type="unit",
+            action="correct",
+            original_value=f"{(i + 1) * 10} mA",
             corrected_value=f"{(i + 1)} mA",
         )
 
     # A few confirmations
     for i in range(3):
         correction_store.add_correction(
-            doc_id=f"doc_{i}", canonical_id=f"c_{i}", canonical_type="unit",
-            action="confirm", original_value=f"{3.3} V",
+            doc_id=f"doc_{i}",
+            canonical_id=f"c_{i}",
+            canonical_type="unit",
+            action="confirm",
+            original_value=f"{3.3} V",
         )
 
     return correction_store
@@ -126,8 +133,11 @@ class TestLabelMisread:
     def test_detect_label_patterns(self, correction_store: CorrectionStore) -> None:
         for _ in range(4):
             correction_store.add_correction(
-                doc_id="d1", canonical_id="lbl_1", canonical_type="unit",
-                action="correct", original_value="therml resistance",
+                doc_id="d1",
+                canonical_id="lbl_1",
+                canonical_type="unit",
+                action="correct",
+                original_value="therml resistance",
                 corrected_value="thermal resistance",
             )
         analyzer = PatternAnalyzer(correction_store)
@@ -140,9 +150,11 @@ class TestTypeBias:
     def test_detect_type_bias(self, correction_store: CorrectionStore) -> None:
         for i in range(8):
             correction_store.add_correction(
-                doc_id=f"d{i}", canonical_id=f"r_{i}",
+                doc_id=f"d{i}",
+                canonical_id=f"r_{i}",
                 canonical_type="range" if i < 6 else "unit",
-                action="correct", original_value=f"{i} V",
+                action="correct",
+                original_value=f"{i} V",
                 corrected_value=f"{i + 0.1} V",
             )
         analyzer = PatternAnalyzer(correction_store)

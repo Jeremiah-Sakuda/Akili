@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # Structured logging (Phase 3: Observability)
 # ---------------------------------------------------------------------------
 
+
 class _JSONFormatter(logging.Formatter):
     """Emit log records as single-line JSON for structured log pipelines."""
 
@@ -49,9 +50,9 @@ def _configure_logging() -> None:
         if config.LOG_FORMAT == "json":
             handler.setFormatter(_JSONFormatter())
         else:
-            handler.setFormatter(logging.Formatter(
-                "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
-            ))
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s")
+            )
         root.addHandler(handler)
         root.setLevel(logging.INFO)
 
@@ -95,17 +96,18 @@ _RATE_LIMIT_ENABLED = config.RATE_LIMIT_ENABLED
 
 try:
     from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.errors import RateLimitExceeded
     from slowapi.util import get_remote_address
 
     def _rate_limit_key(request: Request) -> str:
         """Use user UID when auth is enabled, otherwise fall back to IP."""
         from akili.api.auth import is_auth_required
+
         if is_auth_required():
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Bearer ") and len(auth_header) > 7:
                 try:
                     from akili.api.auth import verify_firebase_token
+
                     claims = verify_firebase_token(auth_header[7:])
                     uid = claims.get("uid")
                     if uid:
@@ -123,21 +125,23 @@ except ImportError:
 
     class _NoOpLimiter:
         """Stub when slowapi is not installed."""
+
         def limit(self, *args: Any, **kwargs: Any) -> Any:
             def decorator(fn: Any) -> Any:
                 return fn
+
             return decorator
 
     limiter = _NoOpLimiter()  # type: ignore[assignment]
     if _RATE_LIMIT_ENABLED:
         logger.warning(
-            "slowapi not installed — rate limiting disabled. "
-            "Install with: pip install slowapi"
+            "slowapi not installed — rate limiting disabled. " "Install with: pip install slowapi"
         )
 
 # ---------------------------------------------------------------------------
 # Security headers middleware
 # ---------------------------------------------------------------------------
+
 
 class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to every response."""
@@ -169,6 +173,7 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # Lifespan (replaces deprecated @app.on_event("startup"))
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle for the FastAPI app."""
@@ -181,6 +186,7 @@ async def lifespan(app: FastAPI):
             "GOOGLE_API_KEY is missing or empty — ingest will return 500 until set in .env"
         )
     from akili.api.auth import is_auth_required, _is_production_environment
+
     if not is_auth_required():
         if _is_production_environment():
             logger.error(
@@ -233,9 +239,12 @@ if hasattr(limiter, "init_app"):
     app.state.limiter = limiter
     try:
         from slowapi.middleware import SlowAPIMiddleware
-        from slowapi.errors import RateLimitExceeded
+        from slowapi.errors import RateLimitExceeded as RLE
+
         app.add_middleware(SlowAPIMiddleware)
-        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+        app.add_exception_handler(
+            RLE, _rate_limit_exceeded_handler  # type: ignore[arg-type]
+        )
     except ImportError:
         pass
 
@@ -280,7 +289,8 @@ def status() -> JSONResponse:
             "message": (
                 "GOOGLE_API_KEY is set; ingest can call Gemini."
                 if key_set
-                else "GOOGLE_API_KEY is missing or empty. Set it in .env and ensure the API container uses env_file: .env"
+                else "GOOGLE_API_KEY is missing or empty. Set it in .env "
+                "and ensure the API container uses env_file: .env"
             ),
             "database": "postgresql" if using_pg else "sqlite",
             "AKILI_DB_PATH": db_path if not using_pg else None,

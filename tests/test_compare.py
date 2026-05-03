@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from akili.canonical import Unit
 from akili.canonical.models import Point
 from akili.verify.compare import (
-    ComparisonResult,
     compare_documents,
     format_comparison_response,
 )
@@ -20,12 +17,36 @@ def _doc_units(
     theta: float = 45.0,
 ) -> list[Unit]:
     return [
-        Unit(id=f"{doc_id}_vcc", label="VCC", value=vcc, unit_of_measure="V",
-             context="supply voltage", origin=Point(x=0.1, y=0.1), doc_id=doc_id, page=0),
-        Unit(id=f"{doc_id}_vmax", label="VCC max", value=vmax, unit_of_measure="V",
-             context="absolute maximum voltage", origin=Point(x=0.2, y=0.1), doc_id=doc_id, page=0),
-        Unit(id=f"{doc_id}_theta", label="θJA", value=theta, unit_of_measure="°C/W",
-             context="thermal resistance junction to ambient", origin=Point(x=0.3, y=0.3), doc_id=doc_id, page=2),
+        Unit(
+            id=f"{doc_id}_vcc",
+            label="VCC",
+            value=vcc,
+            unit_of_measure="V",
+            context="supply voltage",
+            origin=Point(x=0.1, y=0.1),
+            doc_id=doc_id,
+            page=0,
+        ),
+        Unit(
+            id=f"{doc_id}_vmax",
+            label="VCC max",
+            value=vmax,
+            unit_of_measure="V",
+            context="absolute maximum voltage",
+            origin=Point(x=0.2, y=0.1),
+            doc_id=doc_id,
+            page=0,
+        ),
+        Unit(
+            id=f"{doc_id}_theta",
+            label="θJA",
+            value=theta,
+            unit_of_measure="°C/W",
+            context="thermal resistance junction to ambient",
+            origin=Point(x=0.3, y=0.3),
+            doc_id=doc_id,
+            page=2,
+        ),
     ]
 
 

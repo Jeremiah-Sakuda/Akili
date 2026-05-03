@@ -42,17 +42,21 @@ async def list_corpus() -> JSONResponse:
 
     for chip in COMMON_CHIPS:
         in_corpus = chip.lower() in corpus_mpns
-        available_chips.append({
-            "chip": chip,
-            "available": in_corpus,
-        })
+        available_chips.append(
+            {
+                "chip": chip,
+                "available": in_corpus,
+            }
+        )
 
-    return JSONResponse(content={
-        "corpus": corpus_entries,
-        "common_chips": available_chips,
-        "total_in_corpus": len(corpus_entries),
-        "total_common": len(COMMON_CHIPS),
-    })
+    return JSONResponse(
+        content={
+            "corpus": corpus_entries,
+            "common_chips": available_chips,
+            "total_in_corpus": len(corpus_entries),
+            "total_common": len(COMMON_CHIPS),
+        }
+    )
 
 
 @router.get("/library/{mpn}")
@@ -80,16 +84,18 @@ async def get_corpus_entry(mpn: str) -> JSONResponse:
 
     # Return summary, not full canonical data
     canonical = entry.get("canonical_data") or {}
-    return JSONResponse(content={
-        "mpn": entry["mpn"],
-        "chip_name": entry["chip_name"],
-        "datasheet_url": entry.get("datasheet_url"),
-        "created_at": entry.get("created_at"),
-        "summary": {
-            "units": len(canonical.get("units", [])),
-            "bijections": len(canonical.get("bijections", [])),
-            "grids": len(canonical.get("grids", [])),
-            "ranges": len(canonical.get("ranges", [])),
-            "conditional_units": len(canonical.get("conditional_units", [])),
-        },
-    })
+    return JSONResponse(
+        content={
+            "mpn": entry["mpn"],
+            "chip_name": entry["chip_name"],
+            "datasheet_url": entry.get("datasheet_url"),
+            "created_at": entry.get("created_at"),
+            "summary": {
+                "units": len(canonical.get("units", [])),
+                "bijections": len(canonical.get("bijections", [])),
+                "grids": len(canonical.get("grids", [])),
+                "ranges": len(canonical.get("ranges", [])),
+                "conditional_units": len(canonical.get("conditional_units", [])),
+            },
+        }
+    )

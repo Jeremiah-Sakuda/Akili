@@ -75,11 +75,13 @@ async def create_share_link(
 
     logger.info(f"Created share link: {question_id} for doc {req.doc_id}")
 
-    return JSONResponse(content={
-        "question_id": question_id,
-        "permalink": permalink,
-        "url": f"https://akili.app/q/{question_id}",
-    })
+    return JSONResponse(
+        content={
+            "question_id": question_id,
+            "permalink": permalink,
+            "url": f"https://akili.app/q/{question_id}",
+        }
+    )
 
 
 @router.get("/q/{question_id}")
@@ -104,16 +106,18 @@ async def get_shared_answer(question_id: str) -> JSONResponse:
             detail="Shared answer not found",
         )
 
-    return JSONResponse(content={
-        "question_id": answer["question_id"],
-        "question": answer["question"],
-        "answer": answer["answer"],
-        "status": answer["status"],
-        "confidence": answer["confidence"],
-        "proof_data": answer["proof_data"],
-        "source_page": answer["source_page"],
-        "created_at": answer["created_at"],
-    })
+    return JSONResponse(
+        content={
+            "question_id": answer["question_id"],
+            "question": answer["question"],
+            "answer": answer["answer"],
+            "status": answer["status"],
+            "confidence": answer["confidence"],
+            "proof_data": answer["proof_data"],
+            "source_page": answer["source_page"],
+            "created_at": answer["created_at"],
+        }
+    )
 
 
 @router.get("/share/preview/{question_id}")
@@ -142,10 +146,12 @@ async def preview_share(question_id: str) -> JSONResponse:
     question_preview = answer["question"][:100]
     answer_preview = answer["answer"][:200]
 
-    return JSONResponse(content={
-        "title": f"AKILI: {question_preview}",
-        "description": answer_preview,
-        "url": f"https://akili.app/q/{question_id}",
-        "image": "https://akili.app/og-image.png",
-        "status": answer["status"],
-    })
+    return JSONResponse(
+        content={
+            "title": f"AKILI: {question_preview}",
+            "description": answer_preview,
+            "url": f"https://akili.app/q/{question_id}",
+            "image": "https://akili.app/og-image.png",
+            "status": answer["status"],
+        }
+    )

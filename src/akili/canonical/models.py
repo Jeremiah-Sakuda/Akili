@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Point(BaseModel):
@@ -33,18 +33,24 @@ class Unit(BaseModel):
     Rejected at ingestion if origin or value is ambiguous.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     id: str = Field(..., description="Unique id within document")
     label: str | None = Field(None, description="Human-readable label")
     value: str | float = Field(..., description="Numeric or string value")
     unit_of_measure: str | None = Field(None, description="e.g. V, A, Ω")
-    context: str | None = Field(None, description="What this value refers to (e.g. charge voltage, nominal capacity)")
+    context: str | None = Field(
+        None, description="What this value refers to (e.g. charge voltage, nominal capacity)"
+    )
     origin: Point = Field(..., description="(x,y) location in document")
     doc_id: str = Field(..., description="Source document id")
     page: int = Field(..., ge=0, description="Page number (0-based)")
     bbox: BBox | None = Field(None, description="Optional bounding box")
     extraction_agreement: float = Field(
-        default=0.5, ge=0.0, le=1.0,
-        description="Consensus agreement score (1.0=full consensus, 0.5=single-pass default)"
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Consensus agreement score (1.0=full consensus, 0.5=single-pass default)",
     )
 
 
@@ -53,6 +59,8 @@ class Bijection(BaseModel):
     Strict 1:1 mapping between two sets (e.g. pin name ↔ pin number).
     Coordinate ranges indicate where in the doc this mapping holds.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     id: str = Field(..., description="Unique id within document")
     left_set: list[str] = Field(..., description="Left side of mapping")
@@ -84,9 +92,11 @@ class GridCell(BaseModel):
 
 class Grid(BaseModel):
     """
-    Tabular or schematic region: rows × cols with cell-level coordinates.
+    Tabular or schematic region: rows x cols with cell-level coordinates.
     Used for datasheet tables, pinout grids, schematic grids.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     id: str = Field(..., description="Unique id within document")
     rows: int = Field(..., ge=0)
@@ -99,6 +109,9 @@ class Grid(BaseModel):
 
     def get_cell(self, row: int, col: int) -> GridCell | None:
         """Return cell at (row, col) if present."""
+        # HIGH-4: Validate bounds before searching
+        if row < 0 or row >= self.rows or col < 0 or col >= self.cols:
+            return None
         for c in self.cells:
             if c.row == row and c.col == col:
                 return c
@@ -112,13 +125,17 @@ class Grid(BaseModel):
 class Range(BaseModel):
     """Min/typ/max specification with optional conditions (e.g. 'at 25C', 'VCC = 3.3V')."""
 
+    model_config = ConfigDict(extra="forbid")
+
     id: str = Field(..., description="Unique id within document")
     label: str | None = Field(None, description="Parameter name (e.g. 'VCC', 'ICC')")
     min: float | None = Field(None, description="Minimum value")
     typ: float | None = Field(None, description="Typical value")
     max: float | None = Field(None, description="Maximum value")
     unit: str = Field(..., description="Unit of measure (e.g. V, mA, ns)")
-    conditions: str | None = Field(None, description="Test conditions (e.g. 'at 25C', 'VCC = 3.3V')")
+    conditions: str | None = Field(
+        None, description="Test conditions (e.g. 'at 25C', 'VCC = 3.3V')"
+    )
     context: str | None = Field(None, description="Section/table context")
     origin: Point = Field(..., description="(x,y) location")
     doc_id: str = Field(..., description="Source document id")
@@ -128,6 +145,8 @@ class Range(BaseModel):
 
 class ConditionalUnit(BaseModel):
     """Value that depends on a specific condition (e.g. derating curves)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     id: str = Field(..., description="Unique id within document")
     label: str | None = Field(None, description="Parameter name")

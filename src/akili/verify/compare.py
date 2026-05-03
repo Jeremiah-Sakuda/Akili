@@ -11,11 +11,10 @@ All queries are executed via SQL JOINs across doc_id — no graph database neede
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 
 from akili.canonical import Unit
-from akili.verify.models import ConfidenceScore, ProofPoint, ProofPointBBox
+from akili.verify.models import ProofPoint, ProofPointBBox
 
 
 @dataclass
@@ -49,8 +48,12 @@ def _proof_from_unit(u: Unit) -> ProofPoint:
     if u.bbox:
         bbox = ProofPointBBox(x1=u.bbox.x1, y1=u.bbox.y1, x2=u.bbox.x2, y2=u.bbox.y2)
     return ProofPoint(
-        x=u.origin.x, y=u.origin.y, page=u.page,
-        bbox=bbox, source_id=u.id, source_type="unit",
+        x=u.origin.x,
+        y=u.origin.y,
+        page=u.page,
+        bbox=bbox,
+        source_id=u.id,
+        source_type="unit",
     )
 
 
@@ -203,16 +206,18 @@ def compare_documents(
                 if val is not None:
                     numeric_rows.append((val, row))
             else:
-                comp.rows.append(ComparisonRow(
-                    doc_id=doc_id,
-                    doc_name=doc_name,
-                    parameter=config["label"],
-                    value=None,
-                    unit_of_measure=None,
-                    source_unit_id=None,
-                    page=None,
-                    proof=None,
-                ))
+                comp.rows.append(
+                    ComparisonRow(
+                        doc_id=doc_id,
+                        doc_name=doc_name,
+                        parameter=config["label"],
+                        value=None,
+                        unit_of_measure=None,
+                        source_unit_id=None,
+                        page=None,
+                        proof=None,
+                    )
+                )
 
         if numeric_rows:
             if comp.direction == "lower":
@@ -226,13 +231,21 @@ def compare_documents(
 
             values_str = ", ".join(
                 f"{r.doc_name}: {r.value} {r.unit_of_measure or ''}"
-                for r in comp.rows if r.value is not None
+                for r in comp.rows
+                if r.value is not None
             )
-            direction_word = "lowest" if comp.direction == "lower" else "highest" if comp.direction == "higher" else ""
+            direction_word = (
+                "lowest"
+                if comp.direction == "lower"
+                else "highest"
+                if comp.direction == "higher"
+                else ""
+            )
             if direction_word:
+                unit = best_row.unit_of_measure or ''
                 comp.summary = (
                     f"{config['label']}: {values_str}. "
-                    f"{direction_word.title()}: {best_row.doc_name} ({best_val} {best_row.unit_of_measure or ''})"
+                    f"{direction_word.title()}: {best_row.doc_name} ({best_val} {unit})"
                 )
             else:
                 comp.summary = f"{config['label']}: {values_str}"

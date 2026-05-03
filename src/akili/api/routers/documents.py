@@ -12,7 +12,6 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from akili.api.auth import get_current_user, is_auth_required
 from akili.api.deps import docs_dir, get_store, validate_doc_id
-from akili.canonical import Bijection, Grid, Unit
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,9 @@ async def get_document_file(
             store = get_store()
             owner = store.get_document_owner(doc_id)
             if owner and owner != _user.get("uid"):
-                raise HTTPException(status_code=403, detail="Not authorized to access this document")
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to access this document"
+                )
     dest = docs_dir() / f"{doc_id}.pdf"
     if not dest.is_file():
         raise HTTPException(

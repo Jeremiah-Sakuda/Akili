@@ -17,6 +17,4 @@ def has_api_key() -> bool:
     return bool(key)
 
 
-skip_without_key = pytest.mark.skipif(
-    not has_api_key(), reason=INTEGRATION_REASON
-)
+skip_without_key = pytest.mark.skipif(not has_api_key(), reason=INTEGRATION_REASON)

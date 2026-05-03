@@ -32,6 +32,7 @@ router = APIRouter(tags=["ingest"])
 
 def _get_limiter():
     from akili.api.app import limiter
+
     return limiter
 
 
@@ -75,7 +76,9 @@ async def ingest(
         tmp.write(content)
         tmp_path = Path(tmp.name)
     try:
-        doc_id, canonical, total_pages, pages_failed = ingest_document(tmp_path, store=store, uploaded_by=user_id)
+        doc_id, canonical, total_pages, pages_failed = ingest_document(
+            tmp_path, store=store, uploaded_by=user_id
+        )
         validate_doc_id(doc_id)
         dd = docs_dir()
         dd.mkdir(parents=True, exist_ok=True)
@@ -224,11 +227,13 @@ async def ingest_stream(
 
     async def _stream_sse(q: queue.Queue, loop: asyncio.AbstractEventLoop) -> Any:
         while True:
+
             def get_msg() -> dict | None:
                 try:
                     return q.get(timeout=0.5)
                 except queue.Empty:
                     return None
+
             msg = await loop.run_in_executor(None, get_msg)
             if msg is None:
                 continue

@@ -19,46 +19,126 @@ from akili.verify.models import AnswerWithProof, ProofChain
 @pytest.fixture()
 def power_units() -> list[Unit]:
     return [
-        Unit(id="v1", label="VCC", value=3.3, unit_of_measure="V",
-             context="supply voltage", origin=Point(x=0.1, y=0.1), doc_id="d1", page=0,
-             bbox=BBox(x1=0.05, y1=0.05, x2=0.15, y2=0.15)),
-        Unit(id="i1", label="ICC", value=50, unit_of_measure="mA",
-             context="supply current", origin=Point(x=0.2, y=0.1), doc_id="d1", page=0,
-             bbox=BBox(x1=0.15, y1=0.05, x2=0.25, y2=0.15)),
+        Unit(
+            id="v1",
+            label="VCC",
+            value=3.3,
+            unit_of_measure="V",
+            context="supply voltage",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d1",
+            page=0,
+            bbox=BBox(x1=0.05, y1=0.05, x2=0.15, y2=0.15),
+        ),
+        Unit(
+            id="i1",
+            label="ICC",
+            value=50,
+            unit_of_measure="mA",
+            context="supply current",
+            origin=Point(x=0.2, y=0.1),
+            doc_id="d1",
+            page=0,
+            bbox=BBox(x1=0.15, y1=0.05, x2=0.25, y2=0.15),
+        ),
     ]
 
 
 @pytest.fixture()
 def thermal_units() -> list[Unit]:
     return [
-        Unit(id="theta1", label="θJA", value=45.0, unit_of_measure="°C/W",
-             context="thermal resistance junction to ambient", origin=Point(x=0.1, y=0.3), doc_id="d1", page=2),
-        Unit(id="pd1", label="PD", value=200, unit_of_measure="mW",
-             context="power dissipation", origin=Point(x=0.2, y=0.3), doc_id="d1", page=2),
-        Unit(id="tjmax", label="TJ max", value=125, unit_of_measure="°C",
-             context="maximum junction temperature", origin=Point(x=0.3, y=0.3), doc_id="d1", page=2),
+        Unit(
+            id="theta1",
+            label="θJA",
+            value=45.0,
+            unit_of_measure="°C/W",
+            context="thermal resistance junction to ambient",
+            origin=Point(x=0.1, y=0.3),
+            doc_id="d1",
+            page=2,
+        ),
+        Unit(
+            id="pd1",
+            label="PD",
+            value=200,
+            unit_of_measure="mW",
+            context="power dissipation",
+            origin=Point(x=0.2, y=0.3),
+            doc_id="d1",
+            page=2,
+        ),
+        Unit(
+            id="tjmax",
+            label="TJ max",
+            value=125,
+            unit_of_measure="°C",
+            context="maximum junction temperature",
+            origin=Point(x=0.3, y=0.3),
+            doc_id="d1",
+            page=2,
+        ),
     ]
 
 
 @pytest.fixture()
 def margin_units() -> list[Unit]:
     return [
-        Unit(id="vop", label="VCC", value=3.3, unit_of_measure="V",
-             context="supply voltage", origin=Point(x=0.1, y=0.1), doc_id="d1", page=0),
-        Unit(id="vabs", label="Absolute max voltage", value=6.0, unit_of_measure="V",
-             context="absolute maximum voltage", origin=Point(x=0.2, y=0.1), doc_id="d1", page=0),
+        Unit(
+            id="vop",
+            label="VCC",
+            value=3.3,
+            unit_of_measure="V",
+            context="supply voltage",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d1",
+            page=0,
+        ),
+        Unit(
+            id="vabs",
+            label="Absolute max voltage",
+            value=6.0,
+            unit_of_measure="V",
+            context="absolute maximum voltage",
+            origin=Point(x=0.2, y=0.1),
+            doc_id="d1",
+            page=0,
+        ),
     ]
 
 
 @pytest.fixture()
 def budget_units() -> list[Unit]:
     return [
-        Unit(id="icc", label="ICC", value=100, unit_of_measure="mA",
-             context="supply current", origin=Point(x=0.1, y=0.1), doc_id="d1", page=0),
-        Unit(id="io1", label="IO1", value=20, unit_of_measure="mA",
-             context="output current", origin=Point(x=0.2, y=0.1), doc_id="d1", page=0),
-        Unit(id="io2", label="IO2", value=15, unit_of_measure="mA",
-             context="output current", origin=Point(x=0.3, y=0.1), doc_id="d1", page=0),
+        Unit(
+            id="icc",
+            label="ICC",
+            value=100,
+            unit_of_measure="mA",
+            context="supply current",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d1",
+            page=0,
+        ),
+        Unit(
+            id="io1",
+            label="IO1",
+            value=20,
+            unit_of_measure="mA",
+            context="output current",
+            origin=Point(x=0.2, y=0.1),
+            doc_id="d1",
+            page=0,
+        ),
+        Unit(
+            id="io2",
+            label="IO2",
+            value=15,
+            unit_of_measure="mA",
+            context="output current",
+            origin=Point(x=0.3, y=0.1),
+            doc_id="d1",
+            page=0,
+        ),
     ]
 
 
@@ -78,8 +158,16 @@ class TestPowerDissipation:
 
     def test_missing_current(self) -> None:
         units = [
-            Unit(id="v1", label="VCC", value=3.3, unit_of_measure="V",
-                 context="supply voltage", origin=Point(x=0.1, y=0.1), doc_id="d1", page=0),
+            Unit(
+                id="v1",
+                label="VCC",
+                value=3.3,
+                unit_of_measure="V",
+                context="supply voltage",
+                origin=Point(x=0.1, y=0.1),
+                doc_id="d1",
+                page=0,
+            ),
         ]
         result = derive_power_dissipation("What is the power dissipation?", units)
         assert result is None
@@ -108,12 +196,36 @@ class TestThermalCheck:
 
     def test_thermal_exceeds_limit(self) -> None:
         units = [
-            Unit(id="theta1", label="θJA", value=200.0, unit_of_measure="°C/W",
-                 context="thermal resistance junction to ambient", origin=Point(x=0.1, y=0.3), doc_id="d1", page=2),
-            Unit(id="pd1", label="PD", value=1000, unit_of_measure="mW",
-                 context="power dissipation", origin=Point(x=0.2, y=0.3), doc_id="d1", page=2),
-            Unit(id="tjmax", label="TJ max", value=125, unit_of_measure="°C",
-                 context="maximum junction temperature", origin=Point(x=0.3, y=0.3), doc_id="d1", page=2),
+            Unit(
+                id="theta1",
+                label="θJA",
+                value=200.0,
+                unit_of_measure="°C/W",
+                context="thermal resistance junction to ambient",
+                origin=Point(x=0.1, y=0.3),
+                doc_id="d1",
+                page=2,
+            ),
+            Unit(
+                id="pd1",
+                label="PD",
+                value=1000,
+                unit_of_measure="mW",
+                context="power dissipation",
+                origin=Point(x=0.2, y=0.3),
+                doc_id="d1",
+                page=2,
+            ),
+            Unit(
+                id="tjmax",
+                label="TJ max",
+                value=125,
+                unit_of_measure="°C",
+                context="maximum junction temperature",
+                origin=Point(x=0.3, y=0.3),
+                doc_id="d1",
+                page=2,
+            ),
         ]
         result = derive_thermal_check("thermal check", units)
         assert result is not None
@@ -122,20 +234,52 @@ class TestThermalCheck:
 
     def test_no_theta_returns_none(self) -> None:
         units = [
-            Unit(id="pd1", label="PD", value=200, unit_of_measure="mW",
-                 context="power dissipation", origin=Point(x=0.2, y=0.3), doc_id="d1", page=2),
+            Unit(
+                id="pd1",
+                label="PD",
+                value=200,
+                unit_of_measure="mW",
+                context="power dissipation",
+                origin=Point(x=0.2, y=0.3),
+                doc_id="d1",
+                page=2,
+            ),
         ]
         result = derive_thermal_check("thermal check", units)
         assert result is None
 
     def test_derives_power_from_vi(self) -> None:
         units = [
-            Unit(id="theta1", label="θJA", value=45.0, unit_of_measure="°C/W",
-                 context="thermal resistance junction to ambient", origin=Point(x=0.1, y=0.3), doc_id="d1", page=2),
-            Unit(id="v1", label="VCC", value=3.3, unit_of_measure="V",
-                 context="supply voltage", origin=Point(x=0.1, y=0.1), doc_id="d1", page=0),
-            Unit(id="i1", label="ICC", value=50, unit_of_measure="mA",
-                 context="supply current", origin=Point(x=0.2, y=0.1), doc_id="d1", page=0),
+            Unit(
+                id="theta1",
+                label="θJA",
+                value=45.0,
+                unit_of_measure="°C/W",
+                context="thermal resistance junction to ambient",
+                origin=Point(x=0.1, y=0.3),
+                doc_id="d1",
+                page=2,
+            ),
+            Unit(
+                id="v1",
+                label="VCC",
+                value=3.3,
+                unit_of_measure="V",
+                context="supply voltage",
+                origin=Point(x=0.1, y=0.1),
+                doc_id="d1",
+                page=0,
+            ),
+            Unit(
+                id="i1",
+                label="ICC",
+                value=50,
+                unit_of_measure="mA",
+                context="supply current",
+                origin=Point(x=0.2, y=0.1),
+                doc_id="d1",
+                page=0,
+            ),
         ]
         result = derive_thermal_check("thermal margin check", units)
         assert result is not None
@@ -157,8 +301,16 @@ class TestVoltageMargin:
 
     def test_missing_abs_max(self) -> None:
         units = [
-            Unit(id="vop", label="VCC", value=3.3, unit_of_measure="V",
-                 context="supply voltage", origin=Point(x=0.1, y=0.1), doc_id="d1", page=0),
+            Unit(
+                id="vop",
+                label="VCC",
+                value=3.3,
+                unit_of_measure="V",
+                context="supply voltage",
+                origin=Point(x=0.1, y=0.1),
+                doc_id="d1",
+                page=0,
+            ),
         ]
         result = derive_voltage_margin("voltage margin", units)
         assert result is None
@@ -174,8 +326,16 @@ class TestCurrentBudget:
 
     def test_no_supply(self) -> None:
         units = [
-            Unit(id="io1", label="IO1", value=20, unit_of_measure="mA",
-                 context="output current", origin=Point(x=0.2, y=0.1), doc_id="d1", page=0),
+            Unit(
+                id="io1",
+                label="IO1",
+                value=20,
+                unit_of_measure="mA",
+                context="output current",
+                origin=Point(x=0.2, y=0.1),
+                doc_id="d1",
+                page=0,
+            ),
         ]
         result = derive_current_budget("current budget", units)
         assert result is None

@@ -34,8 +34,12 @@ def _proof_point_from_unit(u: Unit) -> ProofPoint:
     if u.bbox:
         bbox = ProofPointBBox(x1=u.bbox.x1, y1=u.bbox.y1, x2=u.bbox.x2, y2=u.bbox.y2)
     return ProofPoint(
-        x=u.origin.x, y=u.origin.y, page=u.page,
-        bbox=bbox, source_id=u.id, source_type="unit",
+        x=u.origin.x,
+        y=u.origin.y,
+        page=u.page,
+        bbox=bbox,
+        source_id=u.id,
+        source_type="unit",
     )
 
 
@@ -99,9 +103,7 @@ _POWER_PATTERNS = re.compile(
 )
 
 
-def derive_power_dissipation(
-    question: str, units: list[Unit]
-) -> AnswerWithProof | None:
+def derive_power_dissipation(question: str, units: list[Unit]) -> AnswerWithProof | None:
     """P = V × I from extracted voltage and current specs."""
     if not _POWER_PATTERNS.search(question):
         return None
@@ -127,7 +129,17 @@ def derive_power_dissipation(
     if v is None or i is None:
         return None
 
-    v_volts = v if (voltage_unit.unit_of_measure or "").upper() == "V" else v / 1000.0
+    # MATH-2: Robust unit conversion for voltage
+    v_uom = (voltage_unit.unit_of_measure or "").upper()
+    if v_uom == "V":
+        v_volts = v
+    elif v_uom == "MV":
+        v_volts = v / 1000.0
+    elif v_uom == "KV":
+        v_volts = v * 1000.0
+    else:
+        logger.warning("Unexpected voltage unit '%s', assuming V", v_uom)
+        v_volts = v
     i_amps = i
     i_uom = (current_unit.unit_of_measure or "").lower()
     if i_uom == "ma":
@@ -177,9 +189,11 @@ def derive_power_dissipation(
 
     min_cq = min(
         compute_canonical_quality(
-            has_bbox=u.bbox is not None, has_origin=True,
+            has_bbox=u.bbox is not None,
+            has_origin=True,
             has_unit_of_measure=u.unit_of_measure is not None,
-            has_label=u.label is not None, has_context=u.context is not None,
+            has_label=u.label is not None,
+            has_context=u.context is not None,
         )
         for u in [voltage_unit, current_unit]
     )
@@ -190,8 +204,11 @@ def derive_power_dissipation(
         verification_strength=0.85,
     )
 
+    v_unit = voltage_unit.unit_of_measure
+    i_unit = current_unit.unit_of_measure
+    answer = f"Power dissipation: {power_str} (P = V × I = {v} {v_unit} × {i} {i_unit})"
     return AnswerWithProof(
-        answer=f"Power dissipation: {power_str} (P = V × I = {v} {voltage_unit.unit_of_measure} × {i} {current_unit.unit_of_measure})",
+        answer=answer,
         proof=all_proofs,
         source_type="derived",
         confidence=confidence,
@@ -204,14 +221,13 @@ def derive_power_dissipation(
 # ---------------------------------------------------------------------------
 
 _THERMAL_PATTERNS = re.compile(
-    r"(thermal\s+check|junction\s+temp.*safe|within.*thermal|t_?junction|calculate.*temperature|thermal\s+margin)",
+    r"(thermal\s+check|junction\s+temp.*safe|within.*thermal"
+    r"|t_?junction|calculate.*temperature|thermal\s+margin)",
     re.IGNORECASE,
 )
 
 
-def derive_thermal_check(
-    question: str, units: list[Unit]
-) -> AnswerWithProof | None:
+def derive_thermal_check(question: str, units: list[Unit]) -> AnswerWithProof | None:
     """T_junction = T_ambient + (P × θ_JA). Check if within max junction temp."""
     if not _THERMAL_PATTERNS.search(question):
         return None
@@ -248,11 +264,13 @@ def derive_thermal_check(
     steps: list[ProofStep] = []
     proofs: list[ProofPoint] = []
 
-    steps.append(ProofStep(
-        description=f"Thermal resistance: {theta_val} {theta_unit.unit_of_measure}",
-        source_facts=[_proof_point_from_unit(theta_unit)],
-        result=f"{theta_val} °C/W",
-    ))
+    steps.append(
+        ProofStep(
+            description=f"Thermal resistance: {theta_val} {theta_unit.unit_of_measure}",
+            source_facts=[_proof_point_from_unit(theta_unit)],
+            result=f"{theta_val} °C/W",
+        )
+    )
     proofs.append(_proof_point_from_unit(theta_unit))
 
     if power_unit is not None:
@@ -262,11 +280,13 @@ def derive_thermal_check(
             p_uom = (power_unit.unit_of_measure or "").lower()
             if p_uom == "mw":
                 p_watts = p_val / 1000.0
-            steps.append(ProofStep(
-                description=f"Power dissipation: {p_val} {power_unit.unit_of_measure}",
-                source_facts=[_proof_point_from_unit(power_unit)],
-                result=f"{p_watts} W",
-            ))
+            steps.append(
+                ProofStep(
+                    description=f"Power dissipation: {p_val} {power_unit.unit_of_measure}",
+                    source_facts=[_proof_point_from_unit(power_unit)],
+                    result=f"{p_watts} W",
+                )
+            )
             proofs.append(_proof_point_from_unit(power_unit))
         else:
             return None
@@ -277,17 +297,32 @@ def derive_thermal_check(
             v = _numeric_value(voltage)
             i = _numeric_value(current)
             if v is not None and i is not None:
-                v_volts = v if (voltage.unit_of_measure or "").upper() == "V" else v / 1000.0
+                # MATH-2: Robust unit conversion for voltage
+                v_uom = (voltage.unit_of_measure or "").upper()
+                if v_uom == "V":
+                    v_volts = v
+                elif v_uom == "MV":
+                    v_volts = v / 1000.0
+                elif v_uom == "KV":
+                    v_volts = v * 1000.0
+                else:
+                    logger.warning("Unexpected voltage unit '%s', assuming V", v_uom)
+                    v_volts = v
                 i_amps = i
                 if (current.unit_of_measure or "").lower() == "ma":
                     i_amps = i / 1000.0
                 p_watts = v_volts * i_amps
-                steps.append(ProofStep(
-                    description=f"Derived power: P = {v_volts}V × {i_amps}A",
-                    formula="P = V × I",
-                    source_facts=[_proof_point_from_unit(voltage), _proof_point_from_unit(current)],
-                    result=f"{p_watts} W",
-                ))
+                steps.append(
+                    ProofStep(
+                        description=f"Derived power: P = {v_volts}V × {i_amps}A",
+                        formula="P = V × I",
+                        source_facts=[
+                            _proof_point_from_unit(voltage),
+                            _proof_point_from_unit(current),
+                        ],
+                        result=f"{p_watts} W",
+                    )
+                )
                 proofs.extend([_proof_point_from_unit(voltage), _proof_point_from_unit(current)])
             else:
                 return None
@@ -297,12 +332,14 @@ def derive_thermal_check(
     p_watts = float(steps[-1].result.replace(" W", ""))
     t_junction = t_ambient + (p_watts * theta_val)
 
-    steps.append(ProofStep(
-        description=f"Junction temperature at {t_ambient}°C ambient",
-        formula=f"T_j = T_a + (P × θ_JA) = {t_ambient} + ({p_watts} × {theta_val})",
-        source_facts=proofs.copy(),
-        result=f"{t_junction:.1f} °C",
-    ))
+    steps.append(
+        ProofStep(
+            description=f"Junction temperature at {t_ambient}°C ambient",
+            formula=f"T_j = T_a + (P × θ_JA) = {t_ambient} + ({p_watts} × {theta_val})",
+            source_facts=proofs.copy(),
+            result=f"{t_junction:.1f} °C",
+        )
+    )
 
     answer_parts = [f"T_junction = {t_junction:.1f}°C at {t_ambient}°C ambient"]
 
@@ -311,20 +348,25 @@ def derive_thermal_check(
         if max_tj is not None:
             safe = t_junction <= max_tj
             margin = max_tj - t_junction
+            status = 'SAFE' if safe else 'EXCEEDS LIMIT'
             answer_parts.append(
-                f"{'SAFE' if safe else 'EXCEEDS LIMIT'}: max T_j = {max_tj}°C, margin = {margin:.1f}°C"
+                f"{status}: max T_j = {max_tj}°C, margin = {margin:.1f}°C"
             )
-            steps.append(ProofStep(
-                description=f"Max junction temperature: {max_tj}°C",
-                source_facts=[_proof_point_from_unit(max_tj_unit)],
-                result=f"{'SAFE' if safe else 'EXCEEDS'} (margin: {margin:.1f}°C)",
-            ))
+            steps.append(
+                ProofStep(
+                    description=f"Max junction temperature: {max_tj}°C",
+                    source_facts=[_proof_point_from_unit(max_tj_unit)],
+                    result=f"{'SAFE' if safe else 'EXCEEDS'} (margin: {margin:.1f}°C)",
+                )
+            )
             proofs.append(_proof_point_from_unit(max_tj_unit))
 
     chain = ProofChain(
         steps=steps,
         final_result=answer_parts[0],
-        formula_summary=f"T_j = {t_ambient} + ({p_watts:.4f}W × {theta_val}°C/W) = {t_junction:.1f}°C",
+        formula_summary=(
+            f"T_j = {t_ambient} + ({p_watts:.4f}W × {theta_val}°C/W) = {t_junction:.1f}°C"
+        ),
     )
 
     confidence = ConfidenceScore.compute(
@@ -347,14 +389,13 @@ def derive_thermal_check(
 # ---------------------------------------------------------------------------
 
 _VOLTAGE_MARGIN_PATTERNS = re.compile(
-    r"(voltage\s+margin|how\s+close.*abs.*max|margin.*voltage|voltage.*headroom|operating.*vs.*max)",
+    r"(voltage\s+margin|how\s+close.*abs.*max|margin.*voltage"
+    r"|voltage.*headroom|operating.*vs.*max)",
     re.IGNORECASE,
 )
 
 
-def derive_voltage_margin(
-    question: str, units: list[Unit]
-) -> AnswerWithProof | None:
+def derive_voltage_margin(question: str, units: list[Unit]) -> AnswerWithProof | None:
     """margin = (V_abs_max - V_operating) / V_abs_max × 100%."""
     if not _VOLTAGE_MARGIN_PATTERNS.search(question):
         return None
@@ -386,6 +427,15 @@ def derive_voltage_margin(
     v_op = _numeric_value(v_operating)
     v_max = _numeric_value(v_abs_max)
     if v_op is None or v_max is None or v_max == 0:
+        return None
+
+    # MEDIUM-5: Handle negative voltage margins (v_op > v_max)
+    if v_op > v_max:
+        logger.warning(
+            "Operating voltage %.2fV exceeds max %.2fV — invalid data",
+            v_op,
+            v_max,
+        )
         return None
 
     margin_pct = ((v_max - v_op) / v_max) * 100.0
@@ -426,8 +476,12 @@ def derive_voltage_margin(
         verification_strength=0.85,
     )
 
+    answer = (
+        f"Voltage margin: {margin_pct:.1f}% ({margin_v:.2f} V headroom). "
+        f"Operating: {v_op} V, Max: {v_max} V."
+    )
     return AnswerWithProof(
-        answer=f"Voltage margin: {margin_pct:.1f}% ({margin_v:.2f} V headroom). Operating: {v_op} V, Max: {v_max} V.",
+        answer=answer,
         proof=proofs,
         source_type="derived",
         confidence=confidence,
@@ -445,9 +499,7 @@ _CURRENT_BUDGET_PATTERNS = re.compile(
 )
 
 
-def derive_current_budget(
-    question: str, units: list[Unit]
-) -> AnswerWithProof | None:
+def derive_current_budget(question: str, units: list[Unit]) -> AnswerWithProof | None:
     """Sum of output/pin currents vs. total supply current."""
     if not _CURRENT_BUDGET_PATTERNS.search(question):
         return None
@@ -497,39 +549,56 @@ def derive_current_budget(
                     total_out += val * 1000.0
                 else:
                     total_out += val
-                steps.append(ProofStep(
-                    description=f"Output current: {val} {oc.unit_of_measure} ({oc.id})",
-                    source_facts=[_proof_point_from_unit(oc)],
-                    result=f"{val} {oc.unit_of_measure}",
-                ))
+                steps.append(
+                    ProofStep(
+                        description=f"Output current: {val} {oc.unit_of_measure} ({oc.id})",
+                        source_facts=[_proof_point_from_unit(oc)],
+                        result=f"{val} {oc.unit_of_measure}",
+                    )
+                )
                 proofs.append(_proof_point_from_unit(oc))
 
         remaining = i_supply - total_out
-        steps.append(ProofStep(
-            description="Current budget summary",
-            formula=f"Remaining = {i_supply} - {total_out:.1f} = {remaining:.1f} {supply_current.unit_of_measure}",
-            source_facts=proofs.copy(),
-            result=f"{remaining:.1f} {supply_current.unit_of_measure} remaining",
-        ))
+        steps.append(
+            ProofStep(
+                description="Current budget summary",
+                formula=(
+                    f"Remaining = {i_supply} - {total_out:.1f} "
+                    f"= {remaining:.1f} {supply_current.unit_of_measure}"
+                ),
+                source_facts=proofs.copy(),
+                result=f"{remaining:.1f} {supply_current.unit_of_measure} remaining",
+            )
+        )
 
+        uom = supply_current.unit_of_measure
         chain = ProofChain(
             steps=steps,
-            final_result=f"Supply: {i_supply} {supply_current.unit_of_measure}, Used: {total_out:.1f}, Remaining: {remaining:.1f}",
-            formula_summary=f"Budget = {i_supply} - {total_out:.1f} = {remaining:.1f} {supply_current.unit_of_measure}",
+            final_result=(
+                f"Supply: {i_supply} {uom}, Used: {total_out:.1f}, "
+                f"Remaining: {remaining:.1f}"
+            ),
+            formula_summary=(
+                f"Budget = {i_supply} - {total_out:.1f} = {remaining:.1f} {uom}"
+            ),
         )
 
         answer = (
-            f"Current budget: {i_supply} {supply_current.unit_of_measure} supply, "
-            f"{total_out:.1f} {supply_current.unit_of_measure} allocated across {len(output_currents)} outputs, "
-            f"{remaining:.1f} {supply_current.unit_of_measure} remaining."
+            f"Current budget: {i_supply} {uom} supply, "
+            f"{total_out:.1f} {uom} allocated across {len(output_currents)} outputs, "
+            f"{remaining:.1f} {uom} remaining."
         )
     else:
+        uom = supply_current.unit_of_measure
         chain = ProofChain(
             steps=steps,
-            final_result=f"Total supply: {i_supply} {supply_current.unit_of_measure}",
-            formula_summary=f"Supply current = {i_supply} {supply_current.unit_of_measure}",
+            final_result=f"Total supply: {i_supply} {uom}",
+            formula_summary=f"Supply current = {i_supply} {uom}",
         )
-        answer = f"Total supply current: {i_supply} {supply_current.unit_of_measure}. No individual output currents found to sum."
+        answer = (
+            f"Total supply current: {i_supply} {uom}. "
+            f"No individual output currents found to sum."
+        )
 
     confidence = ConfidenceScore.compute(
         extraction_agreement=0.5,

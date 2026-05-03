@@ -8,7 +8,6 @@ electrical specs, absolute max ratings, block diagram, or general text.
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import os
 import time
@@ -55,7 +54,6 @@ Classify this datasheet page into exactly ONE of these categories:
 - other: Anything not matching the above
 
 Respond with ONLY the category name, nothing else."""
-
 
 
 def classify_page(image_png_bytes: bytes) -> PageType:

@@ -99,6 +99,7 @@ class TestPageClassifier:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             result = classify_page(b"fake_image_bytes")
         assert result == "electrical_specs"
@@ -113,20 +114,28 @@ class TestPageClassifier:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             result = classify_page(b"fake_image_bytes")
         assert result == "other"
 
     def test_classify_no_api_key_returns_other(self):
         import os
+
         with patch.dict(os.environ, {}, clear=True):
             with patch("akili.config.PAGE_CLASSIFY_ENABLED", True):
                 result = classify_page(b"fake_image_bytes")
         assert result == "other"
 
     def test_extraction_hint_for_known_types(self):
-        for ptype in ["pinout_table", "electrical_specs", "absolute_max_ratings",
-                       "timing_characteristics", "package_info", "text_description"]:
+        for ptype in [
+            "pinout_table",
+            "electrical_specs",
+            "absolute_max_ratings",
+            "timing_characteristics",
+            "package_info",
+            "text_description",
+        ]:
             hint = get_extraction_hint(ptype)  # type: ignore[arg-type]
             assert len(hint) > 0, f"No hint for {ptype}"
 

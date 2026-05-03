@@ -48,9 +48,7 @@ class UsageStore:
                         created_at TIMESTAMPTZ DEFAULT NOW()
                     )
                 """)
-                cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_usage_user ON usage(user_id, action)"
-                )
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_usage_user ON usage(user_id, action)")
             else:
                 cur.executescript("""
                     CREATE TABLE IF NOT EXISTS usage (
@@ -97,6 +95,14 @@ class UsageStore:
         docs = self.count(user_id, "ingest")
         queries = self.count(user_id, "query")
         return {
-            "documents": {"used": docs, "limit": MAX_DOCUMENTS, "remaining": max(0, MAX_DOCUMENTS - docs)},
-            "queries": {"used": queries, "limit": MAX_QUERIES, "remaining": max(0, MAX_QUERIES - queries)},
+            "documents": {
+                "used": docs,
+                "limit": MAX_DOCUMENTS,
+                "remaining": max(0, MAX_DOCUMENTS - docs),
+            },
+            "queries": {
+                "used": queries,
+                "limit": MAX_QUERIES,
+                "remaining": max(0, MAX_QUERIES - queries),
+            },
         }

@@ -39,22 +39,26 @@ class ConfidenceScore(BaseModel):
 
     extraction_agreement: float = Field(
         default=0.5,
-        ge=0.0, le=1.0,
-        description="How consistent the extraction was (1.0 = consensus, 0.5 = single-pass default)",
+        ge=0.0,
+        le=1.0,
+        description="Extraction consistency (1.0=consensus, 0.5=single-pass)",
     )
     canonical_validation: float = Field(
         default=0.5,
-        ge=0.0, le=1.0,
-        description="Schema completeness: has bbox, origin, unit_of_measure, label, context",
+        ge=0.0,
+        le=1.0,
+        description="Schema completeness: bbox, origin, unit, label, context",
     )
     verification_strength: float = Field(
         default=0.5,
-        ge=0.0, le=1.0,
-        description="How directly the proof supports the answer (1.0 = exact structured, 0.4 = keyword-only)",
+        ge=0.0,
+        le=1.0,
+        description="Proof quality (1.0=exact structured, 0.4=keyword-only)",
     )
     overall: float = Field(
         default=0.5,
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Weighted average of the three components",
     )
 
@@ -113,7 +117,9 @@ class ProofStep(BaseModel):
 
     description: str = Field(..., description="Human-readable description of this step")
     formula: str | None = Field(None, description="Mathematical formula applied (e.g. 'P = V × I')")
-    source_facts: list[ProofPoint] = Field(default_factory=list, description="Source facts used in this step")
+    source_facts: list[ProofPoint] = Field(
+        default_factory=list, description="Source facts used in this step"
+    )
     result: str = Field(..., description="Result of this step")
 
 
@@ -122,7 +128,9 @@ class ProofChain(BaseModel):
 
     steps: list[ProofStep] = Field(default_factory=list, description="Ordered derivation steps")
     final_result: str = Field(..., description="Final computed answer")
-    formula_summary: str = Field(..., description="Overall formula (e.g. 'P = V × I = 4.2V × 1.0A = 4.2W')")
+    formula_summary: str = Field(
+        ..., description="Overall formula (e.g. 'P = V × I = 4.2V × 1.0A = 4.2W')"
+    )
 
 
 class AnswerWithProof(BaseModel):

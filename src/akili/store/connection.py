@@ -30,10 +30,13 @@ class ConnectionManager:
         if db_url and db_url.startswith("postgresql"):
             try:
                 import psycopg2.pool  # noqa: F401
+
                 self._use_pg = True
                 self._dsn = db_url
                 self._pg_pool = psycopg2.pool.ThreadedConnectionPool(
-                    minconn=1, maxconn=10, dsn=db_url,
+                    minconn=1,
+                    maxconn=10,
+                    dsn=db_url,
                 )
                 logger.info("ConnectionManager using PostgreSQL pool")
             except ImportError:

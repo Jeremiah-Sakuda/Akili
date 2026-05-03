@@ -40,7 +40,9 @@ def _json_to_bbox(s: str | None) -> BBox | None:
 class Store(BaseStore):
     """SQLite-backed store for canonical objects."""
 
-    def __init__(self, db_path: Path | str = "akili.db", conn_manager: ConnectionManager | None = None):
+    def __init__(
+        self, db_path: Path | str = "akili.db", conn_manager: ConnectionManager | None = None
+    ):
         self.db_path = Path(db_path)
         if conn_manager is not None:
             self._mgr = conn_manager
@@ -156,9 +158,17 @@ class Store(BaseStore):
                     details_json TEXT,
                     created_at TEXT DEFAULT (datetime('now'))
                 );
+                CREATE INDEX IF NOT EXISTS idx_units_doc_id ON units(doc_id);
+                CREATE INDEX IF NOT EXISTS idx_bijections_doc_id ON bijections(doc_id);
+                CREATE INDEX IF NOT EXISTS idx_grids_doc_id ON grids(doc_id);
+                CREATE INDEX IF NOT EXISTS idx_ranges_doc_id ON ranges(doc_id);
+                CREATE INDEX IF NOT EXISTS idx_cunit_doc_id
+                    ON conditional_units(doc_id);
             """)
 
-    def _audit(self, action: str, doc_id: str | None, actor: str | None = None, details: dict | None = None) -> None:
+    def _audit(
+        self, action: str, doc_id: str | None, actor: str | None = None, details: dict | None = None
+    ) -> None:
         with self._mgr.connection() as c:
             c.execute(
                 "INSERT INTO audit_log (doc_id, action, actor, details_json) VALUES (?, ?, ?, ?)",
@@ -182,17 +192,27 @@ class Store(BaseStore):
                 ).fetchall()
         return [
             {
-                "id": r[0], "doc_id": r[1], "action": r[2], "actor": r[3],
+                "id": r[0],
+                "doc_id": r[1],
+                "action": r[2],
+                "actor": r[3],
                 "details": json.loads(r[4]) if r[4] else None,
                 "created_at": r[5],
             }
             for r in rows
         ]
 
-    def add_document(self, doc_id: str, filename: str | None = None, page_count: int = 0, uploaded_by: str | None = None) -> None:
+    def add_document(
+        self,
+        doc_id: str,
+        filename: str | None = None,
+        page_count: int = 0,
+        uploaded_by: str | None = None,
+    ) -> None:
         with self._mgr.connection() as c:
             c.execute(
-                "INSERT OR REPLACE INTO documents (doc_id, filename, page_count, uploaded_by) VALUES (?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO documents "
+                "(doc_id, filename, page_count, uploaded_by) VALUES (?, ?, ?, ?)",
                 (doc_id, filename or "", page_count, uploaded_by),
             )
 
@@ -211,13 +231,16 @@ class Store(BaseStore):
         """Persist canonical objects for a document (single transaction)."""
         with self._mgr.connection() as c:
             c.execute(
-                "INSERT OR REPLACE INTO documents (doc_id, filename, page_count, uploaded_by) VALUES (?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO documents "
+                "(doc_id, filename, page_count, uploaded_by) VALUES (?, ?, ?, ?)",
                 (doc_id, filename or "", page_count, uploaded_by),
             )
             for u in units:
                 c.execute(
-                    """INSERT OR REPLACE INTO units (doc_id, page, unit_id, label, value,
-                       unit_of_measure, context, origin_json, bbox_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    """INSERT OR REPLACE INTO units
+                       (doc_id, page, unit_id, label, value, unit_of_measure,
+                       context, origin_json, bbox_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         u.doc_id,
                         u.page,
@@ -272,35 +295,58 @@ class Store(BaseStore):
                         _bbox_to_json(g.bbox),
                     ),
                 )
-            for r in (ranges or []):
+            for r in ranges or []:
                 c.execute(
                     """INSERT OR REPLACE INTO ranges (doc_id, page, range_id, label,
                        min_val, typ_val, max_val, unit, conditions, context,
                        origin_json, bbox_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        r.doc_id, r.page, r.id, r.label,
-                        r.min, r.typ, r.max, r.unit,
-                        r.conditions, r.context,
-                        _point_to_json(r.origin), _bbox_to_json(r.bbox),
+                        r.doc_id,
+                        r.page,
+                        r.id,
+                        r.label,
+                        r.min,
+                        r.typ,
+                        r.max,
+                        r.unit,
+                        r.conditions,
+                        r.context,
+                        _point_to_json(r.origin),
+                        _bbox_to_json(r.bbox),
                     ),
                 )
-            for cu in (conditional_units or []):
+            for cu in conditional_units or []:
                 c.execute(
                     """INSERT OR REPLACE INTO conditional_units (doc_id, page, cunit_id,
                        label, value, unit, condition_type, condition_value,
                        derating, context, origin_json, bbox_json)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        cu.doc_id, cu.page, cu.id, cu.label,
-                        cu.value, cu.unit, cu.condition_type, cu.condition_value,
-                        cu.derating, cu.context,
-                        _point_to_json(cu.origin), _bbox_to_json(cu.bbox),
+                        cu.doc_id,
+                        cu.page,
+                        cu.id,
+                        cu.label,
+                        cu.value,
+                        cu.unit,
+                        cu.condition_type,
+                        cu.condition_value,
+                        cu.derating,
+                        cu.context,
+                        _point_to_json(cu.origin),
+                        _bbox_to_json(cu.bbox),
                     ),
                 )
-        self._audit("store_canonical", doc_id, details={
-            "units": len(units), "bijections": len(bijections), "grids": len(grids),
-            "ranges": len(ranges or []), "conditional_units": len(conditional_units or []),
-        })
+        self._audit(
+            "store_canonical",
+            doc_id,
+            details={
+                "units": len(units),
+                "bijections": len(bijections),
+                "grids": len(grids),
+                "ranges": len(ranges or []),
+                "conditional_units": len(conditional_units or []),
+            },
+        )
 
     def get_units_by_doc(self, doc_id: str) -> list[Unit]:
         with self._mgr.connection() as c:
@@ -404,10 +450,18 @@ class Store(BaseStore):
             ).fetchall()
         return [
             Range(
-                doc_id=r[0], page=r[1], id=r[2], label=r[3],
-                min=r[4], typ=r[5], max=r[6], unit=r[7],
-                conditions=r[8], context=r[9],
-                origin=_json_to_point(r[10]), bbox=_json_to_bbox(r[11]),
+                doc_id=r[0],
+                page=r[1],
+                id=r[2],
+                label=r[3],
+                min=r[4],
+                typ=r[5],
+                max=r[6],
+                unit=r[7],
+                conditions=r[8],
+                context=r[9],
+                origin=_json_to_point(r[10]),
+                bbox=_json_to_bbox(r[11]),
             )
             for r in rows
         ]
@@ -423,10 +477,18 @@ class Store(BaseStore):
             ).fetchall()
         return [
             ConditionalUnit(
-                doc_id=r[0], page=r[1], id=r[2], label=r[3],
-                value=r[4], unit=r[5], condition_type=r[6],
-                condition_value=r[7], derating=r[8], context=r[9],
-                origin=_json_to_point(r[10]), bbox=_json_to_bbox(r[11]),
+                doc_id=r[0],
+                page=r[1],
+                id=r[2],
+                label=r[3],
+                value=r[4],
+                unit=r[5],
+                condition_type=r[6],
+                condition_value=r[7],
+                derating=r[8],
+                context=r[9],
+                origin=_json_to_point(r[10]),
+                bbox=_json_to_bbox(r[11]),
             )
             for r in rows
         ]
@@ -467,9 +529,15 @@ class Store(BaseStore):
         with self._mgr.connection() as c:
             rows = c.execute(
                 "SELECT d.doc_id, d.filename, d.page_count, d.created_at, "
-                "(SELECT COUNT(*) FROM units u WHERE u.doc_id = d.doc_id), "
-                "(SELECT COUNT(*) FROM bijections b WHERE b.doc_id = d.doc_id), "
-                "(SELECT COUNT(*) FROM grids g WHERE g.doc_id = d.doc_id) FROM documents d"
+                "COUNT(DISTINCT u.rowid) as units_count, "
+                "COUNT(DISTINCT b.rowid) as bijections_count, "
+                "COUNT(DISTINCT g.rowid) as grids_count "
+                "FROM documents d "
+                "LEFT JOIN units u ON u.doc_id = d.doc_id "
+                "LEFT JOIN bijections b ON b.doc_id = d.doc_id "
+                "LEFT JOIN grids g ON g.doc_id = d.doc_id "
+                "GROUP BY d.doc_id, d.filename, d.page_count, d.created_at "
+                "ORDER BY d.created_at DESC"
             ).fetchall()
         return [
             {
