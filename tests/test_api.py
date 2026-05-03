@@ -80,6 +80,46 @@ class TestDocumentValidation:
         assert r.status_code == 404
 
 
+class TestDocIdValidation:
+    """Tests for strict UUID doc_id validation (A4)."""
+
+    def test_validate_doc_id_accepts_valid_uuid4(self):
+        """Valid UUID4 should be accepted."""
+        # Use a valid UUID4 format
+        r = client.get("/documents/550e8400-e29b-41d4-a716-446655440000/canonical")
+        # Should return 200 (doc doesn't exist but ID is valid)
+        assert r.status_code == 200
+
+    def test_validate_doc_id_rejects_non_uuid(self):
+        """Non-UUID strings with special chars should be rejected."""
+        # Path with spaces should be rejected
+        r = client.get("/documents/doc%20id/canonical")
+        assert r.status_code == 400
+
+        # Path with @ should be rejected
+        r = client.get("/documents/doc%40id/canonical")
+        assert r.status_code == 400
+
+    def test_validate_doc_id_allows_legacy_alphanumeric(self):
+        """Legacy alphanumeric doc_ids should still work (with warning)."""
+        # Legacy format: alphanumeric with dashes/underscores
+        r = client.get("/documents/legacy-doc-id-12345/canonical")
+        assert r.status_code == 200
+
+    def test_validate_doc_id_rejects_empty(self):
+        """Empty doc_id should be rejected."""
+        r = client.get("/documents//canonical")
+        assert r.status_code in (400, 404, 307)  # 404 or redirect for empty path
+
+    def test_validate_doc_id_rejects_special_chars(self):
+        """Special characters should be rejected."""
+        r = client.get("/documents/doc@id/canonical")
+        assert r.status_code == 400
+
+        r = client.get("/documents/doc%20id/canonical")
+        assert r.status_code == 400
+
+
 class TestQueryFlow:
     """Test the query endpoint with known data via the store."""
 

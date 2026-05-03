@@ -367,3 +367,69 @@ class TestTryDerivedQueries:
         assert len(result.derivation.steps) > 0
         assert result.derivation.final_result
         assert result.derivation.formula_summary
+
+
+class TestDerivedAgreementPropagation:
+    """Tests for B5: derived answers propagate min extraction_agreement."""
+
+    def test_derived_propagates_min_agreement(self) -> None:
+        """Derived power should use min of source units' agreement scores."""
+        # Create units with different extraction_agreement values
+        v_unit = Unit(
+            id="v1",
+            label="VCC",
+            value=5.0,
+            unit_of_measure="V",
+            context="supply voltage",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d1",
+            page=0,
+            extraction_agreement=0.9,  # High agreement
+        )
+        i_unit = Unit(
+            id="i1",
+            label="ICC",
+            value=100,
+            unit_of_measure="mA",
+            context="supply current",
+            origin=Point(x=0.2, y=0.1),
+            doc_id="d1",
+            page=0,
+            extraction_agreement=0.6,  # Lower agreement
+        )
+
+        result = derive_power_dissipation("power dissipation", [v_unit, i_unit])
+        assert result is not None
+        assert result.confidence is not None
+        # Should use min of 0.9 and 0.6 = 0.6
+        assert result.confidence.extraction_agreement == pytest.approx(0.6)
+
+    def test_derived_uses_default_when_no_agreement(self) -> None:
+        """When units don't have agreement scores, use default 0.5."""
+        v_unit = Unit(
+            id="v1",
+            label="VCC",
+            value=5.0,
+            unit_of_measure="V",
+            context="supply voltage",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d1",
+            page=0,
+            # No extraction_agreement set (uses default 0.5)
+        )
+        i_unit = Unit(
+            id="i1",
+            label="ICC",
+            value=100,
+            unit_of_measure="mA",
+            context="supply current",
+            origin=Point(x=0.2, y=0.1),
+            doc_id="d1",
+            page=0,
+            # No extraction_agreement set (uses default 0.5)
+        )
+
+        result = derive_power_dissipation("power dissipation", [v_unit, i_unit])
+        assert result is not None
+        assert result.confidence is not None
+        assert result.confidence.extraction_agreement == pytest.approx(0.5)

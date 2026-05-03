@@ -50,6 +50,21 @@ def _numeric_value(u: Unit) -> float | None:
         return None
 
 
+def _min_extraction_agreement(units: list[Unit]) -> float:
+    """Get minimum extraction_agreement from source units (worst-case).
+
+    Returns 0.5 as default if no units or no agreement scores.
+    """
+    if not units:
+        return 0.5
+    agreements = [
+        getattr(u, "extraction_agreement", 0.5)
+        for u in units
+        if u is not None
+    ]
+    return min(agreements) if agreements else 0.5
+
+
 def _find_unit(
     units: list[Unit],
     context_keywords: list[str],
@@ -198,8 +213,9 @@ def derive_power_dissipation(question: str, units: list[Unit]) -> AnswerWithProo
         for u in [voltage_unit, current_unit]
     )
 
+    min_agreement = _min_extraction_agreement([voltage_unit, current_unit])
     confidence = ConfidenceScore.compute(
-        extraction_agreement=0.5,
+        extraction_agreement=min_agreement,
         canonical_validation=min_cq,
         verification_strength=0.85,
     )
@@ -263,6 +279,7 @@ def derive_thermal_check(question: str, units: list[Unit]) -> AnswerWithProof | 
     t_ambient = 25.0
     steps: list[ProofStep] = []
     proofs: list[ProofPoint] = []
+    source_units: list[Unit] = [theta_unit]  # Track source units for agreement
 
     steps.append(
         ProofStep(
@@ -288,6 +305,7 @@ def derive_thermal_check(question: str, units: list[Unit]) -> AnswerWithProof | 
                 )
             )
             proofs.append(_proof_point_from_unit(power_unit))
+            source_units.append(power_unit)
         else:
             return None
     else:
@@ -324,6 +342,7 @@ def derive_thermal_check(question: str, units: list[Unit]) -> AnswerWithProof | 
                     )
                 )
                 proofs.extend([_proof_point_from_unit(voltage), _proof_point_from_unit(current)])
+                source_units.extend([voltage, current])
             else:
                 return None
         else:
@@ -360,6 +379,7 @@ def derive_thermal_check(question: str, units: list[Unit]) -> AnswerWithProof | 
                 )
             )
             proofs.append(_proof_point_from_unit(max_tj_unit))
+            source_units.append(max_tj_unit)
 
     chain = ProofChain(
         steps=steps,
@@ -369,8 +389,9 @@ def derive_thermal_check(question: str, units: list[Unit]) -> AnswerWithProof | 
         ),
     )
 
+    min_agreement = _min_extraction_agreement(source_units)
     confidence = ConfidenceScore.compute(
-        extraction_agreement=0.5,
+        extraction_agreement=min_agreement,
         canonical_validation=0.7,
         verification_strength=0.80,
     )
@@ -470,8 +491,9 @@ def derive_voltage_margin(question: str, units: list[Unit]) -> AnswerWithProof |
     )
 
     proofs = [_proof_point_from_unit(v_operating), _proof_point_from_unit(v_abs_max)]
+    min_agreement = _min_extraction_agreement([v_operating, v_abs_max])
     confidence = ConfidenceScore.compute(
-        extraction_agreement=0.5,
+        extraction_agreement=min_agreement,
         canonical_validation=0.75,
         verification_strength=0.85,
     )
@@ -534,6 +556,7 @@ def derive_current_budget(question: str, units: list[Unit]) -> AnswerWithProof |
         ),
     ]
     proofs = [_proof_point_from_unit(supply_current)]
+    source_units: list[Unit] = [supply_current]  # Track source units for agreement
 
     if output_currents:
         total_out = 0.0
@@ -557,6 +580,7 @@ def derive_current_budget(question: str, units: list[Unit]) -> AnswerWithProof |
                     )
                 )
                 proofs.append(_proof_point_from_unit(oc))
+                source_units.append(oc)
 
         remaining = i_supply - total_out
         steps.append(
@@ -600,8 +624,9 @@ def derive_current_budget(question: str, units: list[Unit]) -> AnswerWithProof |
             f"No individual output currents found to sum."
         )
 
+    min_agreement = _min_extraction_agreement(source_units)
     confidence = ConfidenceScore.compute(
-        extraction_agreement=0.5,
+        extraction_agreement=min_agreement,
         canonical_validation=0.7,
         verification_strength=0.80,
     )
