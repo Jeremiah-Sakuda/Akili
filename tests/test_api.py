@@ -5,6 +5,8 @@ Covers health, status, request validation, document operations, and query flow.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
 from akili.api.app import app
@@ -123,7 +125,9 @@ class TestDocIdValidation:
 class TestQueryFlow:
     """Test the query endpoint with known data via the store."""
 
-    def test_query_nonexistent_doc_returns_refuse(self):
+    @patch("akili.api.routers.query.get_usage_store")
+    def test_query_nonexistent_doc_returns_refuse(self, mock_usage):
+        mock_usage.return_value.check_limit.return_value = (True, 0, 100)
         r = client.post(
             "/query",
             json={
@@ -136,7 +140,9 @@ class TestQueryFlow:
         assert data.get("status") == "refuse"
         assert "formatting_source" in data
 
-    def test_query_response_has_formatting_source(self):
+    @patch("akili.api.routers.query.get_usage_store")
+    def test_query_response_has_formatting_source(self, mock_usage):
+        mock_usage.return_value.check_limit.return_value = (True, 0, 100)
         r = client.post(
             "/query",
             json={

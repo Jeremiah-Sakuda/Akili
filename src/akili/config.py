@@ -39,7 +39,10 @@ if not GOOGLE_API_KEY.strip():
 # ---------------------------------------------------------------------------
 # Gemini / LLM
 # ---------------------------------------------------------------------------
-GEMINI_MODEL: str = os.environ.get("AKILI_GEMINI_MODEL", "gemini-3-flash")
+# Use dated stable model by default to avoid preview model instability (A6)
+GEMINI_MODEL: str = os.environ.get("AKILI_GEMINI_MODEL", "gemini-2.0-flash")
+# Fallback model for retries on NotFound/PermissionDenied (A6)
+GEMINI_FALLBACK_MODEL: str | None = os.environ.get("AKILI_GEMINI_FALLBACK_MODEL") or None
 GEMINI_MAX_RETRIES: int = _int_env("AKILI_GEMINI_MAX_RETRIES", "6")
 GEMINI_BACKOFF_BASE: float = _float_env("AKILI_GEMINI_BACKOFF_BASE", "8.0")
 GEMINI_PAGE_DELAY: float = _float_env("AKILI_GEMINI_PAGE_DELAY_SECONDS", "4.0")

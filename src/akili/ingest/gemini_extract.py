@@ -540,6 +540,16 @@ def _ensure_configured() -> None:
         raise ValueError("GOOGLE_API_KEY environment variable is required for Gemini extraction")
 
 
+def _is_model_unavailable_error(e: Exception) -> bool:
+    """Check if error indicates model is unavailable (NotFound/PermissionDenied)."""
+    err_str = str(e).lower()
+    err_type = type(e).__name__.lower()
+    return any(
+        indicator in err_str or indicator in err_type
+        for indicator in ("notfound", "not found", "permissiondenied", "permission denied", "404")
+    )
+
+
 def extract_page(
     page_index: int,
     image_png_bytes: bytes,
@@ -551,11 +561,13 @@ def extract_page(
 
     Raises if API key is missing. Returns empty extraction on parse/API errors.
     page_type_hint is an optional string prepended to the prompt (from page_classifier).
+    Uses fallback model on NotFound/PermissionDenied if configured (A6).
     """
     _ensure_configured()
     genai.configure(api_key=config.GOOGLE_API_KEY)
 
-    model = genai.GenerativeModel(config.GEMINI_MODEL)
+    model_name = config.GEMINI_MODEL
+    model = genai.GenerativeModel(model_name)
     image_part = {
         "inline_data": {
             "mime_type": "image/png",
@@ -597,6 +609,18 @@ def extract_page(
                 wait = config.GEMINI_BACKOFF_BASE * (2**attempt)
                 time.sleep(wait)
                 continue
+            # A6: Try fallback model on NotFound/PermissionDenied
+            if _is_model_unavailable_error(e) and config.GEMINI_FALLBACK_MODEL:
+                if model_name != config.GEMINI_FALLBACK_MODEL:
+                    logger.warning(
+                        "Model %s unavailable (%s), trying fallback %s",
+                        model_name,
+                        type(e).__name__,
+                        config.GEMINI_FALLBACK_MODEL,
+                    )
+                    model_name = config.GEMINI_FALLBACK_MODEL
+                    model = genai.GenerativeModel(model_name)
+                    continue
             raise
 
     text = ""
