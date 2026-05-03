@@ -80,6 +80,8 @@ W_VERIFICATION: float = _float_env("AKILI_W_VERIFICATION", "0.40")
 DEBUG: bool = _bool_env("AKILI_DEBUG")
 REQUIRE_AUTH: bool = _bool_env("AKILI_REQUIRE_AUTH", "1")
 RATE_LIMIT_ENABLED: bool = _bool_env("AKILI_RATE_LIMIT", "1")
+# A7: Fail-closed auth — set to 1 to allow unauthenticated production deploys
+ALLOW_OPEN_PROD: bool = _bool_env("AKILI_ALLOW_OPEN_PROD")
 
 CORS_ORIGINS: list[str] = [
     o.strip()

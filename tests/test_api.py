@@ -18,7 +18,9 @@ class TestHealthAndStatus:
     def test_health(self):
         r = client.get("/health")
         assert r.status_code == 200
-        assert r.json() == {"status": "ok"}
+        data = r.json()
+        assert data["status"] == "ok"
+        assert "auth_required" in data  # A7: health includes auth flag
 
     def test_status(self):
         r = client.get("/status")
@@ -167,3 +169,67 @@ class TestIngestValidation:
             files={"file": ("test.txt", b"not a pdf", "text/plain")},
         )
         assert r.status_code == 400
+
+
+class TestFailClosedAuth:
+    """A7: Tests for fail-closed auth in production-like environments."""
+
+    def test_health_includes_auth_required_flag(self):
+        """Health endpoint should include auth_required flag for deploy verification."""
+        r = client.get("/health")
+        assert r.status_code == 200
+        data = r.json()
+        assert "auth_required" in data
+        assert isinstance(data["auth_required"], bool)
+
+    @patch.dict(
+        "os.environ",
+        {"DATABASE_URL": "postgresql://test", "AKILI_REQUIRE_AUTH": "0"},
+        clear=False,
+    )
+    @patch("akili.api.auth._auth_active", None)  # Reset cached auth state
+    @patch("akili.config.ALLOW_OPEN_PROD", False)
+    def test_prod_env_without_auth_fails_startup(self):
+        """Production environment without auth should fail startup unless explicitly allowed."""
+        import asyncio
+
+        import pytest
+
+        from akili.api.app import AuthDisabledInProductionError, lifespan
+        from fastapi import FastAPI
+
+        test_app = FastAPI()
+
+        async def run_lifespan():
+            async with lifespan(test_app):
+                pass
+
+        with pytest.raises(AuthDisabledInProductionError):
+            asyncio.run(run_lifespan())
+
+    @patch.dict(
+        "os.environ",
+        {
+            "DATABASE_URL": "postgresql://test",
+            "AKILI_REQUIRE_AUTH": "0",
+            "AKILI_ALLOW_OPEN_PROD": "1",
+        },
+        clear=False,
+    )
+    @patch("akili.api.auth._auth_active", None)  # Reset cached auth state
+    @patch("akili.config.ALLOW_OPEN_PROD", True)
+    def test_prod_env_with_allow_open_prod_starts(self):
+        """Production environment without auth should start when ALLOW_OPEN_PROD=1."""
+        import asyncio
+
+        from akili.api.app import lifespan
+        from fastapi import FastAPI
+
+        test_app = FastAPI()
+
+        async def run_lifespan():
+            async with lifespan(test_app):
+                pass
+
+        # Should not raise - explicit override allows open access
+        asyncio.run(run_lifespan())

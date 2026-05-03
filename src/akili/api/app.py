@@ -174,6 +174,12 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
+class AuthDisabledInProductionError(Exception):
+    """Raised when auth is disabled in a production environment without explicit override."""
+
+    pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle for the FastAPI app."""
@@ -189,6 +195,14 @@ async def lifespan(app: FastAPI):
 
     if not is_auth_required():
         if _is_production_environment():
+            # A7: Fail-closed auth in production-like environments
+            if not config.ALLOW_OPEN_PROD:
+                raise AuthDisabledInProductionError(
+                    "SECURITY FAILURE: Authentication is DISABLED in a production environment "
+                    "(DATABASE_URL is set). This deployment is fully open to the internet. "
+                    "Either (1) set AKILI_REQUIRE_AUTH=1 and FIREBASE_PROJECT_ID to enable auth, "
+                    "or (2) set AKILI_ALLOW_OPEN_PROD=1 to explicitly allow open access."
+                )
             logger.error(
                 "SECURITY: Authentication is DISABLED in a production environment "
                 "(DATABASE_URL is set). All endpoints are public. "
@@ -301,5 +315,7 @@ def status() -> JSONResponse:
 
 @app.get("/health")
 async def health() -> dict:
-    """Health check."""
-    return {"status": "ok"}
+    """Health check. Includes auth_required flag for deploy verification (A7)."""
+    from akili.api.auth import is_auth_required
+
+    return {"status": "ok", "auth_required": is_auth_required()}
