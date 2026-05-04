@@ -464,8 +464,10 @@ async def main():
     print("=" * 60)
     print("AKILI Benchmark Runner")
     print("=" * 60)
-    total_q = sum(len(c["questions"]) for c in dataset["chips"])
-    print(f"Dataset: {len(dataset['chips'])} chips, {total_q} questions")
+    print(
+        f"Dataset: {len(dataset['chips'])} chips, "
+        f"{sum(len(c['questions']) for c in dataset['chips'])} questions"
+    )
     print()
 
     # Run benchmarks
