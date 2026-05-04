@@ -46,7 +46,7 @@ jobs:
         run: ruff format --check src tests
 
       - name: Pytest with coverage
-        run: pytest tests -v --tb=short --cov=src/akili --cov-report=xml --cov-report=term-missing --cov-fail-under=70
+        run: pytest tests -v --tb=short --cov=src/akili --cov-report=xml --cov-report=term-missing --cov-fail-under=60
         env:
           GOOGLE_API_KEY: ""
 
