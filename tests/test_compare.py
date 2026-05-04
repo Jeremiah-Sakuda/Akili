@@ -123,3 +123,153 @@ class TestFormatComparisonResponse:
     def test_empty_results(self) -> None:
         formatted = format_comparison_response([])
         assert formatted == {"comparisons": []}
+
+
+# ---------------------------------------------------------------------------
+# API endpoint tests (D3)
+# ---------------------------------------------------------------------------
+
+from unittest.mock import MagicMock, patch
+
+from fastapi.testclient import TestClient
+
+from akili.api.app import app
+
+client = TestClient(app)
+
+
+class TestCompareEndpoint:
+    """Tests for POST /compare."""
+
+    def test_compare_requires_two_docs(self):
+        """Comparison requires at least 2 documents."""
+        r = client.post(
+            "/compare",
+            json={"doc_ids": ["doc1"], "question": "Compare voltage"},
+        )
+        assert r.status_code == 400
+        assert "At least 2" in r.json()["detail"]
+
+    @patch("akili.api.routers.compare.get_store")
+    @patch("akili.api.routers.compare.compare_documents")
+    @patch("akili.api.routers.compare.format_comparison_response")
+    def test_compare_returns_results(self, mock_format, mock_compare, mock_get_store):
+        """Comparison should return formatted results."""
+        mock_store = MagicMock()
+        mock_store.get_document_owner.return_value = None
+        mock_store.list_documents.return_value = [
+            {"doc_id": "doc1", "filename": "comp1.pdf"},
+            {"doc_id": "doc2", "filename": "comp2.pdf"},
+        ]
+        mock_store.get_units_by_doc.return_value = []
+        mock_get_store.return_value = mock_store
+
+        mock_compare.return_value = []
+        mock_format.return_value = {"comparisons": []}
+
+        r = client.post(
+            "/compare",
+            json={"doc_ids": ["doc1", "doc2"], "question": "Compare max voltage"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert "comparisons" in data
+
+
+class TestCompareExport:
+    """Tests for POST /compare/export (D3)."""
+
+    @patch("akili.api.routers.compare.get_store")
+    @patch("akili.api.routers.compare.compare_documents")
+    def test_csv_export(self, mock_compare, mock_get_store):
+        """CSV export should return valid CSV."""
+        from akili.verify.compare import ComparisonResult, ComparisonRow
+
+        mock_store = MagicMock()
+        mock_store.get_document_owner.return_value = None
+        mock_store.list_documents.return_value = [
+            {"doc_id": "doc1", "filename": "comp1.pdf"},
+            {"doc_id": "doc2", "filename": "comp2.pdf"},
+        ]
+        mock_store.get_units_by_doc.return_value = []
+        mock_get_store.return_value = mock_store
+
+        mock_compare.return_value = [
+            ComparisonResult(
+                parameter="Maximum Voltage",
+                direction="lower",
+                best_doc_id="doc1",
+                best_value=5.0,
+                rows=[
+                    ComparisonRow(
+                        doc_id="doc1",
+                        doc_name="comp1.pdf",
+                        parameter="Maximum Voltage",
+                        value=5.0,
+                        unit_of_measure="V",
+                        source_unit_id="u1",
+                        page=1,
+                        proof=None,
+                    ),
+                    ComparisonRow(
+                        doc_id="doc2",
+                        doc_name="comp2.pdf",
+                        parameter="Maximum Voltage",
+                        value=6.0,
+                        unit_of_measure="V",
+                        source_unit_id="u2",
+                        page=1,
+                        proof=None,
+                    ),
+                ],
+            )
+        ]
+
+        r = client.post(
+            "/compare/export?format=csv",
+            json={"doc_ids": ["doc1", "doc2"]},
+        )
+        assert r.status_code == 200
+        assert "text/csv" in r.headers["content-type"]
+
+        content = r.text
+        assert "Parameter" in content
+        assert "Maximum Voltage" in content
+
+    def test_export_requires_two_docs(self):
+        """Export requires at least 2 documents."""
+        r = client.post(
+            "/compare/export",
+            json={"doc_ids": ["doc1"]},
+        )
+        assert r.status_code == 400
+
+    def test_export_max_ten_docs(self):
+        """Export is limited to 10 documents."""
+        r = client.post(
+            "/compare/export",
+            json={"doc_ids": [f"doc{i}" for i in range(11)]},
+        )
+        assert r.status_code == 400
+        assert "Maximum 10" in r.json()["detail"]
+
+    @patch("akili.api.routers.compare.get_store")
+    @patch("akili.api.routers.compare.compare_documents")
+    @patch("akili.api.routers.compare.format_comparison_response")
+    def test_json_export(self, mock_format, mock_compare, mock_get_store):
+        """JSON export should return standard comparison response."""
+        mock_store = MagicMock()
+        mock_store.get_document_owner.return_value = None
+        mock_store.list_documents.return_value = []
+        mock_store.get_units_by_doc.return_value = []
+        mock_get_store.return_value = mock_store
+
+        mock_compare.return_value = []
+        mock_format.return_value = {"comparisons": []}
+
+        r = client.post(
+            "/compare/export?format=json",
+            json={"doc_ids": ["doc1", "doc2"]},
+        )
+        assert r.status_code == 200
+        assert r.json()["comparisons"] == []
