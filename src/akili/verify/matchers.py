@@ -47,7 +47,7 @@ def _extract_suffix(match: re.Match) -> str:
     """Get the unit suffix from a regex match (everything after the number)."""
     full = match.group(0)
     num = match.group(1)
-    return full[len(num) :].strip()
+    return full[len(num):].strip()
 
 
 # ---------------------------------------------------------------------------

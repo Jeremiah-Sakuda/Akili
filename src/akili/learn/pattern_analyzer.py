@@ -338,7 +338,7 @@ def _is_unit_confusion_match(value: str, orig_unit: str) -> bool:
 def _apply_unit_correction(value: str, correct_unit: str) -> str:
     m = _UNIT_RE.search(value.strip())
     if m:
-        return value[: m.start()] + correct_unit + value[m.end() :]
+        return value[:m.start()] + correct_unit + value[m.end():]
     return value
 
 
