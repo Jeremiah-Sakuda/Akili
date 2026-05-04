@@ -133,9 +133,7 @@ class TestProjectDocuments:
         mock_auth.return_value = False
         mock_store = MagicMock()
         mock_store.get_project.return_value = {"project_id": "p1", "name": "Test"}
-        mock_store.get_project_documents.return_value = [
-            {"doc_id": "d1", "filename": "test.pdf"}
-        ]
+        mock_store.get_project_documents.return_value = [{"doc_id": "d1", "filename": "test.pdf"}]
         mock_get_store.return_value = mock_store
 
         r = client.get("/projects/p1/documents")

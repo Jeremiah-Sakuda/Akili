@@ -118,9 +118,7 @@ def _generate_csv_export(doc_id: str, audit_entries: list[dict]) -> str:
     return csv_content
 
 
-def _generate_pdf_export(
-    doc_id: str, audit_entries: list[dict], doc_info: dict | None
-) -> bytes:
+def _generate_pdf_export(doc_id: str, audit_entries: list[dict], doc_info: dict | None) -> bytes:
     """Generate PDF export using ReportLab."""
     try:
         from reportlab.lib import colors
@@ -163,9 +161,7 @@ def _generate_pdf_export(
 
     if doc_info:
         if doc_info.get("filename"):
-            story.append(
-                Paragraph(f"<b>Filename:</b> {doc_info['filename']}", styles["Normal"])
-            )
+            story.append(Paragraph(f"<b>Filename:</b> {doc_info['filename']}", styles["Normal"]))
         if doc_info.get("created_at"):
             story.append(
                 Paragraph(

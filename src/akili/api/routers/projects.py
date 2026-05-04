@@ -196,6 +196,4 @@ async def remove_document_from_project(
     store.remove_document_from_project(project_id, doc_id)
     logger.info(f"Removed document {doc_id} from project {project_id}")
 
-    return JSONResponse(
-        content={"status": "removed", "project_id": project_id, "doc_id": doc_id}
-    )
+    return JSONResponse(content={"status": "removed", "project_id": project_id, "doc_id": doc_id})

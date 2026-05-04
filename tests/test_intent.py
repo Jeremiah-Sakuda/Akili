@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from akili.verify.intent import Intent, classify_intent, get_rule_intents, intent_allows_rule
 

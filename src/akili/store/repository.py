@@ -603,7 +603,12 @@ class Store(BaseStore):
                 "INSERT INTO projects (project_id, name, owner_uid) VALUES (?, ?, ?)",
                 (project_id, name, owner_uid),
             )
-        self._audit("create_project", None, actor=owner_uid, details={"project_id": project_id, "name": name})
+        self._audit(
+            "create_project",
+            None,
+            actor=owner_uid,
+            details={"project_id": project_id, "name": name},
+        )
         return {"project_id": project_id, "name": name, "owner_uid": owner_uid}
 
     def get_project(self, project_id: str) -> dict[str, Any] | None:
@@ -725,7 +730,8 @@ class Store(BaseStore):
         """Add a chat message and return its ID."""
         with self._mgr.connection() as c:
             cursor = c.execute(
-                "INSERT INTO chat_messages (doc_id, project_id, user_id, role, text, response_json) "
+                "INSERT INTO chat_messages "
+                "(doc_id, project_id, user_id, role, text, response_json) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (doc_id, project_id, user_id, role, text, response_json),
             )
