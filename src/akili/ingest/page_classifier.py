@@ -27,9 +27,7 @@ def _is_model_unavailable_error(e: Exception) -> bool:
     err_type = type(e).__name__.lower()
     return any(
         indicator in err_str or indicator in err_type
-        for indicator in (
-            "notfound", "not found", "permissiondenied", "permission denied", "404"
-        )
+        for indicator in ("notfound", "not found", "permissiondenied", "permission denied", "404")
     )
 
 

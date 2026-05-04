@@ -135,7 +135,7 @@ except ImportError:
     limiter = _NoOpLimiter()  # type: ignore[assignment]
     if _RATE_LIMIT_ENABLED:
         logger.warning(
-            "slowapi not installed — rate limiting disabled. " "Install with: pip install slowapi"
+            "slowapi not installed — rate limiting disabled. Install with: pip install slowapi"
         )
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,8 @@ if hasattr(limiter, "init_app"):
 
         app.add_middleware(SlowAPIMiddleware)
         app.add_exception_handler(
-            RLE, _rate_limit_exceeded_handler  # type: ignore[arg-type]
+            RLE,
+            _rate_limit_exceeded_handler,  # type: ignore[arg-type]
         )
     except ImportError:
         pass

@@ -89,9 +89,9 @@ def run_benchmark() -> dict:
             results["datasheets"][pdf_name] = {"status": "skipped", "reason": "PDF not found"}
             continue
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  Ingesting: {pdf_name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         start = time.time()
         try:

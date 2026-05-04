@@ -109,7 +109,7 @@ def ingest_document(
     allowed_base = Path(os.environ.get("AKILI_DOCS_DIR", config.DOCS_DIR)).resolve()
     if not str(pdf_path).startswith(str(allowed_base)):
         raise ValueError(
-            f"Path outside allowed directory: {pdf_path} " f"(allowed base: {allowed_base})"
+            f"Path outside allowed directory: {pdf_path} (allowed base: {allowed_base})"
         )
 
     if not pdf_path.exists():

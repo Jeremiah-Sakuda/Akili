@@ -46,6 +46,13 @@ where = ["src"]
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/akili/api/*" = ["E402"]
+
 [tool.ruff.format]
 quote-style = "double"
 

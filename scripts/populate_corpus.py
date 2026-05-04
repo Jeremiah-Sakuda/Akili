@@ -107,7 +107,7 @@ async def process_chip(chip: str, store: object, dry_run: bool = False) -> bool:
         # Check if already in corpus
         existing = store.get_corpus_entry(content_hash)
         if existing:
-            logger.info(f"  Already in corpus, skipping")
+            logger.info("  Already in corpus, skipping")
             return True
 
         # Run ingestion
@@ -146,7 +146,7 @@ async def process_chip(chip: str, store: object, dry_run: bool = False) -> bool:
                 datasheet_url=DATASHEET_URLS.get(chip),
             )
 
-            logger.info(f"  Stored in corpus successfully")
+            logger.info("  Stored in corpus successfully")
             return True
 
         except Exception as e:

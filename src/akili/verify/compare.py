@@ -242,7 +242,7 @@ def compare_documents(
                 else ""
             )
             if direction_word:
-                unit = best_row.unit_of_measure or ''
+                unit = best_row.unit_of_measure or ""
                 comp.summary = (
                     f"{config['label']}: {values_str}. "
                     f"{direction_word.title()}: {best_row.doc_name} ({best_val} {unit})"

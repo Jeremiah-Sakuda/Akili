@@ -41,8 +41,7 @@ class ConnectionManager:
                 logger.info("ConnectionManager using PostgreSQL pool")
             except ImportError:
                 logger.warning(
-                    "DATABASE_URL is PostgreSQL but psycopg2 not installed; "
-                    "falling back to SQLite"
+                    "DATABASE_URL is PostgreSQL but psycopg2 not installed; falling back to SQLite"
                 )
 
         if not self._use_pg:

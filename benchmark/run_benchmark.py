@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,9 +35,11 @@ from src.akili.config import GOOGLE_API_KEY, GEMINI_MODEL  # noqa: E402
 # Data structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class QuestionResult:
     """Result of running a single question through AKILI or baseline."""
+
     question_id: str
     question: str
     expected_answer: str
@@ -52,6 +53,7 @@ class QuestionResult:
 @dataclass
 class ChipResults:
     """Aggregate results for a single chip."""
+
     chip: str
     questions: list[QuestionResult] = field(default_factory=list)
 
@@ -87,6 +89,7 @@ class ChipResults:
 @dataclass
 class BenchmarkResults:
     """Full benchmark results."""
+
     chips: list[ChipResults] = field(default_factory=list)
 
     @property
@@ -111,6 +114,7 @@ class BenchmarkResults:
 # ---------------------------------------------------------------------------
 # Answer matching
 # ---------------------------------------------------------------------------
+
 
 def normalize_answer(answer: str) -> str:
     """Normalize answer for comparison."""
@@ -142,6 +146,7 @@ def answers_match(expected: str, actual: str) -> bool:
 
     # Check key numeric values match
     import re
+
     expected_nums = set(re.findall(r"[\d.]+", expected_norm))
     actual_nums = set(re.findall(r"[\d.]+", actual_norm))
 
@@ -154,6 +159,7 @@ def answers_match(expected: str, actual: str) -> bool:
 # ---------------------------------------------------------------------------
 # Gemini baseline runner
 # ---------------------------------------------------------------------------
+
 
 async def run_gemini_baseline_question(
     model: genai.GenerativeModel,
@@ -204,15 +210,17 @@ async def run_gemini_baseline(dataset: dict) -> BenchmarkResults:
 
             correct = answers_match(q["expected_answer"], answer) if status != "ERROR" else False
 
-            chip_results.questions.append(QuestionResult(
-                question_id=q["id"],
-                question=q["question"],
-                expected_answer=q["expected_answer"],
-                actual_answer=answer,
-                status=status,
-                correct=correct,
-                error_message=error,
-            ))
+            chip_results.questions.append(
+                QuestionResult(
+                    question_id=q["id"],
+                    question=q["question"],
+                    expected_answer=q["expected_answer"],
+                    actual_answer=answer,
+                    status=status,
+                    correct=correct,
+                    error_message=error,
+                )
+            )
 
             # Rate limiting
             await asyncio.sleep(0.5)
@@ -225,6 +233,7 @@ async def run_gemini_baseline(dataset: dict) -> BenchmarkResults:
 # ---------------------------------------------------------------------------
 # AKILI runner (stub - to be implemented with actual AKILI API)
 # ---------------------------------------------------------------------------
+
 
 async def run_akili_benchmark(dataset: dict) -> BenchmarkResults:
     """Run AKILI on all questions.
@@ -246,15 +255,17 @@ async def run_akili_benchmark(dataset: dict) -> BenchmarkResults:
         for q in chip_data["questions"]:
             # Simulate AKILI performance (to be replaced with real API calls)
             # Expected: ~85-95% accuracy with verification
-            chip_results.questions.append(QuestionResult(
-                question_id=q["id"],
-                question=q["question"],
-                expected_answer=q["expected_answer"],
-                actual_answer=q["expected_answer"],  # Placeholder
-                status="VERIFIED",
-                correct=True,  # Placeholder
-                confidence=0.90,
-            ))
+            chip_results.questions.append(
+                QuestionResult(
+                    question_id=q["id"],
+                    question=q["question"],
+                    expected_answer=q["expected_answer"],
+                    actual_answer=q["expected_answer"],  # Placeholder
+                    status="VERIFIED",
+                    correct=True,  # Placeholder
+                    confidence=0.90,
+                )
+            )
 
         results.chips.append(chip_results)
 
@@ -264,6 +275,7 @@ async def run_akili_benchmark(dataset: dict) -> BenchmarkResults:
 # ---------------------------------------------------------------------------
 # Comparison and reporting
 # ---------------------------------------------------------------------------
+
 
 def generate_comparison_table(
     akili: BenchmarkResults,
@@ -319,7 +331,9 @@ def generate_json_results(
         "overall": {
             "akili_accuracy": round(akili.overall_accuracy * 100),
             "gemini_accuracy": round(baseline.overall_accuracy * 100),
-            "hallucination_delta": round((akili.overall_accuracy - baseline.overall_accuracy) * 100),
+            "hallucination_delta": round(
+                (akili.overall_accuracy - baseline.overall_accuracy) * 100
+            ),
             "false_refuse_rate": round(akili.false_refuse_rate * 100),
         },
     }
@@ -328,6 +342,7 @@ def generate_json_results(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main():
     parser = argparse.ArgumentParser(description="AKILI Benchmark Runner")
@@ -369,7 +384,9 @@ async def main():
     print("=" * 60)
     print("AKILI Benchmark Runner")
     print("=" * 60)
-    print(f"Dataset: {len(dataset['chips'])} chips, {sum(len(c['questions']) for c in dataset['chips'])} questions")
+    print(
+        f"Dataset: {len(dataset['chips'])} chips, {sum(len(c['questions']) for c in dataset['chips'])} questions"
+    )
     print()
 
     # Run benchmarks
