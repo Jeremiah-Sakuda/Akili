@@ -67,8 +67,7 @@ async def ingest(
         raise HTTPException(
             status_code=413,
             detail=(
-                f"File too large (max {max_bytes} bytes). "
-                "Set AKILI_MAX_UPLOAD_BYTES to override."
+                f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override."
             ),
         )
     store = get_store()
@@ -199,8 +198,7 @@ async def ingest_stream(
         raise HTTPException(
             status_code=413,
             detail=(
-                f"File too large (max {max_bytes} bytes). "
-                "Set AKILI_MAX_UPLOAD_BYTES to override."
+                f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override."
             ),
         )
     store = get_store()

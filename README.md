@@ -1,6 +1,6 @@
 # Akili
 
-![CI](https://github.com/jeremytraini/akili/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/Jeremiah-Sakuda/Akili/actions/workflows/ci.yml/badge.svg)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Node 20](https://img.shields.io/badge/node-20-green)
 ![React 19](https://img.shields.io/badge/react-19-61dafb)
@@ -39,7 +39,7 @@ AKILI reduces hallucinations by 15% compared to raw Gemini on datasheet Q&A:
 
 ```bash
 # Clone and set up
-git clone https://github.com/jeremytraini/akili.git
+git clone https://github.com/Jeremiah-Sakuda/Akili.git
 cd akili
 
 # Create venv and install
@@ -149,7 +149,7 @@ docker compose up --build
 | Layer | Technology |
 |-------|------------|
 | **Backend** | Python 3.11+, FastAPI, Pydantic v2, PyMuPDF |
-| **LLM & Vision** | Google Gemini 3 API (multimodal) |
+| **LLM & Vision** | Google Gemini 2.0 API (multimodal) |
 | **Database** | SQLite (dev) / PostgreSQL via Supabase (prod) |
 | **Verification** | 30-rule engine + derived queries + Z3 constraint solver |
 | **Frontend** | React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4 |
@@ -236,7 +236,7 @@ akili/
 │   │   ├── contexts/            # AuthContext, ThemeContext, ToastContext
 │   │   ├── hooks/               # useOnboarding, useOnboardingMetrics, useReveal
 │   │   ├── App.tsx, api.ts, firebase.ts, types.ts
-│   │   └── test/                # Vitest setup + 23 tests
+│   │   └── test/                # Vitest setup + 29 tests
 │   ├── vercel.json              # Vercel deployment config
 │   └── package.json
 ├── src/akili/
@@ -263,7 +263,7 @@ akili/
 │   └── populate_corpus.py       # Seed public corpus with common chips
 ├── docs/                        # Documentation
 │   └── hackster-writeup.md      # Hackster.io project writeup
-├── tests/                       # 205+ backend tests
+├── tests/                       # 280+ backend tests
 ├── Dockerfile                   # Production backend (gunicorn + uvicorn)
 ├── docker-compose.yml
 └── pyproject.toml
@@ -274,10 +274,10 @@ akili/
 ## Testing
 
 ```bash
-# Backend (205+ tests)
+# Backend (280+ tests)
 pytest tests/ -v
 
-# Frontend (23 tests)
+# Frontend (29 tests)
 cd frontend && npm test
 ```
 
@@ -297,7 +297,7 @@ cd frontend && npm test
 | Cross-doc comparison | 7 |
 | Extraction/pipeline | 18 |
 | Canonical models | 4 |
-| Frontend (Vitest) | 23 |
+| Frontend (Vitest) | 29 |
 
 ---
 

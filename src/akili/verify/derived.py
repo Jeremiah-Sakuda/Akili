@@ -593,7 +593,7 @@ def derive_current_budget(question: str, units: list[Unit]) -> AnswerWithProof |
         chain = ProofChain(
             steps=steps,
             final_result=(
-                f"Supply: {i_supply} {uom}, Used: {total_out:.1f}, " f"Remaining: {remaining:.1f}"
+                f"Supply: {i_supply} {uom}, Used: {total_out:.1f}, Remaining: {remaining:.1f}"
             ),
             formula_summary=(f"Budget = {i_supply} - {total_out:.1f} = {remaining:.1f} {uom}"),
         )
@@ -611,8 +611,7 @@ def derive_current_budget(question: str, units: list[Unit]) -> AnswerWithProof |
             formula_summary=f"Supply current = {i_supply} {uom}",
         )
         answer = (
-            f"Total supply current: {i_supply} {uom}. "
-            f"No individual output currents found to sum."
+            f"Total supply current: {i_supply} {uom}. No individual output currents found to sum."
         )
 
     min_agreement = _min_extraction_agreement(source_units)
