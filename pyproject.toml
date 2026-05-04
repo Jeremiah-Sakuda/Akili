@@ -51,6 +51,7 @@ quote-style = "double"
 
 [tool.flake8]
 max-line-length = 100
+extend-ignore = ["E203"]
 exclude = [".git", "__pycache__", ".venv", "build", "dist"]
 per-file-ignores = [
     "src/akili/api/*:E402",
