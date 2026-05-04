@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,9 +35,11 @@ from src.akili.config import GOOGLE_API_KEY, GEMINI_MODEL  # noqa: E402
 # Data structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class QuestionResult:
     """Result of running a single question through AKILI or baseline."""
+
     question_id: str
     question: str
     expected_answer: str
@@ -52,6 +53,7 @@ class QuestionResult:
 @dataclass
 class ChipResults:
     """Aggregate results for a single chip."""
+
     chip: str
     questions: list[QuestionResult] = field(default_factory=list)
 
@@ -87,6 +89,7 @@ class ChipResults:
 @dataclass
 class BenchmarkResults:
     """Full benchmark results."""
+
     chips: list[ChipResults] = field(default_factory=list)
 
     @property
@@ -107,10 +110,62 @@ class BenchmarkResults:
         total_refused = sum(c.refused_count for c in self.chips)
         return total_refused / self.total_questions if self.total_questions > 0 else 0.0
 
+    # B2: False-accept rate as headline metric
+    @property
+    def false_accept_rate(self) -> float:
+        """Rate of VERIFIED answers that are actually wrong.
+
+        false_accept_rate = count(status=VERIFIED ∧ correct=False) / count(status=VERIFIED)
+        This is the critical metric for safety-critical industries.
+        """
+        all_questions = [q for c in self.chips for q in c.questions]
+        verified = [q for q in all_questions if q.status == "VERIFIED"]
+        if not verified:
+            return 0.0
+        false_accepts = sum(1 for q in verified if not q.correct)
+        return false_accepts / len(verified)
+
+    @property
+    def refuse_precision(self) -> float:
+        """How often we correctly refused (question was unanswerable or answer would be wrong).
+
+        refuse_precision = count(status=REFUSED ∧ correct=False) / count(status=REFUSED)
+        High precision means we refuse appropriately.
+        """
+        all_questions = [q for c in self.chips for q in c.questions]
+        refused = [q for q in all_questions if q.status == "REFUSED"]
+        if not refused:
+            return 1.0  # No refusals = perfect precision (vacuously true)
+        correct_refusals = sum(1 for q in refused if not q.correct)
+        return correct_refusals / len(refused)
+
+    def confusion_matrix(self) -> dict[str, dict[str, int]]:
+        """Generate confusion matrix.
+
+        Rows = (correct, incorrect), columns = (VERIFIED, REVIEW, REFUSED).
+
+        Returns dict like:
+        {
+            "correct": {"VERIFIED": N, "REVIEW": N, "REFUSED": N},
+            "incorrect": {"VERIFIED": N, "REVIEW": N, "REFUSED": N},
+            "error": {"VERIFIED": 0, "REVIEW": 0, "REFUSED": 0, "ERROR": N}
+        }
+        """
+        matrix = {
+            "correct": {"VERIFIED": 0, "REVIEW": 0, "REFUSED": 0, "ERROR": 0},
+            "incorrect": {"VERIFIED": 0, "REVIEW": 0, "REFUSED": 0, "ERROR": 0},
+        }
+        for c in self.chips:
+            for q in c.questions:
+                row = "correct" if q.correct else "incorrect"
+                matrix[row][q.status] = matrix[row].get(q.status, 0) + 1
+        return matrix
+
 
 # ---------------------------------------------------------------------------
 # Answer matching
 # ---------------------------------------------------------------------------
+
 
 def normalize_answer(answer: str) -> str:
     """Normalize answer for comparison."""
@@ -142,6 +197,7 @@ def answers_match(expected: str, actual: str) -> bool:
 
     # Check key numeric values match
     import re
+
     expected_nums = set(re.findall(r"[\d.]+", expected_norm))
     actual_nums = set(re.findall(r"[\d.]+", actual_norm))
 
@@ -154,6 +210,7 @@ def answers_match(expected: str, actual: str) -> bool:
 # ---------------------------------------------------------------------------
 # Gemini baseline runner
 # ---------------------------------------------------------------------------
+
 
 async def run_gemini_baseline_question(
     model: genai.GenerativeModel,
@@ -204,15 +261,17 @@ async def run_gemini_baseline(dataset: dict) -> BenchmarkResults:
 
             correct = answers_match(q["expected_answer"], answer) if status != "ERROR" else False
 
-            chip_results.questions.append(QuestionResult(
-                question_id=q["id"],
-                question=q["question"],
-                expected_answer=q["expected_answer"],
-                actual_answer=answer,
-                status=status,
-                correct=correct,
-                error_message=error,
-            ))
+            chip_results.questions.append(
+                QuestionResult(
+                    question_id=q["id"],
+                    question=q["question"],
+                    expected_answer=q["expected_answer"],
+                    actual_answer=answer,
+                    status=status,
+                    correct=correct,
+                    error_message=error,
+                )
+            )
 
             # Rate limiting
             await asyncio.sleep(0.5)
@@ -225,6 +284,7 @@ async def run_gemini_baseline(dataset: dict) -> BenchmarkResults:
 # ---------------------------------------------------------------------------
 # AKILI runner (stub - to be implemented with actual AKILI API)
 # ---------------------------------------------------------------------------
+
 
 async def run_akili_benchmark(dataset: dict) -> BenchmarkResults:
     """Run AKILI on all questions.
@@ -246,15 +306,17 @@ async def run_akili_benchmark(dataset: dict) -> BenchmarkResults:
         for q in chip_data["questions"]:
             # Simulate AKILI performance (to be replaced with real API calls)
             # Expected: ~85-95% accuracy with verification
-            chip_results.questions.append(QuestionResult(
-                question_id=q["id"],
-                question=q["question"],
-                expected_answer=q["expected_answer"],
-                actual_answer=q["expected_answer"],  # Placeholder
-                status="VERIFIED",
-                correct=True,  # Placeholder
-                confidence=0.90,
-            ))
+            chip_results.questions.append(
+                QuestionResult(
+                    question_id=q["id"],
+                    question=q["question"],
+                    expected_answer=q["expected_answer"],
+                    actual_answer=q["expected_answer"],  # Placeholder
+                    status="VERIFIED",
+                    correct=True,  # Placeholder
+                    confidence=0.90,
+                )
+            )
 
         results.chips.append(chip_results)
 
@@ -264,6 +326,29 @@ async def run_akili_benchmark(dataset: dict) -> BenchmarkResults:
 # ---------------------------------------------------------------------------
 # Comparison and reporting
 # ---------------------------------------------------------------------------
+
+
+def print_confusion_matrix(results: BenchmarkResults) -> str:
+    """Generate formatted confusion matrix display.
+
+    B2: Shows (correct, incorrect) × (VERIFIED, REVIEW, REFUSED) to help
+    identify where verification is failing.
+    """
+    matrix = results.confusion_matrix()
+    lines = [
+        "Confusion Matrix (rows=ground truth, cols=status):",
+        "",
+        "              | VERIFIED | REVIEW | REFUSED | ERROR |",
+        "--------------|----------|--------|---------|-------|",
+    ]
+    for row_name in ["correct", "incorrect"]:
+        row = matrix[row_name]
+        lines.append(
+            f"  {row_name:11} |   {row.get('VERIFIED', 0):5}  |  {row.get('REVIEW', 0):4}  |   "
+            f"{row.get('REFUSED', 0):5}  | {row.get('ERROR', 0):4}  |"
+        )
+    return "\n".join(lines)
+
 
 def generate_comparison_table(
     akili: BenchmarkResults,
@@ -290,9 +375,11 @@ def generate_comparison_table(
     overall_delta = baseline_overall - akili_overall
 
     lines.append("|------|----------------|-----------------|-------------------------|")
-    lines.append(
-        f"| **Overall** | **{akili_overall:.0f}%** | **{baseline_overall:.0f}%** | **{-overall_delta:+.0f}%** |"
+    overall_line = (
+        f"| **Overall** | **{akili_overall:.0f}%** | "
+        f"**{baseline_overall:.0f}%** | **{-overall_delta:+.0f}%** |"
     )
+    lines.append(overall_line)
 
     return "\n".join(lines)
 
@@ -319,15 +406,23 @@ def generate_json_results(
         "overall": {
             "akili_accuracy": round(akili.overall_accuracy * 100),
             "gemini_accuracy": round(baseline.overall_accuracy * 100),
-            "hallucination_delta": round((akili.overall_accuracy - baseline.overall_accuracy) * 100),
+            "hallucination_delta": round(
+                (akili.overall_accuracy - baseline.overall_accuracy) * 100
+            ),
             "false_refuse_rate": round(akili.false_refuse_rate * 100),
+            # B2: False-accept rate as headline metric
+            "false_accept_rate": round(akili.false_accept_rate * 100, 2),
+            "refuse_precision": round(akili.refuse_precision * 100, 2),
         },
+        # B2: Confusion matrix
+        "confusion_matrix": akili.confusion_matrix(),
     }
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main():
     parser = argparse.ArgumentParser(description="AKILI Benchmark Runner")
@@ -369,7 +464,8 @@ async def main():
     print("=" * 60)
     print("AKILI Benchmark Runner")
     print("=" * 60)
-    print(f"Dataset: {len(dataset['chips'])} chips, {sum(len(c['questions']) for c in dataset['chips'])} questions")
+    total_q = sum(len(c["questions"]) for c in dataset["chips"])
+    print(f"Dataset: {len(dataset['chips'])} chips, {total_q} questions")
     print()
 
     # Run benchmarks
@@ -378,6 +474,9 @@ async def main():
         akili_results = await run_akili_benchmark(dataset)
         print(f"  Overall accuracy: {akili_results.overall_accuracy * 100:.1f}%")
         print(f"  False refuse rate: {akili_results.false_refuse_rate * 100:.1f}%")
+        # B2: Show false-accept rate as headline metric
+        print(f"  False accept rate: {akili_results.false_accept_rate * 100:.2f}%")
+        print(f"  Refuse precision: {akili_results.refuse_precision * 100:.1f}%")
         print()
 
     print("Running Gemini baseline...")
@@ -390,6 +489,10 @@ async def main():
         print("Comparison Table:")
         print("-" * 60)
         print(generate_comparison_table(akili_results, baseline_results))
+        print()
+
+        # B2: Print confusion matrix
+        print(print_confusion_matrix(akili_results))
         print()
 
         # Save JSON results
@@ -408,6 +511,7 @@ async def main():
 
             accuracy = akili_results.overall_accuracy * 100
             false_refuse = akili_results.false_refuse_rate * 100
+            false_accept = akili_results.false_accept_rate * 100
 
             passed = True
 
@@ -422,6 +526,13 @@ async def main():
                 passed = False
             else:
                 print(f"  PASS: False refuse rate {false_refuse:.1f}% <= 30% threshold")
+
+            # B2: False-accept rate gate (critical for safety-critical industries)
+            if false_accept > 1.0:
+                print(f"  FAIL: False accept rate {false_accept:.2f}% > 1% threshold")
+                passed = False
+            else:
+                print(f"  PASS: False accept rate {false_accept:.2f}% <= 1% threshold")
 
             if not passed:
                 sys.exit(1)

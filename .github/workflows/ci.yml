@@ -46,9 +46,13 @@ jobs:
         run: ruff format --check src tests
 
       - name: Pytest with coverage
-        run: pytest tests -v --tb=short --cov=src/akili --cov-report=xml --cov-report=term-missing --cov-fail-under=50
+        run: pytest tests -v --tb=short --cov=src/akili --cov-report=xml --cov-report=term-missing --cov-fail-under=70
         env:
           GOOGLE_API_KEY: ""
+
+      - name: Audit Python dependencies
+        run: pip install pip-audit && pip-audit
+        continue-on-error: true
 
       - name: Upload backend coverage (optional)
         uses: codecov/codecov-action@v4
@@ -66,7 +70,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -95,4 +99,12 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ''
           VITE_FIREBASE_APP_ID: ''
           VITE_FIREBASE_MEASUREMENT_ID: ''
+
+      - name: Run frontend tests
+        run: npx vitest run --reporter=verbose
+        working-directory: frontend
+
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true
 

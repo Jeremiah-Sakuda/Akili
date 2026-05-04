@@ -56,9 +56,9 @@ describe('App', () => {
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
 
-  it('shows landing page when user is null', () => {
+  it('shows landing page when user is null', async () => {
     render(<App />);
-    expect(screen.getByTestId('landing-page')).toBeInTheDocument();
+    expect(await screen.findByTestId('landing-page')).toBeInTheDocument();
   });
 
   it('shows main layout when user is authenticated', async () => {

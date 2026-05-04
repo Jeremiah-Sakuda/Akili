@@ -73,8 +73,7 @@ class CorrectionStore:
                     )
                 """)
                 cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_corrections_doc "
-                    "ON corrections(doc_id)"
+                    "CREATE INDEX IF NOT EXISTS idx_corrections_doc " "ON corrections(doc_id)"
                 )
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_corrections_canonical "

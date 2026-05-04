@@ -57,11 +57,7 @@ def _min_extraction_agreement(units: list[Unit]) -> float:
     """
     if not units:
         return 0.5
-    agreements = [
-        getattr(u, "extraction_agreement", 0.5)
-        for u in units
-        if u is not None
-    ]
+    agreements = [getattr(u, "extraction_agreement", 0.5) for u in units if u is not None]
     return min(agreements) if agreements else 0.5
 
 
@@ -367,10 +363,8 @@ def derive_thermal_check(question: str, units: list[Unit]) -> AnswerWithProof | 
         if max_tj is not None:
             safe = t_junction <= max_tj
             margin = max_tj - t_junction
-            status = 'SAFE' if safe else 'EXCEEDS LIMIT'
-            answer_parts.append(
-                f"{status}: max T_j = {max_tj}°C, margin = {margin:.1f}°C"
-            )
+            status = "SAFE" if safe else "EXCEEDS LIMIT"
+            answer_parts.append(f"{status}: max T_j = {max_tj}°C, margin = {margin:.1f}°C")
             steps.append(
                 ProofStep(
                     description=f"Max junction temperature: {max_tj}°C",
@@ -599,12 +593,9 @@ def derive_current_budget(question: str, units: list[Unit]) -> AnswerWithProof |
         chain = ProofChain(
             steps=steps,
             final_result=(
-                f"Supply: {i_supply} {uom}, Used: {total_out:.1f}, "
-                f"Remaining: {remaining:.1f}"
+                f"Supply: {i_supply} {uom}, Used: {total_out:.1f}, " f"Remaining: {remaining:.1f}"
             ),
-            formula_summary=(
-                f"Budget = {i_supply} - {total_out:.1f} = {remaining:.1f} {uom}"
-            ),
+            formula_summary=(f"Budget = {i_supply} - {total_out:.1f} = {remaining:.1f} {uom}"),
         )
 
         answer = (

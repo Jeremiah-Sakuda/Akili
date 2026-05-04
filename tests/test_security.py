@@ -19,6 +19,7 @@ from akili.ingest.gemini_extract import _normalize_origin
 # Path traversal (CRITICAL-1)
 # ---------------------------------------------------------------------------
 
+
 class TestPathTraversal:
     """Verify that ingest_document rejects paths outside the allowed dir."""
 
@@ -27,8 +28,10 @@ class TestPathTraversal:
         from akili.ingest.pipeline import ingest_document
 
         evil_path = tmp_path / ".." / ".." / "etc" / "passwd"
-        with patch.dict(os.environ, {"AKILI_DOCS_DIR": str(tmp_path)}), \
-             patch("akili.config.DOCS_DIR", str(tmp_path)):
+        with (
+            patch.dict(os.environ, {"AKILI_DOCS_DIR": str(tmp_path)}),
+            patch("akili.config.DOCS_DIR", str(tmp_path)),
+        ):
             with pytest.raises(ValueError, match="Path outside allowed directory"):
                 ingest_document(evil_path)
 
@@ -38,8 +41,10 @@ class TestPathTraversal:
 
         valid_pdf = tmp_path / "test.pdf"
         valid_pdf.write_bytes(b"%PDF-1.4 minimal")
-        with patch.dict(os.environ, {"AKILI_DOCS_DIR": str(tmp_path)}), \
-             patch("akili.config.DOCS_DIR", str(tmp_path)):
+        with (
+            patch.dict(os.environ, {"AKILI_DOCS_DIR": str(tmp_path)}),
+            patch("akili.config.DOCS_DIR", str(tmp_path)),
+        ):
             # Will fail on PDF parsing, not path validation
             with pytest.raises((FileNotFoundError, Exception)):
                 ingest_document(valid_pdf)
@@ -48,6 +53,7 @@ class TestPathTraversal:
 # ---------------------------------------------------------------------------
 # Max page limit (HIGH-2)
 # ---------------------------------------------------------------------------
+
 
 class TestMaxPages:
     """Verify that ingest_document rejects PDFs exceeding MAX_PAGES."""
@@ -58,10 +64,12 @@ class TestMaxPages:
         pdf_path = tmp_path / "big.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 test")
 
-        with patch.dict(os.environ, {"AKILI_DOCS_DIR": str(tmp_path)}), \
-             patch("akili.config.DOCS_DIR", str(tmp_path)), \
-             patch("akili.ingest.pipeline.load_pdf_pages") as mock_load, \
-             patch("akili.config.MAX_PAGES", 10):
+        with (
+            patch.dict(os.environ, {"AKILI_DOCS_DIR": str(tmp_path)}),
+            patch("akili.config.DOCS_DIR", str(tmp_path)),
+            patch("akili.ingest.pipeline.load_pdf_pages") as mock_load,
+            patch("akili.config.MAX_PAGES", 10),
+        ):
             mock_load.return_value = [b"fake"] * 11
             with pytest.raises(ValueError, match="exceeds maximum"):
                 ingest_document(pdf_path)
@@ -70,6 +78,7 @@ class TestMaxPages:
 # ---------------------------------------------------------------------------
 # Coordinate clamping (MEDIUM-8)
 # ---------------------------------------------------------------------------
+
 
 class TestCoordinateClamping:
     """Verify _normalize_origin clamps to [0, 1]."""
@@ -99,6 +108,7 @@ class TestCoordinateClamping:
 # ---------------------------------------------------------------------------
 # Grid bounds validation (HIGH-4)
 # ---------------------------------------------------------------------------
+
 
 class TestGridBoundsValidation:
     """Verify Grid.get_cell returns None for out-of-bounds indices."""

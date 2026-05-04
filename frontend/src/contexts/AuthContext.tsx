@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u);
       setLoading(false);
     });
-    getRedirectResult(auth).catch(() => {});
+    getRedirectResult(auth).catch((err) => { console.error("Auth redirect error:", err); });
     return () => unsubscribe();
   }, [auth]);
 

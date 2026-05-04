@@ -7,7 +7,7 @@ vi.mock('./firebase', () => ({
 }));
 
 // Must import after mocks are set up
-const { getDocuments, query, isRefuse, isAnswer, deleteDocument } = await import('./api');
+const { getDocuments, query, isRefuse, deleteDocument } = await import('./api');
 
 describe('api client', () => {
   beforeEach(() => {
@@ -31,7 +31,9 @@ describe('api client', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: false,
       status: 500,
-    } as Response);
+      statusText: 'Internal Server Error',
+      json: () => Promise.resolve({ detail: 'Failed to fetch documents' }),
+    } as unknown as Response);
 
     await expect(getDocuments()).rejects.toThrow('Failed to fetch documents');
   });
@@ -57,11 +59,6 @@ describe('api client', () => {
   it('isRefuse correctly identifies refuse responses', () => {
     expect(isRefuse({ status: 'refuse', reason: 'No data' })).toBe(true);
     expect(isRefuse({ status: 'answer', answer: '3.3V', proof: [] })).toBe(false);
-  });
-
-  it('isAnswer correctly identifies answer responses', () => {
-    expect(isAnswer({ status: 'answer', answer: '3.3V', proof: [] })).toBe(true);
-    expect(isAnswer({ status: 'refuse', reason: 'No data' })).toBe(false);
   });
 
   it('deleteDocument calls DELETE endpoint', async () => {

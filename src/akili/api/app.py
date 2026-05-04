@@ -257,7 +257,8 @@ if hasattr(limiter, "init_app"):
 
         app.add_middleware(SlowAPIMiddleware)
         app.add_exception_handler(
-            RLE, _rate_limit_exceeded_handler  # type: ignore[arg-type]
+            RLE,
+            _rate_limit_exceeded_handler,  # type: ignore[arg-type]
         )
     except ImportError:
         pass

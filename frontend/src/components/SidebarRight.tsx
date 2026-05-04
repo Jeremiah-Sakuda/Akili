@@ -7,7 +7,6 @@ import { useReveal } from '../hooks/useReveal';
 
 interface SidebarRightProps {
   currentState: AppState;
-  onStateChange: (state: AppState) => void;
   selectedDocId: string | null;
   documents: DocumentSummary[];
   messages: ChatMessage[];
@@ -37,8 +36,6 @@ const MAX_QUESTION_LENGTH = 2000;
 
 const SidebarRight: React.FC<SidebarRightProps> = ({
   currentState,
-  // onStateChange not used in this component currently
-  onStateChange: _onStateChange,
   selectedDocId,
   documents,
   messages,
@@ -54,7 +51,7 @@ const SidebarRight: React.FC<SidebarRightProps> = ({
   const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   useEffect(() => {
-    getUsage().then(setUsage).catch(() => {});
+    getUsage().then(setUsage).catch((err) => { console.error("Failed to fetch usage:", err); });
   }, [messages.length]);
 
   useEffect(() => {
