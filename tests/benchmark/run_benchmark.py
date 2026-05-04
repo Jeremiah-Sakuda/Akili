@@ -25,9 +25,9 @@ from pathlib import Path
 # Ensure src/ is on path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from akili.canonical import Bijection, Grid, Unit
-from akili.ingest.pipeline import ingest_document
-from akili.verify import Refuse, verify_and_answer
+from akili.canonical import Bijection, Grid, Unit  # noqa: E402
+from akili.ingest.pipeline import ingest_document  # noqa: E402
+from akili.verify import Refuse, verify_and_answer  # noqa: E402
 
 GROUND_TRUTH_PATH = Path(__file__).parent / "ground_truth.json"
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
@@ -60,7 +60,9 @@ def values_match(actual: str, expected: str, expected_unit: str | None) -> bool:
                 for e_num in expected_nums:
                     if abs(float(a_num) - float(e_num)) < 0.01:
                         return True
-                    if float(e_num) != 0 and abs(float(a_num) - float(e_num)) / abs(float(e_num)) < 0.1:
+                    e_val = float(e_num)
+                    diff = abs(float(a_num) - e_val)
+                    if e_val != 0 and diff / abs(e_val) < 0.1:
                         return True
     except (ValueError, ZeroDivisionError):
         pass
@@ -104,8 +106,10 @@ def run_benchmark() -> dict:
         bijections = [o for o in canonical if isinstance(o, Bijection)]
         grids = [o for o in canonical if isinstance(o, Grid)]
 
-        print(f"  Ingested in {ingest_time:.1f}s: {len(units)} units, "
-              f"{len(bijections)} bijections, {len(grids)} grids")
+        print(
+            f"  Ingested in {ingest_time:.1f}s: {len(units)} units, "
+            f"{len(bijections)} bijections, {len(grids)} grids"
+        )
         print(f"  Pages: {total_pages} total, {pages_failed} failed\n")
 
         sheet_results = {
@@ -149,12 +153,14 @@ def run_benchmark() -> dict:
             print(f"      Got:      {actual}")
             print()
 
-            sheet_results["questions"].append({
-                "question": question,
-                "expected": f"{expected} {expected_unit or ''}".strip(),
-                "actual": actual,
-                "status": status,
-            })
+            sheet_results["questions"].append(
+                {
+                    "question": question,
+                    "expected": f"{expected} {expected_unit or ''}".strip(),
+                    "actual": actual,
+                    "status": status,
+                }
+            )
 
         total_q = len(qa_pairs)
         accuracy = sheet_results["correct"] / total_q if total_q > 0 else 0
@@ -163,10 +169,12 @@ def run_benchmark() -> dict:
         sheet_results["refuse_rate"] = round(refuse_rate, 3)
         results["datasheets"][pdf_name] = sheet_results
 
-        print(f"  Summary for {pdf_name}: "
-              f"{sheet_results['correct']}/{total_q} correct "
-              f"({accuracy:.0%} accuracy), "
-              f"{sheet_results['refused']} refused ({refuse_rate:.0%})")
+        print(
+            f"  Summary for {pdf_name}: "
+            f"{sheet_results['correct']}/{total_q} correct "
+            f"({accuracy:.0%} accuracy), "
+            f"{sheet_results['refused']} refused ({refuse_rate:.0%})"
+        )
 
     total = results["overall"]["total"]
     if total > 0:

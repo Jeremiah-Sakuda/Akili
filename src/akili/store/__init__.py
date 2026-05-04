@@ -20,6 +20,7 @@ def create_store(db_url: str | None = None, org_id: str = "default") -> BaseStor
     url = db_url or os.environ.get("DATABASE_URL", "")
     if url.startswith("postgresql"):
         from akili.store.postgres import PostgresStore
+
         return PostgresStore(dsn=url, org_id=org_id)
     return Store(db_path=url if url and not url.startswith("postgresql") else "akili.db")
 

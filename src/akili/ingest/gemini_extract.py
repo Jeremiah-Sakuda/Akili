@@ -10,7 +10,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import os
 import time
 
 import google.generativeai as genai
@@ -263,7 +262,12 @@ def _simplified_extraction_schema() -> dict:
 
 
 def _normalize_origin(origin: object) -> dict | None:
-    """Return {x, y} dict with numeric x,y; accept dict or [x,y] list."""
+    """Return {x, y} dict with numeric x,y; accept dict or [x,y] list.
+
+    MEDIUM-8: Coordinates are clamped to [0.0, 1.0] range.
+    """
+    x_val: float | None = None
+    y_val: float | None = None
     if isinstance(origin, dict):
         x, y = origin.get("x"), origin.get("y")
         if (
@@ -272,14 +276,18 @@ def _normalize_origin(origin: object) -> dict | None:
             and isinstance(x, (int, float))
             and isinstance(y, (int, float))
         ):
-            return {"x": float(x), "y": float(y)}
-        return None
-    if isinstance(origin, (list, tuple)) and len(origin) >= 2:
+            x_val, y_val = float(x), float(y)
+    elif isinstance(origin, (list, tuple)) and len(origin) >= 2:
         try:
-            return {"x": float(origin[0]), "y": float(origin[1])}
+            x_val, y_val = float(origin[0]), float(origin[1])
         except (TypeError, ValueError):
-            return None
-    return None
+            pass
+    if x_val is None or y_val is None:
+        return None
+    # Clamp to [0.0, 1.0]
+    x_val = max(0.0, min(1.0, x_val))
+    y_val = max(0.0, min(1.0, y_val))
+    return {"x": x_val, "y": y_val}
 
 
 def _normalize_bbox(bbox: object) -> dict | None:
@@ -340,9 +348,7 @@ def _normalize_bijection_item(item: dict, page_prefix: str, index: int) -> dict 
         right_set = [v]
         mapping = {k: v}
     elif not (
-        isinstance(left_set, list)
-        and isinstance(right_set, list)
-        and isinstance(mapping, dict)
+        isinstance(left_set, list) and isinstance(right_set, list) and isinstance(mapping, dict)
     ):
         return None
 
@@ -392,12 +398,14 @@ def _normalize_grid_item(item: object, page_prefix: str, index: int) -> dict | N
                     if val is None:
                         val = ""
                     cell_origin = _normalize_origin(cell.get("origin"))
-                    cells_list.append({
-                        "row": ri,
-                        "col": ci,
-                        "value": val,
-                        "origin": cell_origin,
-                    })
+                    cells_list.append(
+                        {
+                            "row": ri,
+                            "col": ci,
+                            "value": val,
+                            "origin": cell_origin,
+                        }
+                    )
                 else:
                     cells_list.append({"row": ri, "col": ci, "value": str(cell), "origin": None})
         if not cells_list and nrows > 0:
@@ -436,12 +444,14 @@ def _normalize_grid_item(item: object, page_prefix: str, index: int) -> dict | N
             if val is None:
                 val = ""
             cell_origin = _normalize_origin(c.get("origin"))
-            normalized_cells.append({
-                "row": ro,
-                "col": co,
-                "value": val,
-                "origin": cell_origin,
-            })
+            normalized_cells.append(
+                {
+                    "row": ro,
+                    "col": co,
+                    "value": val,
+                    "origin": cell_origin,
+                }
+            )
         return {
             "id": gid,
             "rows": int(rows_raw),
@@ -526,8 +536,18 @@ def _normalize_extraction(data: dict, page_index: int = 0) -> dict:
 
 
 def _ensure_configured() -> None:
-    if not os.environ.get("GOOGLE_API_KEY"):
+    if not config.GOOGLE_API_KEY.strip():
         raise ValueError("GOOGLE_API_KEY environment variable is required for Gemini extraction")
+
+
+def _is_model_unavailable_error(e: Exception) -> bool:
+    """Check if error indicates model is unavailable (NotFound/PermissionDenied)."""
+    err_str = str(e).lower()
+    err_type = type(e).__name__.lower()
+    return any(
+        indicator in err_str or indicator in err_type
+        for indicator in ("notfound", "not found", "permissiondenied", "permission denied", "404")
+    )
 
 
 def extract_page(
@@ -541,11 +561,13 @@ def extract_page(
 
     Raises if API key is missing. Returns empty extraction on parse/API errors.
     page_type_hint is an optional string prepended to the prompt (from page_classifier).
+    Uses fallback model on NotFound/PermissionDenied if configured (A6).
     """
     _ensure_configured()
-    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+    genai.configure(api_key=config.GOOGLE_API_KEY)
 
-    model = genai.GenerativeModel(config.GEMINI_MODEL)
+    model_name = config.GEMINI_MODEL
+    model = genai.GenerativeModel(model_name)
     image_part = {
         "inline_data": {
             "mime_type": "image/png",
@@ -553,14 +575,25 @@ def extract_page(
         }
     }
     hint_block = f"\n\nPAGE TYPE HINT: {page_type_hint}\n" if page_type_hint else ""
+
+    # CRITICAL-2: Sanitize doc_id and page_index to prevent prompt injection
+    safe_page_index = max(0, int(page_index))
     prompt = (
         f"{EXTRACT_PROMPT}{hint_block}\n\n"
-        f"This image is page {page_index}. "
+        f"This image is page {safe_page_index}. "
         "Return JSON with keys: units, bijections, grids."
     )
     contents = [prompt, image_part]
 
+    # RESOURCE-2: Track total elapsed time for timeout
+    start_time = time.monotonic()
     for attempt in range(config.GEMINI_MAX_RETRIES):
+        elapsed = time.monotonic() - start_time
+        if elapsed > config.GEMINI_CALL_TIMEOUT:
+            raise TimeoutError(
+                f"Gemini API call exceeded {config.GEMINI_CALL_TIMEOUT}s timeout "
+                f"after {attempt} attempts (page {safe_page_index})"
+            )
         try:
             try:
                 generation_config = genai.types.GenerationConfig(
@@ -576,6 +609,18 @@ def extract_page(
                 wait = config.GEMINI_BACKOFF_BASE * (2**attempt)
                 time.sleep(wait)
                 continue
+            # A6: Try fallback model on NotFound/PermissionDenied
+            if _is_model_unavailable_error(e) and config.GEMINI_FALLBACK_MODEL:
+                if model_name != config.GEMINI_FALLBACK_MODEL:
+                    logger.warning(
+                        "Model %s unavailable (%s), trying fallback %s",
+                        model_name,
+                        type(e).__name__,
+                        config.GEMINI_FALLBACK_MODEL,
+                    )
+                    model_name = config.GEMINI_FALLBACK_MODEL
+                    model = genai.GenerativeModel(model_name)
+                    continue
             raise
 
     text = ""
@@ -602,6 +647,16 @@ def extract_page(
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
         text = "\n".join(lines)
+    # MEDIUM-4: Limit JSON response size to prevent memory exhaustion
+    _MAX_JSON_BYTES = 10_000_000
+    if len(text) > _MAX_JSON_BYTES:
+        logger.warning(
+            "Gemini response too large (%d bytes), truncating to %d bytes (page %d)",
+            len(text),
+            _MAX_JSON_BYTES,
+            page_index,
+        )
+        text = text[:_MAX_JSON_BYTES]
     try:
         data = json.loads(text)
     except json.JSONDecodeError:

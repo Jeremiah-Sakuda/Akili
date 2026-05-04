@@ -1,13 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Header from './components/Header';
 import SidebarLeft from './components/SidebarLeft';
 import SidebarRight from './components/SidebarRight';
 import DocumentViewer from './components/DocumentViewer';
 import FileUploader from './components/FileUploader';
 import IngestSummary from './components/IngestSummary';
-import LandingPage from './components/LandingPage';
-import Onboarding from './components/Onboarding';
 import ToastContainer from './components/Toast';
+
+const LandingPage = React.lazy(() => import('./components/LandingPage'));
+const Onboarding = React.lazy(() => import('./components/Onboarding'));
 import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
 import { useOnboarding } from './hooks/useOnboarding';
@@ -106,23 +107,27 @@ const App: React.FC = () => {
         const text = isRefuse(result) ? result.reason : (result.formatted_answer ?? result.answer);
         setMessages((m) => [...m, { role: 'assistant', text, response: result }]);
         setViewState(isRefuse(result) ? AppState.REFUSED : AppState.VERIFIED);
-      } catch {
+      } catch (err) {
+        // A5: Log error for dev visibility and show user-facing message
+        console.error('Query failed:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Query failed. Is the API running?';
+        addToast(errorMsg);
         setMessages((m) => [
           ...m,
-          { role: 'assistant', text: 'Query failed. Is the API running?', response: { status: 'refuse', reason: 'Query failed.' } },
+          { role: 'assistant', text: errorMsg, response: { status: 'refuse', reason: 'Query failed.' } },
         ]);
       } finally {
         setQueryLoading(false);
       }
     },
-    [selectedDocId]
+    [selectedDocId, addToast]
   );
 
   const displayState =
     messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].response
       ? (messages[messages.length - 1].response!.status === 'refuse' ? AppState.REFUSED : AppState.VERIFIED)
       : viewState;
-  const files = documents.map((d) => documentToFile(d, selectedDocId));
+  const files = useMemo(() => documents.map((d) => documentToFile(d, selectedDocId)), [documents, selectedDocId]);
 
   if (authLoading) {
     return (
@@ -133,7 +138,11 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-    return <LandingPage />;
+    return (
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#0d1117]"><div className="text-gray-600 dark:text-gray-400 text-sm font-medium">Loading…</div></div>}>
+        <LandingPage />
+      </Suspense>
+    );
   }
 
   return (
@@ -143,7 +152,11 @@ const App: React.FC = () => {
       </a>
       <Header />
       <ToastContainer />
-      {!onboardingComplete && <Onboarding step={onboardingStep} onNext={onboardingNext} onSkip={onboardingSkip} />}
+      {!onboardingComplete && (
+        <Suspense fallback={null}>
+          <Onboarding step={onboardingStep} onNext={onboardingNext} onSkip={onboardingSkip} />
+        </Suspense>
+      )}
 
       <div className="layout-desktop flex flex-1 overflow-hidden">
         <SidebarLeft
@@ -188,7 +201,6 @@ const App: React.FC = () => {
 
         <SidebarRight
           currentState={displayState}
-          onStateChange={handleStateChange}
           selectedDocId={selectedDocId}
           documents={documents}
           messages={messages}

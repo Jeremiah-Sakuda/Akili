@@ -24,6 +24,7 @@ try:
     import psycopg2.extras
     import psycopg2.pool
     from psycopg2 import sql as pgsql
+
     PG_AVAILABLE = True
 except ImportError:
     PG_AVAILABLE = False
@@ -74,7 +75,9 @@ class PostgresStore(BaseStore):
 
     def __init__(self, dsn: str | None = None, org_id: str = "default"):
         if not PG_AVAILABLE:
-            raise ImportError("psycopg2 is required for PostgresStore. Install with: pip install psycopg2-binary")
+            raise ImportError(
+                "psycopg2 is required for PostgresStore. Install with: pip install psycopg2-binary"
+            )
         self._dsn = dsn or _get_dsn()
         self._org_id = org_id
         self._pool = psycopg2.pool.ThreadedConnectionPool(minconn=1, maxconn=10, dsn=self._dsn)
@@ -82,11 +85,14 @@ class PostgresStore(BaseStore):
 
     class _PooledConnection:
         """Context manager that commits on success and returns connection to pool."""
+
         def __init__(self, pool: Any):
             self._pool = pool
             self._conn = pool.getconn()
+
         def __enter__(self):
             return self._conn
+
         def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
             if exc_type is None:
                 self._conn.commit()
@@ -221,15 +227,26 @@ class PostgresStore(BaseStore):
                     CREATE INDEX IF NOT EXISTS idx_bijections_doc_id ON bijections(doc_id);
                     CREATE INDEX IF NOT EXISTS idx_grids_doc_id ON grids(doc_id);
                     CREATE INDEX IF NOT EXISTS idx_ranges_doc_id ON ranges(doc_id);
-                    CREATE INDEX IF NOT EXISTS idx_conditional_units_doc_id ON conditional_units(doc_id);
+                    CREATE INDEX IF NOT EXISTS idx_cunit_doc_id
+                        ON conditional_units(doc_id);
                 """)
 
-    def _audit(self, action: str, doc_id: str | None, actor: str | None = None, details: dict | None = None) -> None:
+    def _audit(
+        self, action: str, doc_id: str | None, actor: str | None = None, details: dict | None = None
+    ) -> None:
         with self._conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO audit_log (org_id, doc_id, action, actor, details_json) VALUES (%s, %s, %s, %s, %s)",
-                    (self._org_id, doc_id, action, actor, json.dumps(details) if details else None),
+                    "INSERT INTO audit_log "
+                    "(org_id, doc_id, action, actor, details_json) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (
+                        self._org_id,
+                        doc_id,
+                        action,
+                        actor,
+                        json.dumps(details) if details else None,
+                    ),
                 )
 
     def add_document(self, doc_id: str, filename: str | None = None, page_count: int = 0) -> None:
@@ -238,10 +255,13 @@ class PostgresStore(BaseStore):
                 cur.execute(
                     """INSERT INTO documents (doc_id, org_id, filename, page_count)
                        VALUES (%s, %s, %s, %s)
-                       ON CONFLICT (doc_id, org_id) DO UPDATE SET filename=EXCLUDED.filename, page_count=EXCLUDED.page_count""",
+                       ON CONFLICT (doc_id, org_id) DO UPDATE SET
+                       filename=EXCLUDED.filename, page_count=EXCLUDED.page_count""",
                     (doc_id, self._org_id, filename or "", page_count),
                 )
-        self._audit("add_document", doc_id, details={"filename": filename, "page_count": page_count})
+        self._audit(
+            "add_document", doc_id, details={"filename": filename, "page_count": page_count}
+        )
 
     def store_canonical(
         self,
@@ -267,9 +287,18 @@ class PostgresStore(BaseStore):
                            label=EXCLUDED.label, value=EXCLUDED.value,
                            unit_of_measure=EXCLUDED.unit_of_measure, context=EXCLUDED.context,
                            origin_json=EXCLUDED.origin_json, bbox_json=EXCLUDED.bbox_json""",
-                        (u.doc_id, self._org_id, u.page, u.id, u.label, str(u.value),
-                         u.unit_of_measure, u.context,
-                         _point_dict(u.origin), _bbox_dict(u.bbox)),
+                        (
+                            u.doc_id,
+                            self._org_id,
+                            u.page,
+                            u.id,
+                            u.label,
+                            str(u.value),
+                            u.unit_of_measure,
+                            u.context,
+                            _point_dict(u.origin),
+                            _bbox_dict(u.bbox),
+                        ),
                     )
                 for b in bijections:
                     cur.execute(
@@ -280,16 +309,30 @@ class PostgresStore(BaseStore):
                            left_set_json=EXCLUDED.left_set_json, right_set_json=EXCLUDED.right_set_json,
                            mapping_json=EXCLUDED.mapping_json, origin_json=EXCLUDED.origin_json,
                            bbox_json=EXCLUDED.bbox_json""",
-                        (b.doc_id, self._org_id, b.page, b.id,
-                         json.dumps(b.left_set), json.dumps(b.right_set),
-                         json.dumps(b.mapping), _point_dict(b.origin), _bbox_dict(b.bbox)),
+                        (
+                            b.doc_id,
+                            self._org_id,
+                            b.page,
+                            b.id,
+                            json.dumps(b.left_set),
+                            json.dumps(b.right_set),
+                            json.dumps(b.mapping),
+                            _point_dict(b.origin),
+                            _bbox_dict(b.bbox),
+                        ),
                     )
                 for g in grids:
-                    cells_j = json.dumps([
-                        {"row": c.row, "col": c.col, "value": c.value,
-                         "origin": {"x": c.origin.x, "y": c.origin.y} if c.origin else None}
-                        for c in g.cells
-                    ])
+                    cells_j = json.dumps(
+                        [
+                            {
+                                "row": c.row,
+                                "col": c.col,
+                                "value": c.value,
+                                "origin": {"x": c.origin.x, "y": c.origin.y} if c.origin else None,
+                            }
+                            for c in g.cells
+                        ]
+                    )
                     cur.execute(
                         """INSERT INTO grids (doc_id, org_id, page, grid_id, rows, cols,
                            cells_json, origin_json, bbox_json)
@@ -297,10 +340,19 @@ class PostgresStore(BaseStore):
                            ON CONFLICT (doc_id, org_id, page, grid_id) DO UPDATE SET
                            rows=EXCLUDED.rows, cols=EXCLUDED.cols, cells_json=EXCLUDED.cells_json,
                            origin_json=EXCLUDED.origin_json, bbox_json=EXCLUDED.bbox_json""",
-                        (g.doc_id, self._org_id, g.page, g.id, g.rows, g.cols,
-                         cells_j, _point_dict(g.origin), _bbox_dict(g.bbox)),
+                        (
+                            g.doc_id,
+                            self._org_id,
+                            g.page,
+                            g.id,
+                            g.rows,
+                            g.cols,
+                            cells_j,
+                            _point_dict(g.origin),
+                            _bbox_dict(g.bbox),
+                        ),
                     )
-                for r in (ranges or []):
+                for r in ranges or []:
                     cur.execute(
                         """INSERT INTO ranges (doc_id, org_id, page, range_id, label,
                            min_val, typ_val, max_val, unit, conditions, context,
@@ -310,11 +362,23 @@ class PostgresStore(BaseStore):
                            label=EXCLUDED.label, min_val=EXCLUDED.min_val, typ_val=EXCLUDED.typ_val,
                            max_val=EXCLUDED.max_val, unit=EXCLUDED.unit, conditions=EXCLUDED.conditions,
                            context=EXCLUDED.context, origin_json=EXCLUDED.origin_json, bbox_json=EXCLUDED.bbox_json""",
-                        (r.doc_id, self._org_id, r.page, r.id, r.label,
-                         r.min, r.typ, r.max, r.unit, r.conditions, r.context,
-                         _point_dict(r.origin), _bbox_dict(r.bbox)),
+                        (
+                            r.doc_id,
+                            self._org_id,
+                            r.page,
+                            r.id,
+                            r.label,
+                            r.min,
+                            r.typ,
+                            r.max,
+                            r.unit,
+                            r.conditions,
+                            r.context,
+                            _point_dict(r.origin),
+                            _bbox_dict(r.bbox),
+                        ),
                     )
-                for cu in (conditional_units or []):
+                for cu in conditional_units or []:
                     cur.execute(
                         """INSERT INTO conditional_units (doc_id, org_id, page, cunit_id,
                            label, value, unit, condition_type, condition_value,
@@ -325,14 +389,34 @@ class PostgresStore(BaseStore):
                            condition_type=EXCLUDED.condition_type, condition_value=EXCLUDED.condition_value,
                            derating=EXCLUDED.derating, context=EXCLUDED.context,
                            origin_json=EXCLUDED.origin_json, bbox_json=EXCLUDED.bbox_json""",
-                        (cu.doc_id, self._org_id, cu.page, cu.id, cu.label,
-                         cu.value, cu.unit, cu.condition_type, cu.condition_value,
-                         cu.derating, cu.context, _point_dict(cu.origin), _bbox_dict(cu.bbox)),
+                        (
+                            cu.doc_id,
+                            self._org_id,
+                            cu.page,
+                            cu.id,
+                            cu.label,
+                            cu.value,
+                            cu.unit,
+                            cu.condition_type,
+                            cu.condition_value,
+                            cu.derating,
+                            cu.context,
+                            _point_dict(cu.origin),
+                            _bbox_dict(cu.bbox),
+                        ),
                     )
-        self._audit("store_canonical", doc_id, actor=uploaded_by, details={
-            "units": len(units), "bijections": len(bijections), "grids": len(grids),
-            "ranges": len(ranges or []), "conditional_units": len(conditional_units or []),
-        })
+        self._audit(
+            "store_canonical",
+            doc_id,
+            actor=uploaded_by,
+            details={
+                "units": len(units),
+                "bijections": len(bijections),
+                "grids": len(grids),
+                "ranges": len(ranges or []),
+                "conditional_units": len(conditional_units or []),
+            },
+        )
 
     def get_units_by_doc(self, doc_id: str) -> list[Unit]:
         with self._conn() as conn:
@@ -350,11 +434,19 @@ class PostgresStore(BaseStore):
                 val = float(r[4]) if "." in str(r[4]) else int(r[4])
             except (ValueError, TypeError):
                 pass
-            out.append(Unit(
-                doc_id=r[0], page=r[1], id=r[2], label=r[3], value=val,
-                unit_of_measure=r[5], context=r[6],
-                origin=_parse_point(r[7]), bbox=_parse_bbox(r[8]),
-            ))
+            out.append(
+                Unit(
+                    doc_id=r[0],
+                    page=r[1],
+                    id=r[2],
+                    label=r[3],
+                    value=val,
+                    unit_of_measure=r[5],
+                    context=r[6],
+                    origin=_parse_point(r[7]),
+                    bbox=_parse_bbox(r[8]),
+                )
+            )
         return out
 
     def get_bijections_by_doc(self, doc_id: str) -> list[Bijection]:
@@ -362,15 +454,21 @@ class PostgresStore(BaseStore):
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT doc_id, page, bijection_id, left_set_json, right_set_json, "
-                    "mapping_json, origin_json, bbox_json FROM bijections WHERE doc_id = %s AND org_id = %s",
+                    "mapping_json, origin_json, bbox_json FROM bijections "
+                    "WHERE doc_id = %s AND org_id = %s",
                     (doc_id, self._org_id),
                 )
                 rows = cur.fetchall()
         return [
             Bijection(
-                doc_id=r[0], page=r[1], id=r[2],
-                left_set=json.loads(r[3]), right_set=json.loads(r[4]),
-                mapping=json.loads(r[5]), origin=_parse_point(r[6]), bbox=_parse_bbox(r[7]),
+                doc_id=r[0],
+                page=r[1],
+                id=r[2],
+                left_set=json.loads(r[3]),
+                right_set=json.loads(r[4]),
+                mapping=json.loads(r[5]),
+                origin=_parse_point(r[6]),
+                bbox=_parse_bbox(r[7]),
             )
             for r in rows
         ]
@@ -389,15 +487,27 @@ class PostgresStore(BaseStore):
             cells_raw = json.loads(r[5])
             cells = [
                 GridCell(
-                    row=cell["row"], col=cell["col"], value=cell["value"],
-                    origin=Point(x=cell["origin"]["x"], y=cell["origin"]["y"]) if cell.get("origin") else None,
+                    row=cell["row"],
+                    col=cell["col"],
+                    value=cell["value"],
+                    origin=Point(x=cell["origin"]["x"], y=cell["origin"]["y"])
+                    if cell.get("origin")
+                    else None,
                 )
                 for cell in cells_raw
             ]
-            out.append(Grid(
-                doc_id=r[0], page=r[1], id=r[2], rows=r[3], cols=r[4],
-                cells=cells, origin=_parse_point(r[6]), bbox=_parse_bbox(r[7]),
-            ))
+            out.append(
+                Grid(
+                    doc_id=r[0],
+                    page=r[1],
+                    id=r[2],
+                    rows=r[3],
+                    cols=r[4],
+                    cells=cells,
+                    origin=_parse_point(r[6]),
+                    bbox=_parse_bbox(r[7]),
+                )
+            )
         return out
 
     def get_ranges_by_doc(self, doc_id: str) -> list[Range]:
@@ -412,10 +522,18 @@ class PostgresStore(BaseStore):
                 rows = cur.fetchall()
         return [
             Range(
-                doc_id=r[0], page=r[1], id=r[2], label=r[3],
-                min=r[4], typ=r[5], max=r[6], unit=r[7],
-                conditions=r[8], context=r[9],
-                origin=_parse_point(r[10]), bbox=_parse_bbox(r[11]),
+                doc_id=r[0],
+                page=r[1],
+                id=r[2],
+                label=r[3],
+                min=r[4],
+                typ=r[5],
+                max=r[6],
+                unit=r[7],
+                conditions=r[8],
+                context=r[9],
+                origin=_parse_point(r[10]),
+                bbox=_parse_bbox(r[11]),
             )
             for r in rows
         ]
@@ -433,10 +551,18 @@ class PostgresStore(BaseStore):
                 rows = cur.fetchall()
         return [
             ConditionalUnit(
-                doc_id=r[0], page=r[1], id=r[2], label=r[3],
-                value=r[4], unit=r[5], condition_type=r[6],
-                condition_value=r[7], derating=r[8], context=r[9],
-                origin=_parse_point(r[10]), bbox=_parse_bbox(r[11]),
+                doc_id=r[0],
+                page=r[1],
+                id=r[2],
+                label=r[3],
+                value=r[4],
+                unit=r[5],
+                condition_type=r[6],
+                condition_value=r[7],
+                derating=r[8],
+                context=r[9],
+                origin=_parse_point(r[10]),
+                bbox=_parse_bbox(r[11]),
             )
             for r in rows
         ]
@@ -462,7 +588,10 @@ class PostgresStore(BaseStore):
                         ),
                         (doc_id, self._org_id),
                     )
-                cur.execute("DELETE FROM documents WHERE doc_id = %s AND org_id = %s", (doc_id, self._org_id))
+                cur.execute(
+                    "DELETE FROM documents WHERE doc_id = %s AND org_id = %s",
+                    (doc_id, self._org_id),
+                )
         self._audit("delete_document", doc_id)
 
     def list_documents(self) -> list[dict[str, Any]]:
@@ -485,9 +614,13 @@ class PostgresStore(BaseStore):
                 rows = cur.fetchall()
         return [
             {
-                "doc_id": r[0], "filename": r[1], "page_count": r[2],
+                "doc_id": r[0],
+                "filename": r[1],
+                "page_count": r[2],
                 "created_at": str(r[3]) if r[3] else None,
-                "units_count": r[4], "bijections_count": r[5], "grids_count": r[6],
+                "units_count": r[4],
+                "bijections_count": r[5],
+                "grids_count": r[6],
             }
             for r in rows
         ]
@@ -512,8 +645,12 @@ class PostgresStore(BaseStore):
                 rows = cur.fetchall()
         return [
             {
-                "id": r[0], "org_id": r[1], "doc_id": r[2], "action": r[3],
-                "actor": r[4], "details": json.loads(r[5]) if r[5] else None,
+                "id": r[0],
+                "org_id": r[1],
+                "doc_id": r[2],
+                "action": r[3],
+                "actor": r[4],
+                "details": json.loads(r[5]) if r[5] else None,
                 "created_at": str(r[6]) if r[6] else None,
             }
             for r in rows
@@ -528,8 +665,9 @@ class PostgresStore(BaseStore):
         with self._conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT content_hash, mpn, chip_name, datasheet_url, canonical_data, created_at "
-                    "FROM public_corpus WHERE content_hash = %s",
+                    "SELECT content_hash, mpn, chip_name, datasheet_url, "
+                    "canonical_data, created_at FROM public_corpus "
+                    "WHERE content_hash = %s",
                     (content_hash,),
                 )
                 row = cur.fetchone()
@@ -549,8 +687,9 @@ class PostgresStore(BaseStore):
         with self._conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT content_hash, mpn, chip_name, datasheet_url, canonical_data, created_at "
-                    "FROM public_corpus WHERE LOWER(mpn) = LOWER(%s)",
+                    "SELECT content_hash, mpn, chip_name, datasheet_url, "
+                    "canonical_data, created_at FROM public_corpus "
+                    "WHERE LOWER(mpn) = LOWER(%s)",
                     (mpn,),
                 )
                 row = cur.fetchone()
@@ -631,8 +770,16 @@ class PostgresStore(BaseStore):
                        ON CONFLICT (question_id) DO UPDATE SET
                        answer=EXCLUDED.answer, status=EXCLUDED.status,
                        confidence=EXCLUDED.confidence, proof_data=EXCLUDED.proof_data""",
-                    (question_id, doc_id, question, answer, status, confidence,
-                     json.dumps(proof_data) if proof_data else None, source_page),
+                    (
+                        question_id,
+                        doc_id,
+                        question,
+                        answer,
+                        status,
+                        confidence,
+                        json.dumps(proof_data) if proof_data else None,
+                        source_page,
+                    ),
                 )
         self._audit("share_answer", doc_id, details={"question_id": question_id})
 

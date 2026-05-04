@@ -51,9 +51,14 @@ class TestCorrectionStore:
 
     def test_correction_fields(self, correction_store: CorrectionStore):
         correction_store.add_correction(
-            doc_id="doc1", canonical_id="u1", canonical_type="unit",
-            action="correct", original_value="3.3 V", corrected_value="3.6 V",
-            corrected_by="engineer", notes="test note",
+            doc_id="doc1",
+            canonical_id="u1",
+            canonical_type="unit",
+            action="correct",
+            original_value="3.3 V",
+            corrected_value="3.6 V",
+            corrected_by="engineer",
+            notes="test note",
         )
         corrections = correction_store.get_corrections_by_doc("doc1")
         c = corrections[0]
@@ -97,6 +102,7 @@ class TestCorrectionStats:
 class TestAuditLog:
     def test_sqlite_audit_log(self, tmp_path: Path):
         from akili.store.repository import Store
+
         store = Store(db_path=tmp_path / "audit_test.db")
         store._audit("test_action", "doc1", details={"foo": "bar"})
 
@@ -111,8 +117,15 @@ class TestAuditLog:
         from akili.store.repository import Store
 
         store = Store(db_path=tmp_path / "audit_test2.db")
-        u = Unit(id="u1", label="VCC", value=3.3, unit_of_measure="V",
-                 origin=Point(x=0.1, y=0.1), doc_id="doc1", page=0)
+        u = Unit(
+            id="u1",
+            label="VCC",
+            value=3.3,
+            unit_of_measure="V",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="doc1",
+            page=0,
+        )
         store.store_canonical("doc1", "test.pdf", 1, [u], [], [])
 
         log = store.get_audit_log("doc1")

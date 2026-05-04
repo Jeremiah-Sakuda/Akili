@@ -85,9 +85,7 @@ def _proof_point(
     source_id: str | None = None,
     source_type: str | None = None,
 ) -> ProofPoint:
-    return ProofPoint(
-        x=x, y=y, page=page, bbox=bbox, source_id=source_id, source_type=source_type
-    )
+    return ProofPoint(x=x, y=y, page=page, bbox=bbox, source_id=source_id, source_type=source_type)
 
 
 def _bbox_from(obj: Unit | Bijection | Grid) -> ProofPointBBox | None:
@@ -142,7 +140,7 @@ def _find_units_by_context(
     label_keywords: list[str] | None = None,
     unit_of_measures: list[str] | None = None,
 ) -> list[Unit]:
-    """Find units whose context/label match keywords and optionally have a specific unit_of_measure."""
+    """Find units matching context/label keywords, optionally filtered by unit_of_measure."""
     label_keywords = label_keywords or context_keywords
     results: list[Unit] = []
     for u in units:
@@ -258,8 +256,9 @@ def _make_best_numeric_rule(
             _, u, answer = best
             return _answer_from_unit(u, answer)
         # Broader fallback: try all units with the text parser
+        uom_upper = [m.upper() for m in uom_list]
         best = _best_numeric_unit(
-            units, maximize=maximize, text_parser=text_parser, unit_of_measures=[m.upper() for m in uom_list]
+            units, maximize=maximize, text_parser=text_parser, unit_of_measures=uom_upper
         )
         if best:
             _, u, answer = best
@@ -381,12 +380,15 @@ def _make_range_rule(
                 lo_val, lo_u = vals[0]
                 hi_val, hi_u = vals[-1]
                 uom = lo_u.unit_of_measure or hi_u.unit_of_measure or range_unit
+                lo_proof = _proof_point(
+                    lo_u.origin.x, lo_u.origin.y, lo_u.page, _bbox_from(lo_u), lo_u.id, "unit"
+                )
+                hi_proof = _proof_point(
+                    hi_u.origin.x, hi_u.origin.y, hi_u.page, _bbox_from(hi_u), hi_u.id, "unit"
+                )
                 return AnswerWithProof(
                     answer=f"{lo_val} to {hi_val} {uom}",
-                    proof=[
-                        _proof_point(lo_u.origin.x, lo_u.origin.y, lo_u.page, _bbox_from(lo_u), lo_u.id, "unit"),
-                        _proof_point(hi_u.origin.x, hi_u.origin.y, hi_u.page, _bbox_from(hi_u), hi_u.id, "unit"),
-                    ],
+                    proof=[lo_proof, hi_proof],
                     source_id=lo_u.id,
                     source_type="unit",
                 )
@@ -419,17 +421,19 @@ def _try_pin_lookup(
     for b in bijections:
         right = b.get_right(n)
         if right is not None:
+            pp = _proof_point(b.origin.x, b.origin.y, b.page, _bbox_from(b), b.id, "bijection")
             return AnswerWithProof(
                 answer=right,
-                proof=[_proof_point(b.origin.x, b.origin.y, b.page, _bbox_from(b), b.id, "bijection")],
+                proof=[pp],
                 source_id=b.id,
                 source_type="bijection",
             )
         left = b.get_left(n)
         if left is not None:
+            pp = _proof_point(b.origin.x, b.origin.y, b.page, _bbox_from(b), b.id, "bijection")
             return AnswerWithProof(
                 answer=left,
-                proof=[_proof_point(b.origin.x, b.origin.y, b.page, _bbox_from(b), b.id, "bijection")],
+                proof=[pp],
                 source_id=b.id,
                 source_type="bijection",
             )
@@ -473,9 +477,10 @@ def _try_part_number(
         if "part" in mapping_text or "order" in mapping_text:
             vals = list(b.mapping.values())
             if vals:
+                pp = _proof_point(b.origin.x, b.origin.y, b.page, _bbox_from(b), b.id, "bijection")
                 return AnswerWithProof(
                     answer=vals[0],
-                    proof=[_proof_point(b.origin.x, b.origin.y, b.page, _bbox_from(b), b.id, "bijection")],
+                    proof=[pp],
                     source_id=b.id,
                     source_type="bijection",
                 )
@@ -493,8 +498,15 @@ def _try_description(
     question: str, units: list[Unit], bijections: list[Bijection], grids: list[Grid]
 ) -> AnswerWithProof | None:
     q = _q(question)
-    if not _has_any(q, "what does this do", "what does this component do", "description",
-                    "what is this component", "what is this device", "overview"):
+    if not _has_any(
+        q,
+        "what does this do",
+        "what does this component do",
+        "description",
+        "what is this component",
+        "what is this device",
+        "overview",
+    ):
         if "what is this" not in q or _has_any(q, "pin", "voltage", "current", "temperature"):
             return None
     matches = _find_units_by_context(
@@ -515,7 +527,8 @@ def _try_description(
 # --- Best-numeric rules (find max/min value matching context + UOM) ---
 
 _make_best_numeric_rule(
-    200, "absolute_max_voltage",
+    200,
+    "absolute_max_voltage",
     question_keywords=[["absolute max", "absolute maximum"], ["voltage", " v "]],
     context_keywords=["absolute maximum", "absolute max", "abs max"],
     uom_list=["V", "mV", "kV"],
@@ -524,7 +537,8 @@ _make_best_numeric_rule(
 )
 
 _make_best_numeric_rule(
-    210, "absolute_max_current",
+    210,
+    "absolute_max_current",
     question_keywords=[["absolute max", "absolute maximum"], ["current", " a ", "amper"]],
     context_keywords=["absolute maximum", "absolute max", "abs max"],
     uom_list=["A", "mA", "µA"],
@@ -532,7 +546,8 @@ _make_best_numeric_rule(
 )
 
 _make_best_numeric_rule(
-    300, "max_voltage",
+    300,
+    "max_voltage",
     question_keywords=[["max", "maximum"], ["voltage", " v ", " v"]],
     context_keywords=["voltage", "vcc", "vdd", "supply"],
     uom_list=["V", "VOLT", "VOLTS", "MV", "KV"],
@@ -540,7 +555,8 @@ _make_best_numeric_rule(
 )
 
 _make_best_numeric_rule(
-    310, "max_current",
+    310,
+    "max_current",
     question_keywords=[["max", "maximum"], ["current", " a ", "amper"]],
     context_keywords=["current", "supply current", "icc"],
     uom_list=["A", "MA", "µA"],
@@ -548,7 +564,8 @@ _make_best_numeric_rule(
 )
 
 _make_best_numeric_rule(
-    320, "max_capacity",
+    320,
+    "max_capacity",
     question_keywords=[["max", "maximum", "nominal"], ["capacity", "mah", " ah ", " wh "]],
     context_keywords=["capacity", "nominal capacity"],
     uom_list=["MAH", "AH", "WH"],
@@ -556,7 +573,8 @@ _make_best_numeric_rule(
 )
 
 _make_best_numeric_rule(
-    500, "power_dissipation",
+    500,
+    "power_dissipation",
     question_keywords=[["power dissipation", "max power", "power rating", "power consumption"]],
     context_keywords=["power dissipation", "power rating", "power consumption", "total power"],
     uom_list=["W", "mW"],
@@ -565,9 +583,18 @@ _make_best_numeric_rule(
 )
 
 _make_best_numeric_rule(
-    600, "clock_frequency",
+    600,
+    "clock_frequency",
     question_keywords=[["clock", "frequency", "bandwidth", "fmax", "speed", "data rate"]],
-    context_keywords=["clock", "frequency", "bandwidth", "fmax", "speed", "data rate", "oscillator"],
+    context_keywords=[
+        "clock",
+        "frequency",
+        "bandwidth",
+        "fmax",
+        "speed",
+        "data rate",
+        "oscillator",
+    ],
     uom_list=["Hz", "kHz", "MHz", "GHz"],
     text_parser=parse_frequency,
     grid_keywords=["clock", "frequency", "bandwidth", "fmax"],
@@ -576,8 +603,15 @@ _make_best_numeric_rule(
 # --- Range rules (assemble min-max from matching units) ---
 
 _make_range_rule(
-    400, "operating_voltage_range",
-    question_keywords=["operating voltage", "supply voltage", "vcc range", "vdd range", "input voltage range"],
+    400,
+    "operating_voltage_range",
+    question_keywords=[
+        "operating voltage",
+        "supply voltage",
+        "vcc range",
+        "vdd range",
+        "input voltage range",
+    ],
     context_keywords=["operating", "supply", "vcc", "vdd", "input voltage"],
     uom_list=["V", "mV", "kV"],
     text_parser=parse_voltage,
@@ -586,9 +620,15 @@ _make_range_rule(
 )
 
 _make_range_rule(
-    410, "operating_temperature_range",
+    410,
+    "operating_temperature_range",
     question_keywords=["operating temp", "junction temp", "temperature range", "ambient temp"],
-    context_keywords=["operating temperature", "junction temperature", "ambient temperature", "operating temp"],
+    context_keywords=[
+        "operating temperature",
+        "junction temperature",
+        "ambient temperature",
+        "operating temp",
+    ],
     uom_list=["°C", "℃", "°F", "K"],
     text_parser=parse_temperature,
     range_unit="°C",
@@ -598,11 +638,13 @@ _make_range_rule(
 # --- Simple lookup rules (first context match wins) ---
 
 _make_simple_lookup_rule(
-    405, "storage_temperature",
+    405,
+    "storage_temperature",
     question_keywords=["storage temp", "storage temperature"],
     context_keywords=["storage temperature", "storage temp", "tstg", "storage"],
     post_filter=lambda matches: [
-        u for u in matches
+        u
+        for u in matches
         if "storage" in (u.context or "").lower()
         or "tstg" in (u.label or "").lower()
         or "storage" in (u.label or "").lower()
@@ -611,14 +653,16 @@ _make_simple_lookup_rule(
 )
 
 _make_simple_lookup_rule(
-    430, "soldering_temperature",
+    430,
+    "soldering_temperature",
     question_keywords=["solder", "reflow", "soldering temperature", "reflow temperature"],
     context_keywords=["solder", "reflow", "soldering", "reflow temperature"],
     grid_keywords=["solder", "reflow"],
 )
 
 _make_simple_lookup_rule(
-    520, "leakage_current",
+    520,
+    "leakage_current",
     question_keywords=["leakage current", "input leakage", "ileak"],
     context_keywords=["leakage", "ileak", "input leakage"],
     uom_list=["A", "mA", "µA", "nA"],
@@ -626,7 +670,8 @@ _make_simple_lookup_rule(
 )
 
 _make_simple_lookup_rule(
-    610, "propagation_delay",
+    610,
+    "propagation_delay",
     question_keywords=["propagation delay", "tpd", "delay time"],
     context_keywords=["propagation delay", "propagation", "tpd", "delay time", "tphl", "tplh"],
     uom_list=["ns", "µs", "ps", "ms"],
@@ -634,29 +679,49 @@ _make_simple_lookup_rule(
 )
 
 _make_simple_lookup_rule(
-    700, "package_type",
+    700,
+    "package_type",
     question_keywords=["package", "footprint", "case"],
     context_keywords=["package", "footprint", "case", "package type"],
     grid_keywords=["package", "footprint", "case"],
 )
 
 _make_simple_lookup_rule(
-    720, "thermal_resistance",
-    question_keywords=["thermal resistance", "θja", "theta-ja", "rθja", "θjc", "junction to ambient", "junction-to-ambient"],
-    context_keywords=["thermal resistance", "θja", "theta", "junction to ambient", "junction-to-ambient", "θjc", "rθja"],
+    720,
+    "thermal_resistance",
+    question_keywords=[
+        "thermal resistance",
+        "θja",
+        "theta-ja",
+        "rθja",
+        "θjc",
+        "junction to ambient",
+        "junction-to-ambient",
+    ],
+    context_keywords=[
+        "thermal resistance",
+        "θja",
+        "theta",
+        "junction to ambient",
+        "junction-to-ambient",
+        "θjc",
+        "rθja",
+    ],
     uom_list=["°C/W", "K/W"],
     grid_keywords=["thermal resistance", "θja", "theta", "junction to ambient"],
 )
 
 _make_simple_lookup_rule(
-    750, "moisture_sensitivity",
+    750,
+    "moisture_sensitivity",
     question_keywords=["moisture sensitivity", "msl", "msl rating"],
     context_keywords=["moisture sensitivity", "msl"],
     grid_keywords=["moisture sensitivity", "msl"],
 )
 
 _make_simple_lookup_rule(
-    730, "weight",
+    730,
+    "weight",
     question_keywords=["weight", "mass"],
     context_keywords=["weight", "mass"],
     uom_list=["g", "mg", "kg", "oz"],
@@ -666,22 +731,34 @@ _make_simple_lookup_rule(
 # --- Multi-value rules (combine multiple matching units) ---
 
 _make_multi_value_rule(
-    510, "esd_ratings",
+    510,
+    "esd_ratings",
     question_keywords=["esd", "electrostatic", "esd rating"],
     context_keywords=["esd", "electrostatic", "hbm", "cdm"],
     grid_keywords=["esd", "electrostatic", "hbm", "cdm"],
 )
 
 _make_multi_value_rule(
-    530, "threshold_voltage",
+    530,
+    "threshold_voltage",
     question_keywords=["threshold", "vil", "vih", "vol", "voh", "logic level"],
-    context_keywords=["threshold", "vil", "vih", "vol", "voh", "logic level", "input low", "input high"],
+    context_keywords=[
+        "threshold",
+        "vil",
+        "vih",
+        "vol",
+        "voh",
+        "logic level",
+        "input low",
+        "input high",
+    ],
     uom_list=["V", "mV"],
     grid_keywords=["threshold", "vil", "vih", "logic level"],
 )
 
 _make_multi_value_rule(
-    620, "rise_fall_time",
+    620,
+    "rise_fall_time",
     question_keywords=["rise time", "fall time", " tr ", " tf ", "slew rate", "rise/fall"],
     context_keywords=["rise time", "fall time", "slew rate", "slew", "tr/tf", "rise/fall"],
     uom_list=["ns", "µs", "ps", "V/µs", "V/ns"],
@@ -689,7 +766,8 @@ _make_multi_value_rule(
 )
 
 _make_multi_value_rule(
-    630, "setup_hold_time",
+    630,
+    "setup_hold_time",
     question_keywords=["setup time", "hold time", "tsu", " th ", "setup/hold", "setup and hold"],
     context_keywords=["setup time", "hold time", "tsu", "setup/hold", "setup and hold"],
     uom_list=["ns", "µs", "ps", "ms"],
@@ -697,8 +775,16 @@ _make_multi_value_rule(
 )
 
 _make_multi_value_rule(
-    710, "package_dimensions",
-    question_keywords=["dimension", "package size", "length", "width", "height", "package dimension"],
+    710,
+    "package_dimensions",
+    question_keywords=[
+        "dimension",
+        "package size",
+        "length",
+        "width",
+        "height",
+        "package dimension",
+    ],
     context_keywords=["dimension", "package size", "length", "width", "height", "body size"],
     uom_list=["mm", "mil", "in", "cm"],
     grid_keywords=["dimension", "package size", "body size"],
@@ -730,9 +816,10 @@ def _try_pin_count(
         right_text = " ".join(b.right_set).lower()
         if "pin" in lbl or "pin" in left_text or "pin" in right_text:
             count = max(len(b.left_set), len(b.right_set))
+            pp = _proof_point(b.origin.x, b.origin.y, b.page, _bbox_from(b), b.id, "bijection")
             return AnswerWithProof(
                 answer=str(count),
-                proof=[_proof_point(b.origin.x, b.origin.y, b.page, _bbox_from(b), b.id, "bijection")],
+                proof=[pp],
                 source_id=b.id,
                 source_type="bijection",
             )
@@ -754,11 +841,17 @@ def _try_recommended_operating(
         return result
     matches = _find_units_by_context(units, ["recommended operating", "recommended conditions"])
     if matches:
-        parts = [f"{u.label or ''}: {u.value} {u.unit_of_measure or ''}".strip() for u in matches[:6]]
+        parts = [
+            f"{u.label or ''}: {u.value} {u.unit_of_measure or ''}".strip() for u in matches[:6]
+        ]
         combined = "; ".join(p for p in parts if p)
+        proof_list = [
+            _proof_point(u.origin.x, u.origin.y, u.page, _bbox_from(u), u.id, "unit")
+            for u in matches[:6]
+        ]
         return AnswerWithProof(
             answer=combined or str(matches[0].value),
-            proof=[_proof_point(u.origin.x, u.origin.y, u.page, _bbox_from(u), u.id, "unit") for u in matches[:6]],
+            proof=proof_list,
             source_id=matches[0].id,
             source_type="unit",
         )
@@ -774,21 +867,35 @@ def _try_unit_by_intent(
 ) -> AnswerWithProof | None:
     q = _q(question)
     # Map intent keywords to UOM sets and optional parsers
-    intents: list[tuple[bool, list[str], Callable[[str], list[tuple[float, str]]] | None]] = [
-        (_has_any(q, "voltage", "volt", " v ", "charge voltage", "cutoff voltage", "cut-off voltage"),
-         ["V", "VOLT", "VOLTS", "MV", "KV"], parse_voltage),
-        (_has_any(q, "current", "amper", " a ", "discharge current", "charge current"),
-         ["A", "MA", "µA"], parse_current),
-        (_has_any(q, "capacity", "mah", " ah ", " wh ", "nominal capacity"),
-         ["MAH", "AH", "WH"], parse_capacity),
-        (_has_any(q, "power", "watt", " w "),
-         ["W", "MW"], parse_power),
-        (_has_any(q, "temperature", "temp", "°c", "℃"),
-         ["°C", "℃", "°F", "K"], parse_temperature),
-        (_has_any(q, "frequency", "clock", "speed", "hz"),
-         ["HZ", "KHZ", "MHZ", "GHZ"], parse_frequency),
-        (_has_any(q, "resistance", "ohm", "impedance", " ω "),
-         ["Ω", "OHM", "OHMS", "KΩ", "MΩ"], None),
+    IntentType = tuple[bool, list[str], Callable[[str], list[tuple[float, str]]] | None]
+    intents: list[IntentType] = [
+        (
+            _has_any(q, "voltage", "volt", " v ", "charge voltage", "cutoff voltage"),
+            ["V", "VOLT", "VOLTS", "MV", "KV"],
+            parse_voltage,
+        ),
+        (
+            _has_any(q, "current", "amper", " a ", "discharge current", "charge current"),
+            ["A", "MA", "µA"],
+            parse_current,
+        ),
+        (
+            _has_any(q, "capacity", "mah", " ah ", " wh ", "nominal capacity"),
+            ["MAH", "AH", "WH"],
+            parse_capacity,
+        ),
+        (_has_any(q, "power", "watt", " w "), ["W", "MW"], parse_power),
+        (_has_any(q, "temperature", "temp", "°c", "℃"), ["°C", "℃", "°F", "K"], parse_temperature),
+        (
+            _has_any(q, "frequency", "clock", "speed", "hz"),
+            ["HZ", "KHZ", "MHZ", "GHZ"],
+            parse_frequency,
+        ),
+        (
+            _has_any(q, "resistance", "ohm", "impedance", " ω "),
+            ["Ω", "OHM", "OHMS", "KΩ", "MΩ"],
+            None,
+        ),
     ]
 
     active = [(uoms, parser) for matched, uoms, parser in intents if matched]
@@ -867,12 +974,16 @@ def _try_unit_lookup(
     question: str, units: list[Unit], bijections: list[Bijection], grids: list[Grid]
 ) -> AnswerWithProof | None:
     q = _q(question)
-    q_normalized = q.replace("temp", "temperature").replace("freq", "frequency").replace("volt", "voltage")
+    q_normalized = (
+        q.replace("temp", "temperature").replace("freq", "frequency").replace("volt", "voltage")
+    )
 
     for u in units:
         if u.label:
             label_lower = u.label.lower()
-            label_normalized = label_lower.replace("temp", "temperature").replace("freq", "frequency")
+            label_normalized = label_lower.replace("temp", "temperature").replace(
+                "freq", "frequency"
+            )
             if label_lower in q or label_normalized in q_normalized:
                 return _answer_from_unit(u)
         ctx = (u.context or "").lower()
@@ -905,6 +1016,7 @@ def verify_and_answer(
             return result
 
     from akili.verify.derived import try_derived_queries
+
     derived = try_derived_queries(question, units, bijections, grids)
     if derived is not None:
         return derived

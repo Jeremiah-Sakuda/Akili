@@ -47,7 +47,9 @@ const SidebarLeft: React.FC<SidebarLeftProps> = ({
     try {
       const data = await getCanonical(docId);
       setCanonical(data);
-    } catch {
+    } catch (err) {
+      // A5: Log error for dev visibility
+      console.error('Failed to fetch canonical data:', err);
       setCanonical(null);
     } finally {
       setCanonicalLoading(false);

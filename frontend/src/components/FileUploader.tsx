@@ -63,7 +63,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   useEffect(() => {
-    getUsage().then(setUsage).catch(() => {});
+    getUsage().then(setUsage).catch((err) => { console.error("Failed to fetch usage:", err); });
   }, []);
 
   const clearProgressInterval = useCallback(() => {
@@ -79,7 +79,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
       await navigator.clipboard.writeText(result.doc_id);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
+    } catch (err) {
+      // A5: Log clipboard error for debugging
+      console.error('Failed to copy doc_id to clipboard:', err);
       setCopied(false);
     }
   };
@@ -151,7 +153,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
         const data = await ingestSingleFile(pdfFiles[0]);
         setResult(data);
         onSuccess(data.doc_id, data);
-        getUsage().then(setUsage).catch(() => {});
+        getUsage().then(setUsage).catch((err) => { console.error("Failed to fetch usage:", err); });
       } catch (e) {
         clearProgressInterval();
         setProgress(0);
@@ -202,7 +204,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onSuccess, onBack }) => {
       setProgress(100);
       setLoading(false);
       setBatchIndex(-1);
-      getUsage().then(setUsage).catch(() => {});
+      getUsage().then(setUsage).catch((err) => { console.error("Failed to fetch usage:", err); });
     }
   };
 

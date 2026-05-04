@@ -118,12 +118,14 @@ def detect_merge_candidates(
                     sim = _column_similarity(ha, hb)
 
                     if sim >= 0.5 or ga.cols == gb.cols:
-                        candidates.append(MergeCandidate(
-                            grid_a=ga,
-                            grid_b=gb,
-                            column_similarity=sim,
-                            needs_review=sim < 0.8,
-                        ))
+                        candidates.append(
+                            MergeCandidate(
+                                grid_a=ga,
+                                grid_b=gb,
+                                column_similarity=sim,
+                                needs_review=sim < 0.8,
+                            )
+                        )
 
     return candidates
 
@@ -148,12 +150,14 @@ def merge_grids(candidate: MergeCandidate) -> Grid:
         if skip_header_row and cell.row == 0:
             continue
         adjusted_row = cell.row + row_offset if not skip_header_row else cell.row - 1 + row_offset
-        merged_cells.append(GridCell(
-            row=adjusted_row,
-            col=cell.col,
-            value=cell.value,
-            origin=cell.origin,
-        ))
+        merged_cells.append(
+            GridCell(
+                row=adjusted_row,
+                col=cell.col,
+                value=cell.value,
+                origin=cell.origin,
+            )
+        )
 
     extra_rows = gb.rows if not skip_header_row else gb.rows - 1
     merged_rows = ga.rows + extra_rows
@@ -207,10 +211,14 @@ def merge_multipage_tables(
         merged_ids.add(cand.grid_b.id)
         logger.info(
             "Merged grids %s (page %d) + %s (page %d) → %s (%d rows, sim=%.2f, review=%s)",
-            cand.grid_a.id, cand.grid_a.page,
-            cand.grid_b.id, cand.grid_b.page,
-            merged.id, merged.rows,
-            cand.column_similarity, cand.needs_review,
+            cand.grid_a.id,
+            cand.grid_a.page,
+            cand.grid_b.id,
+            cand.grid_b.page,
+            merged.id,
+            merged.rows,
+            cand.column_similarity,
+            cand.needs_review,
         )
 
     remaining_grids = [g for g in grids if g.id not in merged_ids]

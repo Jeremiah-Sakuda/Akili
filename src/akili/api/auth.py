@@ -1,8 +1,9 @@
 """
-Optional Firebase ID token verification for API routes.
+Firebase ID token verification for API routes.
 
-When AKILI_REQUIRE_AUTH=1 and FIREBASE_PROJECT_ID is set, protected routes
-require Authorization: Bearer <id_token> and verify the token with Firebase Admin.
+Auth is ENABLED by default. Set AKILI_REQUIRE_AUTH=0 to explicitly disable.
+When enabled and FIREBASE_PROJECT_ID is set, protected routes require
+Authorization: Bearer <id_token> and verify the token with Firebase Admin.
 /health and /status remain public.
 """
 

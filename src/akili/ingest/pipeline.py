@@ -97,6 +97,7 @@ def ingest_document(
     {"phase": "canonicalizing", "page": i, "total": N}, {"phase": "storing", "total_pages": N},
     {"phase": "done", ...}.
     """
+
     def _progress(msg: dict) -> None:
         if progress_callback:
             progress_callback(msg)
@@ -108,8 +109,7 @@ def ingest_document(
     allowed_base = Path(os.environ.get("AKILI_DOCS_DIR", config.DOCS_DIR)).resolve()
     if not str(pdf_path).startswith(str(allowed_base)):
         raise ValueError(
-            f"Path outside allowed directory: {pdf_path} "
-            f"(allowed base: {allowed_base})"
+            f"Path outside allowed directory: {pdf_path} " f"(allowed base: {allowed_base})"
         )
 
     if not pdf_path.exists():
@@ -120,7 +120,9 @@ def ingest_document(
     corpus_match, corpus_entry = _check_corpus(pdf_path, store)
 
     if corpus_match and corpus_entry:
-        logger.info("Loading from corpus (skipping Gemini extraction): %s", corpus_entry.get("chip_name"))
+        logger.info(
+            "Loading from corpus (skipping Gemini extraction): %s", corpus_entry.get("chip_name")
+        )
         _progress({"phase": "loading_corpus", "chip": corpus_entry.get("chip_name")})
 
         all_canonical = _load_canonical_from_corpus(corpus_entry, doc_id)
@@ -133,8 +135,14 @@ def ingest_document(
             ranges = [o for o in all_canonical if isinstance(o, Range)]
             conditional_units = [o for o in all_canonical if isinstance(o, ConditionalUnit)]
             store.store_canonical(
-                doc_id, pdf_path.name, 1, units, bijections, grids,
-                ranges=ranges, conditional_units=conditional_units,
+                doc_id,
+                pdf_path.name,
+                1,
+                units,
+                bijections,
+                grids,
+                ranges=ranges,
+                conditional_units=conditional_units,
                 uploaded_by=uploaded_by,
             )
 
@@ -178,10 +186,15 @@ def ingest_document(
             page_agreement = 0.5  # default for single-pass
             if should_use_consensus(page_type):
                 extraction, page_agreement = consensus_extract_page(
-                    page_index, image_bytes, doc_id, page_type_hint=hint,
+                    page_index,
+                    image_bytes,
+                    doc_id,
+                    page_type_hint=hint,
                 )
             else:
-                extraction = gemini_extract_page(page_index, image_bytes, doc_id, page_type_hint=hint)
+                extraction = gemini_extract_page(
+                    page_index, image_bytes, doc_id, page_type_hint=hint
+                )
             _progress({"phase": "canonicalizing", "page": page_index, "total": total_pages})
             canonical = canonicalize_page(extraction, doc_id, page_index)
             # Propagate consensus agreement to canonical objects
@@ -211,7 +224,8 @@ def ingest_document(
     if merge_candidates:
         logger.info(
             "Multi-page merge: %d table(s) merged across page boundaries (doc_id=%s).",
-            len(merge_candidates), doc_id,
+            len(merge_candidates),
+            doc_id,
         )
 
     if total_pages > 0 and len(all_canonical) == 0:
@@ -235,7 +249,9 @@ def ingest_document(
         units = [o for o in all_canonical if isinstance(o, Unit)]
         bijections = [o for o in all_canonical if isinstance(o, Bijection)]
         grids = [o for o in all_canonical if isinstance(o, Grid)]
-        store.store_canonical(doc_id, pdf_path.name, total_pages, units, bijections, grids, uploaded_by=uploaded_by)
+        store.store_canonical(
+            doc_id, pdf_path.name, total_pages, units, bijections, grids, uploaded_by=uploaded_by
+        )
 
     result: dict = {
         "phase": "done",

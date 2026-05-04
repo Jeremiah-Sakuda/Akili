@@ -26,7 +26,14 @@ def migrate_sqlite_to_postgres(sqlite_path: str, pg_url: str, org_id: str = "def
     dst = PostgresStore(dsn=pg_url, org_id=org_id)
 
     docs = src.list_documents()
-    summary = {"documents": 0, "units": 0, "bijections": 0, "grids": 0, "ranges": 0, "conditional_units": 0}
+    summary = {
+        "documents": 0,
+        "units": 0,
+        "bijections": 0,
+        "grids": 0,
+        "ranges": 0,
+        "conditional_units": 0,
+    }
 
     for doc_info in docs:
         doc_id = doc_info["doc_id"]
@@ -54,8 +61,15 @@ def migrate_sqlite_to_postgres(sqlite_path: str, pg_url: str, org_id: str = "def
         summary["ranges"] += len(ranges)
         summary["conditional_units"] += len(cunits)
 
-        logger.info("Migrated doc %s: %d units, %d bijections, %d grids, %d ranges, %d cunits",
-                     doc_id, len(units), len(bijections), len(grids), len(ranges), len(cunits))
+        logger.info(
+            "Migrated doc %s: %d units, %d bijections, %d grids, %d ranges, %d cunits",
+            doc_id,
+            len(units),
+            len(bijections),
+            len(grids),
+            len(ranges),
+            len(cunits),
+        )
 
     return summary
 

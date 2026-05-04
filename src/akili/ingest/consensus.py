@@ -110,9 +110,7 @@ def _match_units(
     return matched, unmatched_a, unmatched_b
 
 
-def compute_agreement(
-    extraction_a: PageExtraction, extraction_b: PageExtraction
-) -> float:
+def compute_agreement(extraction_a: PageExtraction, extraction_b: PageExtraction) -> float:
     """Compute agreement score (0.0 to 1.0) between two page extractions."""
     units_a = [u.model_dump() for u in extraction_a.units]
     units_b = [u.model_dump() for u in extraction_b.units]
@@ -157,6 +155,7 @@ def merge_extractions(
     from pydantic import ValidationError
 
     from akili.ingest.extract_schema import UnitExtract
+
     merged_units: list[UnitExtract] = []
 
     for ua, _ub, _sim in matched:
@@ -198,11 +197,30 @@ def consensus_extract_page(
     Returns (merged_extraction, agreement_score).
     agreement_score is 0.0-1.0 representing how much the two passes agreed.
     """
-    precision_hint = (page_type_hint + _PRECISION_SUFFIX) if page_type_hint else _PRECISION_SUFFIX.strip()
+    precision_hint = (
+        (page_type_hint + _PRECISION_SUFFIX) if page_type_hint else _PRECISION_SUFFIX.strip()
+    )
     recall_hint = (page_type_hint + _RECALL_SUFFIX) if page_type_hint else _RECALL_SUFFIX.strip()
 
     extraction_a = extract_page(page_index, image_png_bytes, doc_id, page_type_hint=precision_hint)
     extraction_b = extract_page(page_index, image_png_bytes, doc_id, page_type_hint=recall_hint)
+
+    # MEDIUM-1: Warn when both extractions return empty
+    if (
+        not extraction_a.units
+        and not extraction_b.units
+        and not extraction_a.bijections
+        and not extraction_b.bijections
+        and not extraction_a.grids
+        and not extraction_b.grids
+    ):
+        logger.warning(
+            "Consensus double-failure: both precision and recall passes "
+            "returned empty for page %d (doc_id=%s). Check API key, model, "
+            "and server logs.",
+            page_index,
+            doc_id,
+        )
 
     agreement = compute_agreement(extraction_a, extraction_b)
     merged = merge_extractions(extraction_a, extraction_b)
@@ -210,8 +228,12 @@ def consensus_extract_page(
     logger.info(
         "Consensus extraction page %d (doc_id=%s): agreement=%.2f, "
         "units_a=%d, units_b=%d, merged=%d",
-        page_index, doc_id, agreement,
-        len(extraction_a.units), len(extraction_b.units), len(merged.units),
+        page_index,
+        doc_id,
+        agreement,
+        len(extraction_a.units),
+        len(extraction_b.units),
+        len(merged.units),
     )
 
     return merged, agreement

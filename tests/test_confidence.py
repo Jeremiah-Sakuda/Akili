@@ -1,6 +1,5 @@
 """Tests for confidence scoring."""
 
-
 import pytest
 
 from akili.verify.models import ConfidenceScore, compute_canonical_quality
@@ -38,22 +37,31 @@ class TestConfidenceScore:
 class TestCanonicalQuality:
     def test_all_fields(self):
         score = compute_canonical_quality(
-            has_bbox=True, has_origin=True, has_unit_of_measure=True,
-            has_label=True, has_context=True,
+            has_bbox=True,
+            has_origin=True,
+            has_unit_of_measure=True,
+            has_label=True,
+            has_context=True,
         )
         assert score == pytest.approx(1.0, abs=0.01)
 
     def test_origin_only(self):
         score = compute_canonical_quality(
-            has_bbox=False, has_origin=True, has_unit_of_measure=False,
-            has_label=False, has_context=False,
+            has_bbox=False,
+            has_origin=True,
+            has_unit_of_measure=False,
+            has_label=False,
+            has_context=False,
         )
         assert score == pytest.approx(0.30, abs=0.01)
 
     def test_no_fields(self):
         score = compute_canonical_quality(
-            has_bbox=False, has_origin=False, has_unit_of_measure=False,
-            has_label=False, has_context=False,
+            has_bbox=False,
+            has_origin=False,
+            has_unit_of_measure=False,
+            has_label=False,
+            has_context=False,
         )
         assert score == pytest.approx(0.0, abs=0.01)
 
@@ -62,9 +70,14 @@ class TestConfidenceInVerification:
     def test_structured_unit_has_confidence(self):
         """A unit with explicit unit_of_measure and label should produce high confidence."""
         u = Unit(
-            id="v1", label="VCC", value=5.0, unit_of_measure="V",
+            id="v1",
+            label="VCC",
+            value=5.0,
+            unit_of_measure="V",
             context="supply voltage",
-            origin=Point(x=0.1, y=0.1), doc_id="d", page=0,
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d",
+            page=0,
             bbox=BBox(x1=0.05, y1=0.05, x2=0.15, y2=0.15),
         )
         result = verify_and_answer("What is the maximum voltage?", [u], [], [])
@@ -76,8 +89,12 @@ class TestConfidenceInVerification:
     def test_bare_unit_lower_confidence(self):
         """A unit without label, context, bbox should produce lower canonical validation."""
         u = Unit(
-            id="v1", value=5.0, unit_of_measure="V",
-            origin=Point(x=0.1, y=0.1), doc_id="d", page=0,
+            id="v1",
+            value=5.0,
+            unit_of_measure="V",
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d",
+            page=0,
         )
         result = verify_and_answer("What is the maximum voltage?", [u], [], [])
         assert isinstance(result, AnswerWithProof)

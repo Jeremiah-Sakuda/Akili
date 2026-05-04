@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from z3 import Real, Solver, sat
+
     Z3_AVAILABLE = True
 except ImportError:
     Z3_AVAILABLE = False
@@ -67,14 +68,14 @@ _UNIT_CONVERSIONS: dict[str, tuple[str, float]] = {
 
 # Aliases for unicode/symbol variants
 _UNIT_ALIASES: dict[str, str] = {
-    "\u03a9": "Ohm",     # Ω
+    "\u03a9": "Ohm",  # Ω
     "k\u03a9": "kOhm",
     "M\u03a9": "MOhm",
-    "\u00b5V": "uV",     # µV
+    "\u00b5V": "uV",  # µV
     "\u00b5A": "uA",
     "\u00b5F": "uF",
     "\u00b5s": "us",
-    "\u00b0C": "C",       # °C
+    "\u00b0C": "C",  # °C
     "degC": "C",
 }
 
@@ -99,11 +100,13 @@ def _to_base(value: float, unit_str: str) -> tuple[float, str] | None:
 # Result types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Z3Issue:
     """A single issue found by Z3 checks."""
+
     check_type: str  # "unit_normalization", "contradiction", "range_consistency"
-    severity: str    # "error", "warning"
+    severity: str  # "error", "warning"
     message: str
     source_ids: list[str] = field(default_factory=list)
     page: int | None = None
@@ -112,6 +115,7 @@ class Z3Issue:
 @dataclass
 class Z3CheckResult:
     """Aggregate result from all Z3 checks on a document."""
+
     issues: list[Z3Issue] = field(default_factory=list)
     checks_run: int = 0
     z3_available: bool = Z3_AVAILABLE
@@ -128,6 +132,7 @@ class Z3CheckResult:
 # ---------------------------------------------------------------------------
 # Check 1: Unit normalization
 # ---------------------------------------------------------------------------
+
 
 def _check_unit_normalization(units: list) -> list[Z3Issue]:
     """Verify that extracted values are dimensionally consistent.
@@ -155,6 +160,7 @@ def _check_unit_normalization(units: list) -> list[Z3Issue]:
         base_val, base_unit = result
 
         s = Solver()
+        s.set("timeout", 5000)
         z_val = Real(f"val_{u.id}")
         z_base = Real(f"base_{u.id}")
         norm = _normalize_unit(uom)
@@ -168,17 +174,19 @@ def _check_unit_normalization(units: list) -> list[Z3Issue]:
         s.add(z_base != base_val)
 
         if s.check() == sat:
-            issues.append(Z3Issue(
-                check_type="unit_normalization",
-                severity="error",
-                message=(
-                    f"Unit normalization inconsistency for {u.id}: "
-                    f"{numeric_val} {uom} should be {base_val} {base_unit} "
-                    f"but Z3 found a model where it differs"
-                ),
-                source_ids=[u.id],
-                page=getattr(u, "page", None),
-            ))
+            issues.append(
+                Z3Issue(
+                    check_type="unit_normalization",
+                    severity="error",
+                    message=(
+                        f"Unit normalization inconsistency for {u.id}: "
+                        f"{numeric_val} {uom} should be {base_val} {base_unit} "
+                        f"but Z3 found a model where it differs"
+                    ),
+                    source_ids=[u.id],
+                    page=getattr(u, "page", None),
+                )
+            )
 
     return issues
 
@@ -186,6 +194,7 @@ def _check_unit_normalization(units: list) -> list[Z3Issue]:
 # ---------------------------------------------------------------------------
 # Check 2: Contradiction detection
 # ---------------------------------------------------------------------------
+
 
 def _extract_param_key(unit) -> str | None:
     """Build a grouping key from label + context to identify the same parameter."""
@@ -245,6 +254,7 @@ def _check_contradictions(units: list) -> list[Z3Issue]:
                 continue
 
             s = Solver()
+            s.set("timeout", 5000)
             a = Real("a")
             b = Real("b")
             s.add(a == ref_val)
@@ -252,17 +262,23 @@ def _check_contradictions(units: list) -> list[Z3Issue]:
             s.add(a == b)
 
             if s.check() != sat:
-                issues.append(Z3Issue(
-                    check_type="contradiction",
-                    severity="error",
-                    message=(
-                        f"Contradiction: {key!r} has value {ref_unit.value} {getattr(ref_unit, 'unit_of_measure', '')} "
-                        f"on page {getattr(ref_unit, 'page', '?')} but "
-                        f"{u.value} {getattr(u, 'unit_of_measure', '')} on page {getattr(u, 'page', '?')}"
-                    ),
-                    source_ids=[ref_unit.id, u.id],
-                    page=getattr(u, "page", None),
-                ))
+                ref_uom = getattr(ref_unit, "unit_of_measure", "")
+                ref_page = getattr(ref_unit, "page", "?")
+                u_uom = getattr(u, "unit_of_measure", "")
+                u_page = getattr(u, "page", "?")
+                msg = (
+                    f"Contradiction: {key!r} has value {ref_unit.value} {ref_uom} "
+                    f"on page {ref_page} but {u.value} {u_uom} on page {u_page}"
+                )
+                issues.append(
+                    Z3Issue(
+                        check_type="contradiction",
+                        severity="error",
+                        message=msg,
+                        source_ids=[ref_unit.id, u.id],
+                        page=getattr(u, "page", None),
+                    )
+                )
 
     return issues
 
@@ -270,6 +286,7 @@ def _check_contradictions(units: list) -> list[Z3Issue]:
 # ---------------------------------------------------------------------------
 # Check 3: Range consistency
 # ---------------------------------------------------------------------------
+
 
 def _check_range_consistency(ranges: list) -> list[Z3Issue]:
     """Assert min <= typ <= max for all Range objects using Z3."""
@@ -294,6 +311,7 @@ def _check_range_consistency(ranges: list) -> list[Z3Issue]:
             continue
 
         s = Solver()
+        s.set("timeout", 5000)
         z_vars = {name: Real(f"{r.id}_{name}") for name in vals}
         for name, v in vals.items():
             s.add(z_vars[name] == v)
@@ -308,24 +326,275 @@ def _check_range_consistency(ranges: list) -> list[Z3Issue]:
 
         for constraint in constraints:
             s_test = Solver()
+            s_test.set("timeout", 5000)
             for name, v in vals.items():
                 s_test.add(z_vars[name] == v)
             from z3 import Not
+
             s_test.add(Not(constraint))
             if s_test.check() == sat:
-                issues.append(Z3Issue(
-                    check_type="range_consistency",
-                    severity="error",
-                    message=(
-                        f"Range consistency violation for {r.id} "
-                        f"({getattr(r, 'label', '?')}): "
-                        f"min={vals.get('min')}, typ={vals.get('typ')}, max={vals.get('max')} "
-                        f"({getattr(r, 'unit', '')})"
-                    ),
-                    source_ids=[r.id],
-                    page=getattr(r, "page", None),
-                ))
+                issues.append(
+                    Z3Issue(
+                        check_type="range_consistency",
+                        severity="error",
+                        message=(
+                            f"Range consistency violation for {r.id} "
+                            f"({getattr(r, 'label', '?')}): "
+                            f"min={vals.get('min')}, typ={vals.get('typ')}, max={vals.get('max')} "
+                            f"({getattr(r, 'unit', '')})"
+                        ),
+                        source_ids=[r.id],
+                        page=getattr(r, "page", None),
+                    )
+                )
                 break
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
+# Check 4: Cross-parameter power constraint (P_max >= V * I)
+# ---------------------------------------------------------------------------
+
+
+def _check_power_constraint(units: list) -> list[Z3Issue]:
+    """Verify that the rated max power is >= V_max * I_max.
+
+    If a document specifies max voltage, max current, AND max power,
+    then P_max should be >= V_max * I_max. If not, the datasheet may
+    have an internal inconsistency.
+    """
+    issues: list[Z3Issue] = []
+    if not Z3_AVAILABLE:
+        return issues
+
+    # Gather candidate values by matching context/UOM.
+    voltage_units: list[tuple[float, str, object]] = []
+    current_units: list[tuple[float, str, object]] = []
+    power_units: list[tuple[float, str, object]] = []
+
+    for u in units:
+        val = getattr(u, "value", None)
+        uom = getattr(u, "unit_of_measure", None) or getattr(u, "unit", None)
+        ctx = (getattr(u, "context", "") or "").lower()
+        lbl = (getattr(u, "label", "") or "").lower()
+        if val is None or uom is None:
+            continue
+        try:
+            numeric = float(val)
+        except (ValueError, TypeError):
+            continue
+
+        base = _to_base(numeric, uom)
+        if base is None:
+            continue
+        base_val, base_unit = base
+
+        is_max = any(kw in ctx or kw in lbl for kw in ("max", "maximum", "absolute"))
+        if not is_max:
+            continue
+
+        if base_unit == "V":
+            voltage_units.append((base_val, u.id, u))
+        elif base_unit == "A":
+            current_units.append((base_val, u.id, u))
+        elif base_unit == "W":
+            power_units.append((base_val, u.id, u))
+
+    if not voltage_units or not current_units or not power_units:
+        return issues
+
+    # Use the highest V, highest I, and highest rated P
+    v_max, v_id, v_unit = max(voltage_units, key=lambda x: x[0])
+    i_max, i_id, i_unit = max(current_units, key=lambda x: x[0])
+    p_max, p_id, p_unit = max(power_units, key=lambda x: x[0])
+
+    # Z3: assert p_max < v_max * i_max  →  if SAT, P_max is insufficient
+    s = Solver()
+    s.set("timeout", 5000)
+    z_p = Real("p_max")
+    z_v = Real("v_max")
+    z_i = Real("i_max")
+    s.add(z_p == p_max)
+    s.add(z_v == v_max)
+    s.add(z_i == i_max)
+    s.add(z_p < z_v * z_i)
+
+    if s.check() == sat:
+        vi_product = v_max * i_max
+        issues.append(
+            Z3Issue(
+                check_type="power_constraint",
+                severity="warning",
+                message=(
+                    f"Power constraint concern: rated P_max={p_max:.3f}W but "
+                    f"V_max × I_max = {v_max}V × {i_max}A = {vi_product:.3f}W. "
+                    f"P_max should be >= V × I."
+                ),
+                source_ids=[v_id, i_id, p_id],
+            )
+        )
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
+# Check 5: Thermal viability (T_ambient + P * θJA <= Tj_max)
+# ---------------------------------------------------------------------------
+
+
+def _check_thermal_viability(units: list, ambient_temp: float = 25.0) -> list[Z3Issue]:
+    """Verify that junction temperature at rated power stays within limits.
+
+    T_j = T_ambient + P × θ_JA. If T_j > T_j_max, the design is thermally
+    infeasible at rated power.
+    """
+    issues: list[Z3Issue] = []
+    if not Z3_AVAILABLE:
+        return issues
+
+    theta_ja: tuple[float, str] | None = None
+    p_max_w: tuple[float, str] | None = None
+    tj_max: tuple[float, str] | None = None
+
+    for u in units:
+        val = getattr(u, "value", None)
+        uom = getattr(u, "unit_of_measure", None) or getattr(u, "unit", None)
+        ctx = (getattr(u, "context", "") or "").lower()
+        lbl = (getattr(u, "label", "") or "").lower()
+        if val is None or uom is None:
+            continue
+        try:
+            numeric = float(val)
+        except (ValueError, TypeError):
+            continue
+
+        # Match thermal resistance
+        uom_upper = (uom or "").upper().replace(" ", "")
+        if ("thermal" in ctx or "θja" in lbl or "theta" in lbl or "rthja" in lbl) and uom_upper in (
+            "°C/W",
+            "C/W",
+            "K/W",
+        ):
+            theta_ja = (numeric, u.id)
+        # Match power dissipation
+        elif (
+            ("power" in ctx or "dissipation" in ctx or lbl in ("pd", "power"))
+            and _normalize_unit(uom) in _UNIT_CONVERSIONS
+            and _to_base(numeric, uom) is not None
+        ):
+            base = _to_base(numeric, uom)
+            if base and base[1] == "W":
+                if p_max_w is None or base[0] > p_max_w[0]:
+                    p_max_w = (base[0], u.id)
+        # Match max junction temperature
+        elif "junction" in ctx and ("max" in ctx or "max" in lbl):
+            norm = _normalize_unit(uom)
+            if norm == "C" or uom_upper in ("°C", "℃", "C"):
+                tj_max = (numeric, u.id)
+
+    if theta_ja is None or p_max_w is None or tj_max is None:
+        return issues
+
+    theta_val, theta_id = theta_ja
+    p_val, p_id = p_max_w
+    tj_max_val, tj_id = tj_max
+
+    t_junction = ambient_temp + p_val * theta_val
+
+    s = Solver()
+    s.set("timeout", 5000)
+    z_tj = Real("t_junction")
+    z_tj_max = Real("tj_max")
+    s.add(z_tj == t_junction)
+    s.add(z_tj_max == tj_max_val)
+    s.add(z_tj > z_tj_max)
+
+    if s.check() == sat:
+        issues.append(
+            Z3Issue(
+                check_type="thermal_viability",
+                severity="error",
+                message=(
+                    f"Thermal viability FAIL: T_j = {ambient_temp}°C + "
+                    f"{p_val:.3f}W × {theta_val}°C/W = {t_junction:.1f}°C, "
+                    f"exceeds T_j_max = {tj_max_val}°C by {t_junction - tj_max_val:.1f}°C"
+                ),
+                source_ids=[theta_id, p_id, tj_id],
+            )
+        )
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
+# Check 6: Dropout margin for voltage regulators
+# ---------------------------------------------------------------------------
+
+
+def _check_dropout_margin(units: list) -> list[Z3Issue]:
+    """For regulators: verify V_in_min - V_out >= V_dropout."""
+    issues: list[Z3Issue] = []
+    if not Z3_AVAILABLE:
+        return issues
+
+    v_in_min: tuple[float, str] | None = None
+    v_out: tuple[float, str] | None = None
+    v_dropout: tuple[float, str] | None = None
+
+    for u in units:
+        val = getattr(u, "value", None)
+        uom = getattr(u, "unit_of_measure", None) or getattr(u, "unit", None)
+        ctx = (getattr(u, "context", "") or "").lower()
+        lbl = (getattr(u, "label", "") or "").lower()
+        if val is None or uom is None:
+            continue
+        try:
+            numeric = float(val)
+        except (ValueError, TypeError):
+            continue
+
+        base = _to_base(numeric, uom)
+        if base is None or base[1] != "V":
+            continue
+        base_val = base[0]
+
+        if "dropout" in ctx or "dropout" in lbl or "vdo" in lbl:
+            v_dropout = (base_val, u.id)
+        elif ("input" in ctx and "min" in ctx) or ("vin" in lbl and "min" in lbl):
+            v_in_min = (base_val, u.id)
+        elif "output voltage" in ctx or "vout" in lbl:
+            v_out = (base_val, u.id)
+
+    if v_in_min is None or v_out is None or v_dropout is None:
+        return issues
+
+    vin_val, vin_id = v_in_min
+    vout_val, vout_id = v_out
+    vdo_val, vdo_id = v_dropout
+
+    margin = vin_val - vout_val
+
+    s = Solver()
+    s.set("timeout", 5000)
+    z_margin = Real("margin")
+    z_dropout = Real("dropout")
+    s.add(z_margin == margin)
+    s.add(z_dropout == vdo_val)
+    s.add(z_margin < z_dropout)
+
+    if s.check() == sat:
+        issues.append(
+            Z3Issue(
+                check_type="dropout_margin",
+                severity="warning",
+                message=(
+                    f"Dropout margin insufficient: V_in_min({vin_val}V) - V_out({vout_val}V) "
+                    f"= {margin:.3f}V < V_dropout({vdo_val}V)"
+                ),
+                source_ids=[vin_id, vout_id, vdo_id],
+            )
+        )
 
     return issues
 
@@ -333,6 +602,7 @@ def _check_range_consistency(ranges: list) -> list[Z3Issue]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run_z3_checks(
     units: list | None = None,
@@ -360,6 +630,16 @@ def run_z3_checks(
     result.checks_run += 1
 
     result.issues.extend(_check_range_consistency(ranges or []))
+    result.checks_run += 1
+
+    # Cross-parameter constraint checks
+    result.issues.extend(_check_power_constraint(all_units))
+    result.checks_run += 1
+
+    result.issues.extend(_check_thermal_viability(all_units))
+    result.checks_run += 1
+
+    result.issues.extend(_check_dropout_margin(all_units))
     result.checks_run += 1
 
     if result.issues:

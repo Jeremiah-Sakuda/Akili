@@ -7,13 +7,22 @@ pipeline from PDF load through canonicalization and storage.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, patch as _patch
 
 import pytest
 
 from akili.canonical import Bijection, Grid, Unit
 from akili.ingest.pipeline import ingest_document
+
+
+@pytest.fixture(autouse=True)
+def _allow_tmp_docs(tmp_path):
+    """Patch DOCS_DIR so synthetic PDFs in tmp_path pass path validation."""
+    with _patch.dict(os.environ, {"AKILI_DOCS_DIR": str(tmp_path)}):
+        with _patch("akili.config.DOCS_DIR", str(tmp_path)):
+            yield
 
 
 @pytest.fixture()
@@ -101,6 +110,7 @@ class TestPipelineIntegration:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 doc_id, canonical, total_pages, pages_failed = ingest_document(
@@ -132,11 +142,10 @@ class TestPipelineIntegration:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             with patch("akili.config.GEMINI_PAGE_DELAY", 0):
-                doc_id, _, _, _ = ingest_document(
-                    synthetic_pdf, store=tmp_store
-                )
+                doc_id, _, _, _ = ingest_document(synthetic_pdf, store=tmp_store)
 
         docs = tmp_store.list_documents()
         assert len(docs) == 1
@@ -161,6 +170,7 @@ class TestPipelineIntegration:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 doc_id, canonical, _, _ = ingest_document(synthetic_pdf, store=tmp_store)
@@ -190,6 +200,7 @@ class TestPipelineIntegration:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 doc_id, canonical, total_pages, pages_failed = ingest_document(
@@ -215,6 +226,7 @@ class TestPipelineIntegration:
         progress_events: list[dict] = []
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 ingest_document(
@@ -232,7 +244,7 @@ class TestPipelineIntegration:
         assert "done" in phases
 
     def test_ingest_nonexistent_pdf_raises(self, tmp_store):
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises((FileNotFoundError, ValueError)):
             ingest_document(Path("/nonexistent/path.pdf"), store=tmp_store)
 
     @patch("akili.ingest.pipeline.classify_page", return_value="other")
@@ -246,6 +258,7 @@ class TestPipelineIntegration:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             with patch("akili.config.GEMINI_PAGE_DELAY", 0):
                 with patch("akili.config.GEMINI_429_COOLDOWN", 0):

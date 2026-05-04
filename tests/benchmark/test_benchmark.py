@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from tests.benchmark.run_benchmark import load_ground_truth, values_match
 
 GROUND_TRUTH_PATH = Path(__file__).parent / "ground_truth.json"

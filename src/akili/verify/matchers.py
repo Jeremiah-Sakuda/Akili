@@ -13,36 +13,16 @@ from typing import Any
 # Regex patterns — ordered by specificity (longer units first)
 # ---------------------------------------------------------------------------
 
-VOLTAGE_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:kV|mV|V|VOLT|VOLTS)\b", re.IGNORECASE
-)
-CURRENT_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:µA|uA|mA|A)\b", re.IGNORECASE
-)
-CAPACITY_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:mAh|Ah|Wh)\b", re.IGNORECASE
-)
-RESISTANCE_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:MΩ|kΩ|Ω|ohm|ohms)\b", re.IGNORECASE
-)
-POWER_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:mW|W|WATT|WATTS)\b", re.IGNORECASE
-)
-TEMPERATURE_PATTERN = re.compile(
-    r"([+-]?\d+(?:\.\d+)?)\s*(?:°C|℃|°F|K)\b", re.IGNORECASE
-)
-FREQUENCY_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:GHz|MHz|kHz|Hz)\b", re.IGNORECASE
-)
-TIME_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:µs|us|ns|ps|ms|s)\b", re.IGNORECASE
-)
-DIMENSION_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:mm|mil|cm|in|inch)\b", re.IGNORECASE
-)
-WEIGHT_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(?:mg|kg|g|oz)\b", re.IGNORECASE
-)
+VOLTAGE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:kV|mV|V|VOLT|VOLTS)\b", re.IGNORECASE)
+CURRENT_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:µA|uA|mA|A)\b", re.IGNORECASE)
+CAPACITY_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:mAh|Ah|Wh)\b", re.IGNORECASE)
+RESISTANCE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:MΩ|kΩ|Ω|ohm|ohms)\b", re.IGNORECASE)
+POWER_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:mW|W|WATT|WATTS)\b", re.IGNORECASE)
+TEMPERATURE_PATTERN = re.compile(r"([+-]?\d+(?:\.\d+)?)\s*(?:°C|℃|°F|K)\b", re.IGNORECASE)
+FREQUENCY_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:GHz|MHz|kHz|Hz)\b", re.IGNORECASE)
+TIME_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:µs|us|ns|ps|ms|s)\b", re.IGNORECASE)
+DIMENSION_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:mm|mil|cm|in|inch)\b", re.IGNORECASE)
+WEIGHT_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:mg|kg|g|oz)\b", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
 # Unit normalization for parsed suffix → canonical unit string
@@ -73,6 +53,7 @@ def _extract_suffix(match: re.Match) -> str:
 # ---------------------------------------------------------------------------
 # Public parsers
 # ---------------------------------------------------------------------------
+
 
 def parse_voltage(text: str) -> list[tuple[float, str]]:
     out: list[tuple[float, str]] = []
@@ -148,7 +129,9 @@ def parse_dimension(text: str) -> list[tuple[float, str]]:
     out: list[tuple[float, str]] = []
     for m in DIMENSION_PATTERN.finditer(text):
         try:
-            out.append((float(m.group(1)), _normalize_unit(_extract_suffix(m), _DIMENSION_UNIT_MAP)))
+            out.append(
+                (float(m.group(1)), _normalize_unit(_extract_suffix(m), _DIMENSION_UNIT_MAP))
+            )
         except (TypeError, ValueError):
             continue
     return out
@@ -169,12 +152,42 @@ def parse_weight(text: str) -> list[tuple[float, str]]:
 # ---------------------------------------------------------------------------
 
 #: Common stop words removed when scoring keyword overlap between question and unit text
-STOP_WORDS = frozenset({
-    "what", "is", "the", "of", "this", "document", "a", "an", "are", "for",
-    "in", "on", "at", "to", "and", "or", "it", "its", "how", "does", "do",
-    "that", "which", "with", "from", "can", "has", "have", "be", "was",
-    "many", "much",
-})
+STOP_WORDS = frozenset(
+    {
+        "what",
+        "is",
+        "the",
+        "of",
+        "this",
+        "document",
+        "a",
+        "an",
+        "are",
+        "for",
+        "in",
+        "on",
+        "at",
+        "to",
+        "and",
+        "or",
+        "it",
+        "its",
+        "how",
+        "does",
+        "do",
+        "that",
+        "which",
+        "with",
+        "from",
+        "can",
+        "has",
+        "have",
+        "be",
+        "was",
+        "many",
+        "much",
+    }
+)
 
 
 def keyword_overlap(question: str, text: str) -> int:

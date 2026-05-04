@@ -67,23 +67,25 @@ async def get_corrections(
     """Get all corrections for a document."""
     cs = get_correction_store()
     corrections = cs.get_corrections_by_doc(doc_id)
-    return JSONResponse(content={
-        "doc_id": doc_id,
-        "corrections": [
-            {
-                "id": c.id,
-                "canonical_id": c.canonical_id,
-                "canonical_type": c.canonical_type,
-                "action": c.action,
-                "original_value": c.original_value,
-                "corrected_value": c.corrected_value,
-                "corrected_by": c.corrected_by,
-                "notes": c.notes,
-                "created_at": c.created_at,
-            }
-            for c in corrections
-        ],
-    })
+    return JSONResponse(
+        content={
+            "doc_id": doc_id,
+            "corrections": [
+                {
+                    "id": c.id,
+                    "canonical_id": c.canonical_id,
+                    "canonical_type": c.canonical_type,
+                    "action": c.action,
+                    "original_value": c.original_value,
+                    "corrected_value": c.corrected_value,
+                    "corrected_by": c.corrected_by,
+                    "notes": c.notes,
+                    "created_at": c.created_at,
+                }
+                for c in corrections
+            ],
+        }
+    )
 
 
 @router.get("/corrections/stats/{doc_id}")
@@ -100,6 +102,7 @@ async def correction_stats(
 # ---------------------------------------------------------------------------
 # Pattern Analysis
 # ---------------------------------------------------------------------------
+
 
 @router.get("/patterns")
 async def get_patterns(
@@ -120,20 +123,22 @@ async def get_doc_patterns(
     validate_doc_id(doc_id)
     analyzer = PatternAnalyzer(get_correction_store())
     patterns = analyzer.analyze_by_doc(doc_id)
-    return JSONResponse(content={
-        "doc_id": doc_id,
-        "patterns": [
-            {
-                "id": p.pattern_id,
-                "description": p.description,
-                "category": p.category,
-                "occurrences": p.occurrences,
-                "auto_correctable": p.auto_correctable,
-                "confidence": p.confidence,
-            }
-            for p in patterns
-        ],
-    })
+    return JSONResponse(
+        content={
+            "doc_id": doc_id,
+            "patterns": [
+                {
+                    "id": p.pattern_id,
+                    "description": p.description,
+                    "category": p.category,
+                    "occurrences": p.occurrences,
+                    "auto_correctable": p.auto_correctable,
+                    "confidence": p.confidence,
+                }
+                for p in patterns
+            ],
+        }
+    )
 
 
 class SuggestCorrectionRequest(BaseModel):
@@ -149,8 +154,10 @@ async def suggest_correction(
     """Suggest an auto-correction based on learned patterns."""
     analyzer = PatternAnalyzer(get_correction_store())
     suggestion = analyzer.suggest_correction(req.canonical_type, req.original_value)
-    return JSONResponse(content={
-        "original_value": req.original_value,
-        "suggested_correction": suggestion,
-        "has_suggestion": suggestion is not None,
-    })
+    return JSONResponse(
+        content={
+            "original_value": req.original_value,
+            "suggested_correction": suggestion,
+            "has_suggestion": suggestion is not None,
+        }
+    )

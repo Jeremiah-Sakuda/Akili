@@ -10,8 +10,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
-from akili.api.auth import get_current_user, is_auth_required
-from akili.api.deps import docs_dir, get_store, validate_doc_id
+from akili.api.auth import get_current_user
+from akili.api.deps import docs_dir, get_store, require_doc_access, validate_doc_id
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ async def delete_document(
 ) -> JSONResponse:
     """Delete an ingested document (canonical store and PDF file)."""
     validate_doc_id(doc_id)
+    require_doc_access(doc_id, _user)  # A2: ownership check
     store = get_store()
     store.delete_document(doc_id)
     try:
@@ -53,12 +54,7 @@ async def get_document_file(
 ) -> FileResponse:
     """Return the ingested PDF file for a document (for viewer / Show on document)."""
     validate_doc_id(doc_id)
-    if _user is not None:
-        if is_auth_required():
-            store = get_store()
-            owner = store.get_document_owner(doc_id)
-            if owner and owner != _user.get("uid"):
-                raise HTTPException(status_code=403, detail="Not authorized to access this document")
+    require_doc_access(doc_id, _user)  # A2: ownership check
     dest = docs_dir() / f"{doc_id}.pdf"
     if not dest.is_file():
         raise HTTPException(
@@ -75,6 +71,7 @@ async def get_canonical(
 ) -> JSONResponse:
     """Return canonical objects (units, bijections, grids) for a document."""
     validate_doc_id(doc_id)
+    require_doc_access(doc_id, _user)  # A2: ownership check
     store = get_store()
     units = store.get_units_by_doc(doc_id)
     bijections = store.get_bijections_by_doc(doc_id)

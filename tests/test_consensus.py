@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from akili.ingest.consensus import (
     _match_units,
     _unit_similarity,
@@ -17,8 +16,12 @@ from akili.ingest.extract_schema import (
 )
 
 
-def _unit(uid: str, label: str, value: float, uom: str, x: float = 0.5, y: float = 0.5) -> UnitExtract:
-    return UnitExtract(id=uid, label=label, value=value, unit_of_measure=uom, origin=PointSchema(x=x, y=y))
+def _unit(
+    uid: str, label: str, value: float, uom: str, x: float = 0.5, y: float = 0.5
+) -> UnitExtract:
+    return UnitExtract(
+        id=uid, label=label, value=value, unit_of_measure=uom, origin=PointSchema(x=x, y=y)
+    )
 
 
 class TestUnitSimilarity:
@@ -27,23 +30,36 @@ class TestUnitSimilarity:
         assert _unit_similarity(u, u) > 0.9
 
     def test_different_values_same_label(self):
-        u1 = {"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": {"x": 0.5, "y": 0.5}}
-        u2 = {"value": "5.0", "label": "VCC", "unit_of_measure": "V", "origin": {"x": 0.5, "y": 0.5}}
+        origin = {"x": 0.5, "y": 0.5}
+        u1 = {"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": origin}
+        u2 = {"value": "5.0", "label": "VCC", "unit_of_measure": "V", "origin": origin}
         sim = _unit_similarity(u1, u2)
         assert 0.3 < sim < 0.8
 
     def test_completely_different(self):
-        u1 = {"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": {"x": 0.1, "y": 0.1}}
-        u2 = {"value": "100", "label": "FCLK", "unit_of_measure": "MHz", "origin": {"x": 0.9, "y": 0.9}}
+        u1 = {
+            "value": "3.3",
+            "label": "VCC",
+            "unit_of_measure": "V",
+            "origin": {"x": 0.1, "y": 0.1},
+        }
+        u2 = {
+            "value": "100",
+            "label": "FCLK",
+            "unit_of_measure": "MHz",
+            "origin": {"x": 0.9, "y": 0.9},
+        }
         sim = _unit_similarity(u1, u2)
         assert sim < 0.5
 
 
 class TestMatchUnits:
     def test_perfect_match(self):
+        origin1 = {"x": 0.5, "y": 0.5}
+        origin2 = {"x": 0.5, "y": 0.6}
         units = [
-            {"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": {"x": 0.5, "y": 0.5}},
-            {"value": "100", "label": "FCLK", "unit_of_measure": "MHz", "origin": {"x": 0.5, "y": 0.6}},
+            {"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": origin1},
+            {"value": "100", "label": "FCLK", "unit_of_measure": "MHz", "origin": origin2},
         ]
         matched, unmatched_a, unmatched_b = _match_units(units, units)
         assert len(matched) == 2
@@ -51,10 +67,12 @@ class TestMatchUnits:
         assert len(unmatched_b) == 0
 
     def test_partial_match(self):
-        a = [{"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": {"x": 0.5, "y": 0.5}}]
+        origin1 = {"x": 0.5, "y": 0.5}
+        origin2 = {"x": 0.5, "y": 0.6}
+        a = [{"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": origin1}]
         b = [
-            {"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": {"x": 0.5, "y": 0.5}},
-            {"value": "100", "label": "FCLK", "unit_of_measure": "MHz", "origin": {"x": 0.5, "y": 0.6}},
+            {"value": "3.3", "label": "VCC", "unit_of_measure": "V", "origin": origin1},
+            {"value": "100", "label": "FCLK", "unit_of_measure": "MHz", "origin": origin2},
         ]
         matched, unmatched_a, unmatched_b = _match_units(a, b)
         assert len(matched) == 1

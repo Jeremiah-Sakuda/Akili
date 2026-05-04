@@ -99,6 +99,7 @@ class TestPageClassifier:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             result = classify_page(b"fake_image_bytes")
         assert result == "electrical_specs"
@@ -113,20 +114,28 @@ class TestPageClassifier:
         mock_genai.GenerativeModel.return_value = mock_model
 
         import os
+
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
             result = classify_page(b"fake_image_bytes")
         assert result == "other"
 
     def test_classify_no_api_key_returns_other(self):
         import os
+
         with patch.dict(os.environ, {}, clear=True):
             with patch("akili.config.PAGE_CLASSIFY_ENABLED", True):
                 result = classify_page(b"fake_image_bytes")
         assert result == "other"
 
     def test_extraction_hint_for_known_types(self):
-        for ptype in ["pinout_table", "electrical_specs", "absolute_max_ratings",
-                       "timing_characteristics", "package_info", "text_description"]:
+        for ptype in [
+            "pinout_table",
+            "electrical_specs",
+            "absolute_max_ratings",
+            "timing_characteristics",
+            "package_info",
+            "text_description",
+        ]:
             hint = get_extraction_hint(ptype)  # type: ignore[arg-type]
             assert len(hint) > 0, f"No hint for {ptype}"
 
@@ -137,3 +146,70 @@ class TestPageClassifier:
     def test_extraction_hint_for_block_diagram(self):
         hint = get_extraction_hint("block_diagram")
         assert hint == ""
+
+
+class TestModelFallback:
+    """A6: Tests for Gemini model fallback on NotFound/PermissionDenied."""
+
+    @patch("akili.ingest.gemini_extract.config")
+    @patch("akili.ingest.gemini_extract.genai")
+    def test_extract_page_uses_fallback_on_not_found(self, mock_genai, mock_config):
+        """On NotFound error, should retry with fallback model."""
+        from akili.ingest.gemini_extract import extract_page
+
+        # Configure mock config
+        mock_config.GOOGLE_API_KEY = "test-key"
+        mock_config.GEMINI_MODEL = "gemini-primary"
+        mock_config.GEMINI_FALLBACK_MODEL = "gemini-fallback"
+        mock_config.GEMINI_MAX_RETRIES = 3
+        mock_config.GEMINI_BACKOFF_BASE = 1.0
+        mock_config.GEMINI_CALL_TIMEOUT = 60.0
+
+        # First call raises NotFound, second call succeeds
+        mock_model_primary = MagicMock()
+        mock_model_primary.generate_content.side_effect = Exception("NotFound: model")
+
+        mock_response = MagicMock()
+        mock_response.text = '{"units": [], "bijections": [], "grids": []}'
+        mock_model_fallback = MagicMock()
+        mock_model_fallback.generate_content.return_value = mock_response
+
+        # Return different models for primary and fallback
+        models_returned = []
+
+        def model_factory(name):
+            models_returned.append(name)
+            if name == "gemini-primary":
+                return mock_model_primary
+            return mock_model_fallback
+
+        mock_genai.GenerativeModel.side_effect = model_factory
+
+        result = extract_page(0, b"fake_image_bytes", "doc1")
+
+        # Should have tried both models
+        assert "gemini-primary" in models_returned
+        assert "gemini-fallback" in models_returned
+        assert result is not None
+
+    @patch("akili.ingest.gemini_extract.config")
+    @patch("akili.ingest.gemini_extract.genai")
+    def test_extract_page_raises_when_no_fallback(self, mock_genai, mock_config):
+        """Without fallback model, NotFound should propagate."""
+        from akili.ingest.gemini_extract import extract_page
+        import pytest
+
+        # Configure mock config without fallback
+        mock_config.GOOGLE_API_KEY = "test-key"
+        mock_config.GEMINI_MODEL = "gemini-primary"
+        mock_config.GEMINI_FALLBACK_MODEL = None
+        mock_config.GEMINI_MAX_RETRIES = 3
+        mock_config.GEMINI_BACKOFF_BASE = 1.0
+        mock_config.GEMINI_CALL_TIMEOUT = 60.0
+
+        mock_model = MagicMock()
+        mock_model.generate_content.side_effect = Exception("NotFound: model")
+        mock_genai.GenerativeModel.return_value = mock_model
+
+        with pytest.raises(Exception, match="NotFound"):
+            extract_page(0, b"fake_image_bytes", "doc1")

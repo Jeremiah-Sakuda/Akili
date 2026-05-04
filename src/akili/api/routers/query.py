@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from akili import config
 from akili.api.auth import get_current_user
-from akili.api.deps import get_store, get_usage_store
+from akili.api.deps import get_store, get_usage_store, require_doc_access, validate_doc_id
 from akili.ingest.gemini_format import format_answer, format_refusal
 from akili.verify import AnswerWithProof, Refuse, verify_and_answer
 
@@ -48,8 +48,11 @@ def _proof_to_coordinates(proof: list[Any]) -> str:
 
 class QueryRequest(BaseModel):
     """Request body for POST /query."""
+
     doc_id: str = Field(..., description="Document id from ingest")
-    question: str = Field(..., description="Question to answer from canonical facts", max_length=2000)
+    question: str = Field(
+        ..., description="Question to answer from canonical facts", max_length=2000
+    )
     include_formatted_answer: bool = Field(
         False,
         description="If true, request 1-sentence phrasing from Gemini (best-effort).",
@@ -65,6 +68,9 @@ async def query(
     """
     Submit a question for a document. Returns coordinate-grounded answer + proof, or REFUSE.
     """
+    validate_doc_id(req.doc_id)  # A4: strict UUID validation
+    require_doc_access(req.doc_id, _user)  # A2: ownership check
+
     user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
     usage = get_usage_store()
     allowed, used, limit = usage.check_limit(user_id, "query")
@@ -90,7 +96,9 @@ async def query(
                 formatted_reason = await asyncio.wait_for(
                     loop.run_in_executor(
                         _get_format_executor(),
-                        lambda: format_refusal(req.question, len(units), len(bijections), len(grids)),
+                        lambda: format_refusal(
+                            req.question, len(units), len(bijections), len(grids)
+                        ),
                     ),
                     timeout=_FORMAT_TIMEOUT,
                 )

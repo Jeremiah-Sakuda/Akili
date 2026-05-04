@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Correction:
     """A single human correction record."""
+
     id: int | None
     doc_id: str
     canonical_id: str
@@ -53,6 +54,7 @@ class CorrectionStore:
         self._init_schema()
 
     def _init_schema(self) -> None:
+        self._mgr.placeholder()
         with self._mgr.connection() as conn:
             cur = conn.cursor()
             if self._mgr.is_postgres:
@@ -71,10 +73,12 @@ class CorrectionStore:
                     )
                 """)
                 cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_corrections_doc ON corrections(doc_id)"
+                    "CREATE INDEX IF NOT EXISTS idx_corrections_doc "
+                    "ON corrections(doc_id)"
                 )
                 cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_corrections_canonical ON corrections(canonical_id)"
+                    "CREATE INDEX IF NOT EXISTS idx_corrections_canonical "
+                    "ON corrections(canonical_id)"
                 )
             else:
                 cur.executescript("""
@@ -90,8 +94,10 @@ class CorrectionStore:
                         notes TEXT,
                         created_at TEXT DEFAULT (datetime('now'))
                     );
-                    CREATE INDEX IF NOT EXISTS idx_corrections_doc ON corrections(doc_id);
-                    CREATE INDEX IF NOT EXISTS idx_corrections_canonical ON corrections(canonical_id);
+                    CREATE INDEX IF NOT EXISTS idx_corrections_doc
+                        ON corrections(doc_id);
+                    CREATE INDEX IF NOT EXISTS idx_corrections_canonical
+                        ON corrections(canonical_id);
                 """)
 
     def add_correction(
@@ -115,8 +121,16 @@ class CorrectionStore:
                        action, original_value, corrected_value, corrected_by, notes)
                        VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
                        RETURNING id""",
-                    (doc_id, canonical_id, canonical_type, action,
-                     original_value, corrected_value, corrected_by, notes),
+                    (
+                        doc_id,
+                        canonical_id,
+                        canonical_type,
+                        action,
+                        original_value,
+                        corrected_value,
+                        corrected_by,
+                        notes,
+                    ),
                 )
                 row = cur.fetchone()
                 return row[0] if row else 0
@@ -125,8 +139,16 @@ class CorrectionStore:
                     f"""INSERT INTO corrections (doc_id, canonical_id, canonical_type,
                        action, original_value, corrected_value, corrected_by, notes)
                        VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
-                    (doc_id, canonical_id, canonical_type, action,
-                     original_value, corrected_value, corrected_by, notes),
+                    (
+                        doc_id,
+                        canonical_id,
+                        canonical_type,
+                        action,
+                        original_value,
+                        corrected_value,
+                        corrected_by,
+                        notes,
+                    ),
                 )
                 return cur.lastrowid or 0
 
@@ -144,9 +166,15 @@ class CorrectionStore:
             rows = cur.fetchall()
         return [
             Correction(
-                id=r[0], doc_id=r[1], canonical_id=r[2], canonical_type=r[3],
-                action=r[4], original_value=r[5], corrected_value=r[6],
-                corrected_by=r[7], notes=r[8],
+                id=r[0],
+                doc_id=r[1],
+                canonical_id=r[2],
+                canonical_type=r[3],
+                action=r[4],
+                original_value=r[5],
+                corrected_value=r[6],
+                corrected_by=r[7],
+                notes=r[8],
                 created_at=str(r[9]) if r[9] else None,
             )
             for r in rows
@@ -160,9 +188,15 @@ class CorrectionStore:
             if doc_id:
                 cur.execute(f"SELECT COUNT(*) FROM corrections WHERE doc_id = {ph}", (doc_id,))
                 total = cur.fetchone()[0]
-                cur.execute(f"SELECT COUNT(*) FROM corrections WHERE doc_id = {ph} AND action = 'confirm'", (doc_id,))
+                cur.execute(
+                    f"SELECT COUNT(*) FROM corrections WHERE doc_id = {ph} AND action = 'confirm'",
+                    (doc_id,),
+                )
                 confirms = cur.fetchone()[0]
-                cur.execute(f"SELECT COUNT(*) FROM corrections WHERE doc_id = {ph} AND action = 'correct'", (doc_id,))
+                cur.execute(
+                    f"SELECT COUNT(*) FROM corrections WHERE doc_id = {ph} AND action = 'correct'",
+                    (doc_id,),
+                )
                 corrects = cur.fetchone()[0]
             else:
                 cur.execute("SELECT COUNT(*) FROM corrections")
