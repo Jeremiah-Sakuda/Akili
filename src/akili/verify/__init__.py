@@ -7,6 +7,7 @@ If not → deterministic REFUSE.
 
 from akili.verify.compare import ComparisonResult, compare_documents, format_comparison_response
 from akili.verify.derived import try_derived_queries
+from akili.verify.intent import Intent, classify_intent
 from akili.verify.models import (
     AnswerWithProof,
     ConfidenceScore,
@@ -22,10 +23,12 @@ __all__ = [
     "AnswerWithProof",
     "ComparisonResult",
     "ConfidenceScore",
+    "Intent",
     "ProofChain",
     "ProofPoint",
     "ProofStep",
     "Refuse",
+    "classify_intent",
     "compare_documents",
     "format_comparison_response",
     "try_derived_queries",

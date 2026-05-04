@@ -103,12 +103,12 @@ _PIN_PATTERNS = [
 ]
 
 _PACKAGE_PATTERNS = [
-    re.compile(r"\bpackage\s+(?:type|size|dimension|footprint)\b", re.I),
+    re.compile(r"\bpackage\s+(?:type|size|dimensions?|footprint)\b", re.I),
     re.compile(r"\b(?:soic|qfp|qfn|bga|dip|sot|tssop|lqfp|dfn)\b", re.I),
     re.compile(r"\bpin\s+count\b", re.I),
     re.compile(r"\b(?:how\s+many|number\s+of)\s+pins\b", re.I),
     re.compile(r"\bfootprint\b", re.I),
-    re.compile(r"\bdimension\b", re.I),
+    re.compile(r"\bdimensions?\b", re.I),
     re.compile(r"\bweight\b", re.I),
     re.compile(r"\bmsl\b", re.I),
     re.compile(r"\bmoisture\s+sensitivity\b", re.I),
@@ -217,17 +217,17 @@ def intent_allows_rule(question_intent: Intent, rule_intents: set[Intent] | None
     Returns:
         True if the rule should be considered for this question.
     """
-    # Rules with no intent filter accept all questions
+    # OUT_OF_SCOPE should refuse all rules
+    if question_intent == Intent.OUT_OF_SCOPE:
+        return False
+
+    # Rules with no intent filter accept all questions (except OUT_OF_SCOPE)
     if rule_intents is None:
         return True
 
     # GENERAL_QUESTION allows all rules (fallback behavior)
     if question_intent == Intent.GENERAL_QUESTION:
         return True
-
-    # OUT_OF_SCOPE should refuse
-    if question_intent == Intent.OUT_OF_SCOPE:
-        return False
 
     # Check if the question intent matches any rule intent
     return question_intent in rule_intents

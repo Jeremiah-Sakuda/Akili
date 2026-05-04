@@ -1002,6 +1002,7 @@ def verify_and_answer(
     units: list[Unit],
     bijections: list[Bijection],
     grids: list[Grid],
+    use_intent_filter: bool = True,
 ) -> AnswerWithProof | Refuse:
     """
     Determine if the question can be answered from canonical facts.
@@ -1009,8 +1010,38 @@ def verify_and_answer(
     Same question + same canonical set → same answer or same REFUSE (deterministic).
     Rules are tried in priority order (lower priority number = tried first).
     After all direct-lookup rules, derived-query rules (power, thermal, margin, budget) are tried.
+
+    Args:
+        question: The question to answer.
+        units: List of canonical Unit objects.
+        bijections: List of canonical Bijection objects.
+        grids: List of canonical Grid objects.
+        use_intent_filter: If True, use intent classification to filter rules. (B7)
+
+    Returns:
+        AnswerWithProof if derivable, Refuse otherwise.
     """
-    for _priority, _name, fn in _RULES:
+    from akili.verify.intent import (
+        Intent,
+        classify_intent,
+        get_rule_intents,
+        intent_allows_rule,
+    )
+
+    # Classify question intent (B7)
+    question_intent = classify_intent(question) if use_intent_filter else Intent.GENERAL_QUESTION
+
+    # OUT_OF_SCOPE questions refuse immediately
+    if question_intent == Intent.OUT_OF_SCOPE:
+        return Refuse(reason="Question is outside the scope of datasheet specifications.")
+
+    for _priority, rule_name, fn in _RULES:
+        # Check intent filter (B7)
+        if use_intent_filter:
+            rule_intents = get_rule_intents(rule_name)
+            if not intent_allows_rule(question_intent, rule_intents):
+                continue
+
         result = fn(question, units, bijections, grids)
         if result is not None:
             return result
