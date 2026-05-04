@@ -164,6 +164,27 @@ class Store(BaseStore):
                 CREATE INDEX IF NOT EXISTS idx_ranges_doc_id ON ranges(doc_id);
                 CREATE INDEX IF NOT EXISTS idx_cunit_doc_id
                     ON conditional_units(doc_id);
+
+                -- D1: Project workspace tables
+                CREATE TABLE IF NOT EXISTS projects (
+                    project_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    owner_uid TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+                CREATE TABLE IF NOT EXISTS project_documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL,
+                    doc_id TEXT NOT NULL,
+                    added_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE(project_id, doc_id),
+                    FOREIGN KEY (project_id) REFERENCES projects(project_id),
+                    FOREIGN KEY (doc_id) REFERENCES documents(doc_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_project_docs_project
+                    ON project_documents(project_id);
+                CREATE INDEX IF NOT EXISTS idx_project_docs_doc
+                    ON project_documents(doc_id);
             """)
 
     def _audit(
@@ -551,3 +572,122 @@ class Store(BaseStore):
             }
             for r in rows
         ]
+
+    # -------------------------------------------------------------------------
+    # Project workspace methods (D1)
+    # -------------------------------------------------------------------------
+
+    def create_project(
+        self, project_id: str, name: str, owner_uid: str | None = None
+    ) -> dict[str, Any]:
+        """Create a new project workspace."""
+        with self._mgr.connection() as c:
+            c.execute(
+                "INSERT INTO projects (project_id, name, owner_uid) VALUES (?, ?, ?)",
+                (project_id, name, owner_uid),
+            )
+        self._audit("create_project", None, actor=owner_uid, details={"project_id": project_id, "name": name})
+        return {"project_id": project_id, "name": name, "owner_uid": owner_uid}
+
+    def get_project(self, project_id: str) -> dict[str, Any] | None:
+        """Get a project by ID."""
+        with self._mgr.connection() as c:
+            row = c.execute(
+                "SELECT project_id, name, owner_uid, created_at FROM projects WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "project_id": row[0],
+            "name": row[1],
+            "owner_uid": row[2],
+            "created_at": row[3],
+        }
+
+    def list_projects(self, owner_uid: str | None = None) -> list[dict[str, Any]]:
+        """List all projects, optionally filtered by owner."""
+        with self._mgr.connection() as c:
+            if owner_uid:
+                rows = c.execute(
+                    "SELECT p.project_id, p.name, p.owner_uid, p.created_at, "
+                    "COUNT(pd.doc_id) as doc_count "
+                    "FROM projects p "
+                    "LEFT JOIN project_documents pd ON pd.project_id = p.project_id "
+                    "WHERE p.owner_uid = ? "
+                    "GROUP BY p.project_id ORDER BY p.created_at DESC",
+                    (owner_uid,),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT p.project_id, p.name, p.owner_uid, p.created_at, "
+                    "COUNT(pd.doc_id) as doc_count "
+                    "FROM projects p "
+                    "LEFT JOIN project_documents pd ON pd.project_id = p.project_id "
+                    "GROUP BY p.project_id ORDER BY p.created_at DESC"
+                ).fetchall()
+        return [
+            {
+                "project_id": r[0],
+                "name": r[1],
+                "owner_uid": r[2],
+                "created_at": r[3],
+                "doc_count": r[4],
+            }
+            for r in rows
+        ]
+
+    def delete_project(self, project_id: str) -> None:
+        """Delete a project and its document associations (not the documents themselves)."""
+        with self._mgr.connection() as c:
+            c.execute("DELETE FROM project_documents WHERE project_id = ?", (project_id,))
+            c.execute("DELETE FROM projects WHERE project_id = ?", (project_id,))
+        self._audit("delete_project", None, details={"project_id": project_id})
+
+    def add_document_to_project(self, project_id: str, doc_id: str) -> None:
+        """Associate a document with a project."""
+        with self._mgr.connection() as c:
+            c.execute(
+                "INSERT OR IGNORE INTO project_documents (project_id, doc_id) VALUES (?, ?)",
+                (project_id, doc_id),
+            )
+        self._audit("add_doc_to_project", doc_id, details={"project_id": project_id})
+
+    def remove_document_from_project(self, project_id: str, doc_id: str) -> None:
+        """Remove document association from a project."""
+        with self._mgr.connection() as c:
+            c.execute(
+                "DELETE FROM project_documents WHERE project_id = ? AND doc_id = ?",
+                (project_id, doc_id),
+            )
+        self._audit("remove_doc_from_project", doc_id, details={"project_id": project_id})
+
+    def get_project_documents(self, project_id: str) -> list[dict[str, Any]]:
+        """List all documents in a project."""
+        with self._mgr.connection() as c:
+            rows = c.execute(
+                "SELECT d.doc_id, d.filename, d.page_count, d.created_at, pd.added_at "
+                "FROM project_documents pd "
+                "JOIN documents d ON d.doc_id = pd.doc_id "
+                "WHERE pd.project_id = ? "
+                "ORDER BY pd.added_at DESC",
+                (project_id,),
+            ).fetchall()
+        return [
+            {
+                "doc_id": r[0],
+                "filename": r[1],
+                "page_count": r[2],
+                "created_at": r[3],
+                "added_at": r[4],
+            }
+            for r in rows
+        ]
+
+    def get_project_owner(self, project_id: str) -> str | None:
+        """Return the owner_uid for a project, or None if not set."""
+        with self._mgr.connection() as c:
+            row = c.execute(
+                "SELECT owner_uid FROM projects WHERE project_id = ?", (project_id,)
+            ).fetchone()
+        return row[0] if row else None

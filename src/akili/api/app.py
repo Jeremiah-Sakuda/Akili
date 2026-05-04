@@ -275,6 +275,7 @@ from akili.api.routers.compare import router as compare_router  # noqa: E402
 from akili.api.routers.library import router as library_router  # noqa: E402
 from akili.api.routers.share import router as share_router  # noqa: E402
 from akili.api.routers.audit import router as audit_router  # noqa: E402
+from akili.api.routers.projects import router as projects_router  # noqa: E402
 
 app.include_router(documents_router)
 app.include_router(ingest_router)
@@ -284,6 +285,7 @@ app.include_router(compare_router)
 app.include_router(library_router)
 app.include_router(share_router)
 app.include_router(audit_router)
+app.include_router(projects_router)
 
 # ---------------------------------------------------------------------------
 # Top-level endpoints (health, status, startup)
