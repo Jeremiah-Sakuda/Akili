@@ -100,6 +100,7 @@ class TestPipelineIntegration:
     @patch("akili.ingest.pipeline.classify_page", return_value="other")
     @patch("akili.ingest.pipeline.get_extraction_hint", return_value="")
     @patch("akili.ingest.gemini_extract.genai")
+    @patch("akili.ingest.gemini_extract.config.GOOGLE_API_KEY", "test-key")
     def test_full_ingest_produces_canonical_objects(
         self, mock_genai, mock_hint, mock_classify, synthetic_pdf, tmp_store
     ):
@@ -109,13 +110,10 @@ class TestPipelineIntegration:
         )
         mock_genai.GenerativeModel.return_value = mock_model
 
-        import os
-
-        with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
-                doc_id, canonical, total_pages, pages_failed = ingest_document(
-                    synthetic_pdf, store=tmp_store
-                )
+        with patch("akili.config.GEMINI_PAGE_DELAY", 0):
+            doc_id, canonical, total_pages, pages_failed = ingest_document(
+                synthetic_pdf, store=tmp_store
+            )
 
         assert total_pages == 1
         assert pages_failed == 0
@@ -132,6 +130,7 @@ class TestPipelineIntegration:
     @patch("akili.ingest.pipeline.classify_page", return_value="other")
     @patch("akili.ingest.pipeline.get_extraction_hint", return_value="")
     @patch("akili.ingest.gemini_extract.genai")
+    @patch("akili.ingest.gemini_extract.config.GOOGLE_API_KEY", "test-key")
     def test_ingest_stores_to_db(
         self, mock_genai, mock_hint, mock_classify, synthetic_pdf, tmp_store
     ):
@@ -141,11 +140,8 @@ class TestPipelineIntegration:
         )
         mock_genai.GenerativeModel.return_value = mock_model
 
-        import os
-
-        with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
-                doc_id, _, _, _ = ingest_document(synthetic_pdf, store=tmp_store)
+        with patch("akili.config.GEMINI_PAGE_DELAY", 0):
+            doc_id, _, _, _ = ingest_document(synthetic_pdf, store=tmp_store)
 
         docs = tmp_store.list_documents()
         assert len(docs) == 1
@@ -160,6 +156,7 @@ class TestPipelineIntegration:
     @patch("akili.ingest.pipeline.classify_page", return_value="other")
     @patch("akili.ingest.pipeline.get_extraction_hint", return_value="")
     @patch("akili.ingest.gemini_extract.genai")
+    @patch("akili.ingest.gemini_extract.config.GOOGLE_API_KEY", "test-key")
     def test_ingest_canonical_data_integrity(
         self, mock_genai, mock_hint, mock_classify, synthetic_pdf, tmp_store
     ):
@@ -169,11 +166,8 @@ class TestPipelineIntegration:
         )
         mock_genai.GenerativeModel.return_value = mock_model
 
-        import os
-
-        with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
-                doc_id, canonical, _, _ = ingest_document(synthetic_pdf, store=tmp_store)
+        with patch("akili.config.GEMINI_PAGE_DELAY", 0):
+            doc_id, canonical, _, _ = ingest_document(synthetic_pdf, store=tmp_store)
 
         units = [o for o in canonical if isinstance(o, Unit)]
         vcc_max = next((u for u in units if u.label == "VCC max"), None)
@@ -189,6 +183,7 @@ class TestPipelineIntegration:
     @patch("akili.ingest.pipeline.classify_page", return_value="other")
     @patch("akili.ingest.pipeline.get_extraction_hint", return_value="")
     @patch("akili.ingest.gemini_extract.genai")
+    @patch("akili.ingest.gemini_extract.config.GOOGLE_API_KEY", "test-key")
     def test_ingest_with_empty_extraction(
         self, mock_genai, mock_hint, mock_classify, synthetic_pdf, tmp_store
     ):
@@ -199,13 +194,10 @@ class TestPipelineIntegration:
         )
         mock_genai.GenerativeModel.return_value = mock_model
 
-        import os
-
-        with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
-                doc_id, canonical, total_pages, pages_failed = ingest_document(
-                    synthetic_pdf, store=tmp_store
-                )
+        with patch("akili.config.GEMINI_PAGE_DELAY", 0):
+            doc_id, canonical, total_pages, pages_failed = ingest_document(
+                synthetic_pdf, store=tmp_store
+            )
 
         assert total_pages == 1
         assert pages_failed == 0
@@ -214,6 +206,7 @@ class TestPipelineIntegration:
     @patch("akili.ingest.pipeline.classify_page", return_value="other")
     @patch("akili.ingest.pipeline.get_extraction_hint", return_value="")
     @patch("akili.ingest.gemini_extract.genai")
+    @patch("akili.ingest.gemini_extract.config.GOOGLE_API_KEY", "test-key")
     def test_ingest_progress_callback(
         self, mock_genai, mock_hint, mock_classify, synthetic_pdf, tmp_store
     ):
@@ -225,15 +218,12 @@ class TestPipelineIntegration:
 
         progress_events: list[dict] = []
 
-        import os
-
-        with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
-                ingest_document(
-                    synthetic_pdf,
-                    store=tmp_store,
-                    progress_callback=progress_events.append,
-                )
+        with patch("akili.config.GEMINI_PAGE_DELAY", 0):
+            ingest_document(
+                synthetic_pdf,
+                store=tmp_store,
+                progress_callback=progress_events.append,
+            )
 
         phases = [e["phase"] for e in progress_events]
         assert "rendering" in phases
@@ -250,6 +240,7 @@ class TestPipelineIntegration:
     @patch("akili.ingest.pipeline.classify_page", return_value="other")
     @patch("akili.ingest.pipeline.get_extraction_hint", return_value="")
     @patch("akili.ingest.gemini_extract.genai")
+    @patch("akili.ingest.gemini_extract.config.GOOGLE_API_KEY", "test-key")
     def test_ingest_gemini_failure_counts_as_failed_page(
         self, mock_genai, mock_hint, mock_classify, synthetic_pdf, tmp_store
     ):
@@ -257,14 +248,11 @@ class TestPipelineIntegration:
         mock_model.generate_content.side_effect = RuntimeError("Gemini API error")
         mock_genai.GenerativeModel.return_value = mock_model
 
-        import os
-
-        with patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):
-            with patch("akili.config.GEMINI_PAGE_DELAY", 0):
-                with patch("akili.config.GEMINI_429_COOLDOWN", 0):
-                    doc_id, canonical, total_pages, pages_failed = ingest_document(
-                        synthetic_pdf, store=tmp_store
-                    )
+        with patch("akili.config.GEMINI_PAGE_DELAY", 0):
+            with patch("akili.config.GEMINI_429_COOLDOWN", 0):
+                doc_id, canonical, total_pages, pages_failed = ingest_document(
+                    synthetic_pdf, store=tmp_store
+                )
 
         assert total_pages == 1
         assert pages_failed == 1
