@@ -185,6 +185,23 @@ class Store(BaseStore):
                     ON project_documents(project_id);
                 CREATE INDEX IF NOT EXISTS idx_project_docs_doc
                     ON project_documents(doc_id);
+
+                -- D2: Persistent chat messages
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    doc_id TEXT NOT NULL,
+                    project_id TEXT,
+                    user_id TEXT,
+                    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+                    text TEXT NOT NULL,
+                    response_json TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (doc_id) REFERENCES documents(doc_id),
+                    FOREIGN KEY (project_id) REFERENCES projects(project_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_chat_doc ON chat_messages(doc_id);
+                CREATE INDEX IF NOT EXISTS idx_chat_project ON chat_messages(project_id);
+                CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_messages(user_id);
             """)
 
     def _audit(
@@ -691,3 +708,79 @@ class Store(BaseStore):
                 "SELECT owner_uid FROM projects WHERE project_id = ?", (project_id,)
             ).fetchone()
         return row[0] if row else None
+
+    # -------------------------------------------------------------------------
+    # Chat message methods (D2)
+    # -------------------------------------------------------------------------
+
+    def add_chat_message(
+        self,
+        doc_id: str,
+        role: str,
+        text: str,
+        user_id: str | None = None,
+        project_id: str | None = None,
+        response_json: str | None = None,
+    ) -> int:
+        """Add a chat message and return its ID."""
+        with self._mgr.connection() as c:
+            cursor = c.execute(
+                "INSERT INTO chat_messages (doc_id, project_id, user_id, role, text, response_json) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (doc_id, project_id, user_id, role, text, response_json),
+            )
+            return cursor.lastrowid
+
+    def get_chat_messages(
+        self,
+        doc_id: str,
+        project_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Get chat messages for a document, optionally within a project."""
+        with self._mgr.connection() as c:
+            if project_id:
+                rows = c.execute(
+                    "SELECT id, doc_id, project_id, user_id, role, text, response_json, created_at "
+                    "FROM chat_messages "
+                    "WHERE doc_id = ? AND project_id = ? "
+                    "ORDER BY created_at ASC LIMIT ? OFFSET ?",
+                    (doc_id, project_id, limit, offset),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT id, doc_id, project_id, user_id, role, text, response_json, created_at "
+                    "FROM chat_messages "
+                    "WHERE doc_id = ? AND project_id IS NULL "
+                    "ORDER BY created_at ASC LIMIT ? OFFSET ?",
+                    (doc_id, limit, offset),
+                ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "doc_id": r[1],
+                "project_id": r[2],
+                "user_id": r[3],
+                "role": r[4],
+                "text": r[5],
+                "response_json": json.loads(r[6]) if r[6] else None,
+                "created_at": r[7],
+            }
+            for r in rows
+        ]
+
+    def delete_chat_messages(self, doc_id: str, project_id: str | None = None) -> int:
+        """Delete chat messages for a document. Returns count deleted."""
+        with self._mgr.connection() as c:
+            if project_id:
+                cursor = c.execute(
+                    "DELETE FROM chat_messages WHERE doc_id = ? AND project_id = ?",
+                    (doc_id, project_id),
+                )
+            else:
+                cursor = c.execute(
+                    "DELETE FROM chat_messages WHERE doc_id = ? AND project_id IS NULL",
+                    (doc_id,),
+                )
+            return cursor.rowcount
