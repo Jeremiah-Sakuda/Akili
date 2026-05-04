@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
+from fastapi.testclient import TestClient
+
+from akili.api.app import app
 from akili.canonical import Unit
 from akili.canonical.models import Point
 from akili.verify.compare import (
@@ -128,12 +133,6 @@ class TestFormatComparisonResponse:
 # ---------------------------------------------------------------------------
 # API endpoint tests (D3)
 # ---------------------------------------------------------------------------
-
-from unittest.mock import MagicMock, patch
-
-from fastapi.testclient import TestClient
-
-from akili.api.app import app
 
 client = TestClient(app)
 
