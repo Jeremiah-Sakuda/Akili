@@ -113,9 +113,11 @@ class PostgresStore(BaseStore):
                         org_id TEXT NOT NULL DEFAULT 'default',
                         filename TEXT,
                         page_count INTEGER,
+                        uploaded_by TEXT,
                         created_at TIMESTAMPTZ DEFAULT NOW(),
                         PRIMARY KEY (doc_id, org_id)
                     );
+                    ALTER TABLE documents ADD COLUMN IF NOT EXISTS uploaded_by TEXT;
                     CREATE TABLE IF NOT EXISTS units (
                         id SERIAL PRIMARY KEY,
                         doc_id TEXT NOT NULL,
@@ -220,6 +222,16 @@ class PostgresStore(BaseStore):
                     );
                     CREATE INDEX IF NOT EXISTS idx_audit_log_doc ON audit_log(doc_id);
                     CREATE INDEX IF NOT EXISTS idx_audit_log_org ON audit_log(org_id);
+
+                    -- Enforce append-only at the DB level: reject UPDATE/DELETE.
+                    CREATE OR REPLACE FUNCTION akili_audit_append_only()
+                        RETURNS TRIGGER AS $$
+                        BEGIN RAISE EXCEPTION 'audit_log is append-only'; END;
+                        $$ LANGUAGE plpgsql;
+                    DROP TRIGGER IF EXISTS audit_log_no_modify ON audit_log;
+                    CREATE TRIGGER audit_log_no_modify
+                        BEFORE UPDATE OR DELETE ON audit_log
+                        FOR EACH ROW EXECUTE FUNCTION akili_audit_append_only();
                     CREATE INDEX IF NOT EXISTS idx_corpus_mpn ON public_corpus(mpn);
                     CREATE INDEX IF NOT EXISTS idx_corpus_chip ON public_corpus(chip_name);
                     CREATE INDEX IF NOT EXISTS idx_shared_doc ON shared_answers(doc_id);
@@ -249,19 +261,40 @@ class PostgresStore(BaseStore):
                     ),
                 )
 
-    def add_document(self, doc_id: str, filename: str | None = None, page_count: int = 0) -> None:
+    def add_document(
+        self,
+        doc_id: str,
+        filename: str | None = None,
+        page_count: int = 0,
+        uploaded_by: str | None = None,
+    ) -> None:
         with self._conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO documents (doc_id, org_id, filename, page_count)
-                       VALUES (%s, %s, %s, %s)
+                    """INSERT INTO documents (doc_id, org_id, filename, page_count, uploaded_by)
+                       VALUES (%s, %s, %s, %s, %s)
                        ON CONFLICT (doc_id, org_id) DO UPDATE SET
-                       filename=EXCLUDED.filename, page_count=EXCLUDED.page_count""",
-                    (doc_id, self._org_id, filename or "", page_count),
+                       filename=EXCLUDED.filename, page_count=EXCLUDED.page_count,
+                       uploaded_by=COALESCE(EXCLUDED.uploaded_by, documents.uploaded_by)""",
+                    (doc_id, self._org_id, filename or "", page_count, uploaded_by),
                 )
         self._audit(
-            "add_document", doc_id, details={"filename": filename, "page_count": page_count}
+            "add_document",
+            doc_id,
+            details={"filename": filename, "page_count": page_count},
+            actor=uploaded_by,
         )
+
+    def get_document_owner(self, doc_id: str) -> str | None:
+        """Return the uploaded_by (owner uid) for a document within this org."""
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT uploaded_by FROM documents WHERE doc_id = %s AND org_id = %s",
+                    (doc_id, self._org_id),
+                )
+                row = cur.fetchone()
+        return row[0] if row and row[0] else None
 
     def store_canonical(
         self,
@@ -275,7 +308,7 @@ class PostgresStore(BaseStore):
         conditional_units: list[ConditionalUnit] | None = None,
         uploaded_by: str | None = None,
     ) -> None:
-        self.add_document(doc_id, filename, page_count)
+        self.add_document(doc_id, filename, page_count, uploaded_by=uploaded_by)
         with self._conn() as conn:
             with conn.cursor() as cur:
                 for u in units:
@@ -594,11 +627,13 @@ class PostgresStore(BaseStore):
                 )
         self._audit("delete_document", doc_id)
 
-    def list_documents(self) -> list[dict[str, Any]]:
+    def list_documents(self, uploaded_by: str | None = None) -> list[dict[str, Any]]:
+        owner_clause = "AND d.uploaded_by = %s " if uploaded_by is not None else ""
+        params: tuple = (self._org_id, uploaded_by) if uploaded_by is not None else (self._org_id,)
         with self._conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT d.doc_id, d.filename, d.page_count, d.created_at,
+                    f"""SELECT d.doc_id, d.filename, d.page_count, d.created_at,
                        COUNT(DISTINCT u.id) as units_count,
                        COUNT(DISTINCT b.id) as bijections_count,
                        COUNT(DISTINCT g.id) as grids_count
@@ -606,10 +641,10 @@ class PostgresStore(BaseStore):
                        LEFT JOIN units u ON u.doc_id = d.doc_id AND u.org_id = d.org_id
                        LEFT JOIN bijections b ON b.doc_id = d.doc_id AND b.org_id = d.org_id
                        LEFT JOIN grids g ON g.doc_id = d.doc_id AND g.org_id = d.org_id
-                       WHERE d.org_id = %s
+                       WHERE d.org_id = %s {owner_clause}
                        GROUP BY d.doc_id, d.filename, d.page_count, d.created_at
                        ORDER BY d.created_at DESC""",
-                    (self._org_id,),
+                    params,
                 )
                 rows = cur.fetchall()
         return [

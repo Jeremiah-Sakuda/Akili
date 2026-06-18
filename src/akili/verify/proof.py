@@ -84,8 +84,17 @@ def _proof_point(
     bbox: ProofPointBBox | None = None,
     source_id: str | None = None,
     source_type: str | None = None,
+    grounded: bool = False,
 ) -> ProofPoint:
-    return ProofPoint(x=x, y=y, page=page, bbox=bbox, source_id=source_id, source_type=source_type)
+    return ProofPoint(
+        x=x,
+        y=y,
+        page=page,
+        bbox=bbox,
+        source_id=source_id,
+        source_type=source_type,
+        grounded=grounded,
+    )
 
 
 def _bbox_from(obj: Unit | Bijection | Grid) -> ProofPointBBox | None:
@@ -111,18 +120,75 @@ def _answer_from_unit(
     if answer_str is None:
         answer_str = f"{u.value} {u.unit_of_measure or ''}".strip()
     cq = _unit_canonical_quality(u)
+    extraction_agreement = getattr(u, "extraction_agreement", 0.5)
+    # Coordinate grounding is independent corroboration: if the value's text was
+    # actually located on the page, that both confirms the extraction (raises
+    # extraction_agreement) and strengthens the proof (raises verification_strength).
+    # This is what lets a grounded fact reach the VERIFIED tier; ungrounded single-pass
+    # facts stay in REVIEW.
+    if getattr(u, "grounded", False):
+        gscore = getattr(u, "grounding_score", 0.0)
+        extraction_agreement = max(extraction_agreement, gscore)
+        verification_strength = min(1.0, max(verification_strength, 0.80) + 0.15 * gscore)
+    # A fact flagged by a consistency check (e.g. a Z3 contradiction) is capped so it can
+    # never reach VERIFIED — it must surface for human review even if otherwise grounded.
+    if getattr(u, "flagged_for_review", False):
+        extraction_agreement = min(extraction_agreement, 0.4)
+        verification_strength = min(verification_strength, 0.6)
     confidence = ConfidenceScore.compute(
-        extraction_agreement=getattr(u, "extraction_agreement", 0.5),
+        extraction_agreement=extraction_agreement,
         canonical_validation=cq,
         verification_strength=verification_strength,
     )
     return AnswerWithProof(
         answer=answer_str,
-        proof=[_proof_point(u.origin.x, u.origin.y, u.page, _bbox_from(u), u.id, "unit")],
+        proof=[
+            _proof_point(
+                u.origin.x,
+                u.origin.y,
+                u.page,
+                _bbox_from(u),
+                u.id,
+                "unit",
+                grounded=getattr(u, "grounded", False),
+            )
+        ],
         source_id=u.id,
         source_type="unit",
         confidence=confidence,
     )
+
+
+def _default_confidence(result: AnswerWithProof) -> ConfidenceScore:
+    """Confidence for answers built without an explicit score (pin/bijection/grid/etc.).
+
+    Structural lookups (a pin number from a bijection, a value from a grid cell) are exact
+    matches by construction, so they earn a solid verification_strength; grounded proof
+    points raise both agreement and strength. This ensures EVERY answer carries a tier.
+    """
+    proof = result.proof or []
+    any_bbox = any(getattr(p, "bbox", None) for p in proof)
+    any_grounded = any(getattr(p, "grounded", False) for p in proof)
+    source_type = result.source_type or ""
+
+    base_vs = 0.85 if source_type in ("bijection", "grid") else 0.65
+    extraction_agreement = max(0.5, 0.85 if any_grounded else 0.5)
+    canonical_validation = min(
+        1.0, 0.5 + (0.2 if any_bbox else 0.0) + (0.15 if source_type else 0.0)
+    )
+    verification_strength = min(1.0, base_vs + (0.1 if any_grounded else 0.0))
+    return ConfidenceScore.compute(
+        extraction_agreement=extraction_agreement,
+        canonical_validation=canonical_validation,
+        verification_strength=verification_strength,
+    )
+
+
+def _finalize(result: AnswerWithProof | Refuse) -> AnswerWithProof | Refuse:
+    """Guarantee every returned answer carries a ConfidenceScore (and thus a tier)."""
+    if isinstance(result, AnswerWithProof) and result.confidence is None:
+        result.confidence = _default_confidence(result)
+    return result
 
 
 def _q(question: str) -> str:
@@ -157,14 +223,34 @@ def _find_units_by_context(
     return results
 
 
+def _base_magnitude(value: float, uom: str | None) -> float:
+    """Magnitude in base SI units for cross-unit comparison.
+
+    Without this, 500 mA compares as larger than 2 A (500 > 2). Falls back to the raw
+    value when the unit is unknown/unconvertible.
+    """
+    if uom:
+        from akili.verify.z3_checks import _to_base
+
+        conv = _to_base(value, uom)
+        if conv is not None:
+            return conv[0]
+    return value
+
+
 def _best_numeric_unit(
     units: list[Unit],
     maximize: bool = True,
     text_parser: Callable[[str], list[tuple[float, str]]] | None = None,
     unit_of_measures: list[str] | None = None,
 ) -> tuple[float, Unit, str] | None:
-    """Find the unit with the max (or min) numeric value. Optionally parse from text."""
-    numeric: list[tuple[float, Unit, str]] = []
+    """Find the unit with the max (or min) value, compared in base SI units.
+
+    Returns (raw_value, unit, display_string). Comparison normalizes magnitude so e.g.
+    "max current" correctly prefers 2 A over 500 mA.
+    """
+    # (sort_key_in_base_units, raw_value, unit, display)
+    numeric: list[tuple[float, float, Unit, str]] = []
     for u in units:
         if u.unit_of_measure and (
             unit_of_measures is None
@@ -172,16 +258,24 @@ def _best_numeric_unit(
         ):
             try:
                 v = float(u.value)
-                numeric.append((v, u, f"{u.value} {u.unit_of_measure or ''}".strip()))
+                numeric.append(
+                    (
+                        _base_magnitude(v, u.unit_of_measure),
+                        v,
+                        u,
+                        f"{u.value} {u.unit_of_measure or ''}".strip(),
+                    )
+                )
             except (TypeError, ValueError):
                 pass
         if text_parser:
             text = get_unit_text(u)
             for val, uom in text_parser(text):
-                numeric.append((val, u, f"{val} {uom}"))
+                numeric.append((_base_magnitude(val, uom), val, u, f"{val} {uom}"))
     if not numeric:
         return None
-    return max(numeric, key=lambda x: x[0]) if maximize else min(numeric, key=lambda x: x[0])
+    best = max(numeric, key=lambda x: x[0]) if maximize else min(numeric, key=lambda x: x[0])
+    return (best[1], best[2], best[3])
 
 
 # ---------------------------------------------------------------------------
@@ -1044,12 +1138,12 @@ def verify_and_answer(
 
         result = fn(question, units, bijections, grids)
         if result is not None:
-            return result
+            return _finalize(result)
 
     from akili.verify.derived import try_derived_queries
 
     derived = try_derived_queries(question, units, bijections, grids)
     if derived is not None:
-        return derived
+        return _finalize(derived)
 
     return Refuse(reason="No canonical fact derives this answer.")

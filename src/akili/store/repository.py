@@ -158,6 +158,14 @@ class Store(BaseStore):
                     details_json TEXT,
                     created_at TEXT DEFAULT (datetime('now'))
                 );
+                -- Enforce append-only at the DB level (not merely by convention):
+                -- any UPDATE/DELETE against the audit log aborts.
+                CREATE TRIGGER IF NOT EXISTS audit_log_no_update
+                    BEFORE UPDATE ON audit_log
+                    BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
+                    BEFORE DELETE ON audit_log
+                    BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
                 CREATE INDEX IF NOT EXISTS idx_units_doc_id ON units(doc_id);
                 CREATE INDEX IF NOT EXISTS idx_bijections_doc_id ON bijections(doc_id);
                 CREATE INDEX IF NOT EXISTS idx_grids_doc_id ON grids(doc_id);
@@ -202,6 +210,18 @@ class Store(BaseStore):
                 CREATE INDEX IF NOT EXISTS idx_chat_doc ON chat_messages(doc_id);
                 CREATE INDEX IF NOT EXISTS idx_chat_project ON chat_messages(project_id);
                 CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_messages(user_id);
+
+                -- Public corpus of pre-indexed chips (FR-CORP). Mirrors PostgresStore so
+                -- the library / instant-results feature works on the default SQLite backend.
+                CREATE TABLE IF NOT EXISTS public_corpus (
+                    content_hash TEXT PRIMARY KEY,
+                    mpn TEXT NOT NULL,
+                    chip_name TEXT NOT NULL,
+                    datasheet_url TEXT,
+                    canonical_data TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+                CREATE INDEX IF NOT EXISTS idx_corpus_mpn ON public_corpus(mpn);
             """)
 
     def _audit(
@@ -551,6 +571,76 @@ class Store(BaseStore):
             ).fetchone()
         return row[0] if row else None
 
+    # -------------------------------------------------------------------------
+    # Public corpus (FR-CORP) — mirrors PostgresStore so the library feature works
+    # on the default SQLite backend.
+    # -------------------------------------------------------------------------
+
+    def _corpus_row_to_dict(self, row: tuple) -> dict:
+        return {
+            "content_hash": row[0],
+            "mpn": row[1],
+            "chip_name": row[2],
+            "datasheet_url": row[3],
+            "canonical_data": json.loads(row[4]) if row[4] else {},
+            "created_at": row[5] if len(row) > 5 else None,
+        }
+
+    def get_corpus_entry(self, content_hash: str) -> dict | None:
+        """Look up a corpus entry by PDF content hash."""
+        with self._mgr.connection() as c:
+            row = c.execute(
+                "SELECT content_hash, mpn, chip_name, datasheet_url, canonical_data, created_at "
+                "FROM public_corpus WHERE content_hash = ?",
+                (content_hash,),
+            ).fetchone()
+        return self._corpus_row_to_dict(row) if row else None
+
+    def get_corpus_by_mpn(self, mpn: str) -> dict | None:
+        """Look up a corpus entry by manufacturer part number."""
+        with self._mgr.connection() as c:
+            row = c.execute(
+                "SELECT content_hash, mpn, chip_name, datasheet_url, canonical_data, created_at "
+                "FROM public_corpus WHERE mpn = ?",
+                (mpn,),
+            ).fetchone()
+        return self._corpus_row_to_dict(row) if row else None
+
+    def store_corpus_entry(
+        self,
+        content_hash: str,
+        mpn: str,
+        chip_name: str,
+        datasheet_url: str | None,
+        canonical_data: dict,
+    ) -> None:
+        """Insert or replace a corpus entry."""
+        with self._mgr.connection() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO public_corpus "
+                "(content_hash, mpn, chip_name, datasheet_url, canonical_data) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (content_hash, mpn, chip_name, datasheet_url, json.dumps(canonical_data)),
+            )
+
+    def list_corpus(self) -> list[dict]:
+        """List corpus entries (metadata only, no canonical_data)."""
+        with self._mgr.connection() as c:
+            rows = c.execute(
+                "SELECT content_hash, mpn, chip_name, datasheet_url, created_at "
+                "FROM public_corpus ORDER BY mpn"
+            ).fetchall()
+        return [
+            {
+                "content_hash": r[0],
+                "mpn": r[1],
+                "chip_name": r[2],
+                "datasheet_url": r[3],
+                "created_at": r[4],
+            }
+            for r in rows
+        ]
+
     def delete_document(self, doc_id: str) -> None:
         """Remove a document and all its canonical objects from the store."""
         with self._mgr.connection() as c:
@@ -562,8 +652,10 @@ class Store(BaseStore):
             c.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
         self._audit("delete_document", doc_id)
 
-    def list_documents(self) -> list[dict[str, Any]]:
-        """List ingested documents with counts."""
+    def list_documents(self, uploaded_by: str | None = None) -> list[dict[str, Any]]:
+        """List ingested documents with counts; optionally scoped to one owner."""
+        where = "WHERE d.uploaded_by = ? " if uploaded_by is not None else ""
+        params = (uploaded_by,) if uploaded_by is not None else ()
         with self._mgr.connection() as c:
             rows = c.execute(
                 "SELECT d.doc_id, d.filename, d.page_count, d.created_at, "
@@ -574,8 +666,10 @@ class Store(BaseStore):
                 "LEFT JOIN units u ON u.doc_id = d.doc_id "
                 "LEFT JOIN bijections b ON b.doc_id = d.doc_id "
                 "LEFT JOIN grids g ON g.doc_id = d.doc_id "
+                f"{where}"
                 "GROUP BY d.doc_id, d.filename, d.page_count, d.created_at "
-                "ORDER BY d.created_at DESC"
+                "ORDER BY d.created_at DESC",
+                params,
             ).fetchall()
         return [
             {

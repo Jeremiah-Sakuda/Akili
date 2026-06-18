@@ -10,26 +10,35 @@
 
 > No citations. Only proof.
 
-Akili is a deterministic verification layer for technical documentation. While LLMs generate plausible answers, Akili constrains Gemini's multimodal perception within a strict structural framework — turning dense PDFs, pinout tables, and schematics into **auditable, coordinate-grounded truth**.
+Akili is a deterministic verification layer for technical documentation. While LLMs generate plausible answers, Akili constrains Gemini's multimodal perception within a strict structural framework — turning dense PDFs, pinout tables, and schematics into **auditable, coordinate-grounded facts**.
 
-Every answer is tied to exact `(x, y)` coordinates on the source document, or the system refuses.
+Gemini estimates where each fact sits on the page; Akili then **grounds** those estimates by
+snapping them to the real text geometry from the PDF text layer (PyMuPDF). A fact whose value is
+actually found at the claimed location is marked **grounded** and can reach the VERIFIED tier; a
+fact that can't be located keeps its estimate but is flagged (never presented as proven). Every
+answer carries its `(x, y)` proof and a confidence tier — or the system **refuses**.
 
 ---
 
-## Benchmark Results
+## Benchmark
 
-AKILI reduces hallucinations by 15% compared to raw Gemini on datasheet Q&A:
+Akili ships a real benchmark harness that compares the Akili verification pipeline against
+a raw-Gemini baseline on a 50-pair, hand-labeled dataset (`benchmark/dataset.json`):
 
-| Chip | AKILI | Gemini | Hallucination Reduction |
-|------|-------|--------|-------------------------|
-| ATmega328P | 92% | 74% | +18% |
-| ESP32 | 88% | 71% | +17% |
-| STM32F103 | 85% | 68% | +17% |
-| NE555 | 94% | 82% | +12% |
-| LM7805 | 91% | 79% | +12% |
-| **Overall** | **90%** | **75%** | **+15%** |
+```bash
+# Requires GOOGLE_API_KEY and datasheet PDFs in benchmark/fixtures/<chip>.pdf
+python benchmark/run_benchmark.py            # writes benchmark/results.json
+python benchmark/run_benchmark.py --check-regression   # CI gate
+```
 
-*Tested on 50 hand-labeled Q&A pairs across 5 common chips. See `benchmark/dataset.json` for the full dataset.*
+The runner ingests each datasheet through the **real** pipeline, runs every question through
+`verify_and_answer`, and reports accuracy, false-accept rate, refuse precision, and a confusion
+matrix. The headline metric is **false-accept rate** (VERIFIED-but-wrong) — the number that
+matters for a "refuse rather than hallucinate" system.
+
+> **Note:** measured numbers are produced only when you run the harness with an API key and the
+> datasheet fixtures. The landing page shows clearly-labeled *illustrative targets* until a real
+> run publishes `frontend/public/benchmark-results.json`. We do not ship hardcoded accuracy claims.
 
 ---
 
@@ -87,7 +96,7 @@ docker compose up --build
 |--------|-------------|
 | **Structural Canonicalization** | Raw Gemini perception → typed objects (units, bijections, grids). Ambiguous data rejected at the source. |
 | **Coordinate-Level Grounding** | Every answer mapped to precise `(x, y)` coordinates. No "citations" — only proof. |
-| **Deterministic Refusal** | If a specification cannot be derived from the canonical structure, Akili refuses to answer. |
+| **Deterministic Refusal** | If a specification cannot be derived from the canonical structure — or the answer's confidence falls below the review threshold — Akili refuses to answer. |
 | **Confidence Scoring** | Three-component confidence (extraction agreement, canonical validation, verification strength) classifies answers as VERIFIED, REVIEW, or REFUSED. |
 
 ---
@@ -135,7 +144,7 @@ docker compose up --build
 
 ### Data Flow
 
-1. **Ingest**: PDF → page images (PyMuPDF 150 DPI) → classify page type → optional consensus dual-pass → Gemini structured extraction → `Unit`, `Bijection`, `Grid`, `Range`, `ConditionalUnit` → detect multi-page tables → Z3 consistency checks → validate → persist.
+1. **Ingest**: PDF → page images (PyMuPDF 150 DPI) → classify page type → optional consensus dual-pass → Gemini structured extraction → `Unit`, `Bijection`, `Grid` → **coordinate grounding** against the PDF text layer → detect multi-page tables → consistency / Z3 checks (contradictions cap confidence) → validate → persist. (`Range`/`ConditionalUnit` are currently produced by the corpus loader, not yet by live extraction.)
 2. **Store**: Canonical objects in SQLite (dev) or PostgreSQL (prod) with `(doc_id, page, x, y, context, ...)`. No free-text beliefs — only structural facts. Immutable audit log.
 3. **Query**: 30 verification rules in priority order → derived query engine (P=V×I, thermal, voltage margin, current budget) → coordinate proof + confidence score → or REFUSE.
 4. **Compare**: Cross-document parameter comparison with best-value highlighting.
@@ -221,6 +230,16 @@ confidence = {
 | **REVIEW** | 0.50 – 0.85 | Yellow badge, flagged for review |
 | **REFUSED** | < 0.50 | Deterministic refusal with reason |
 
+Notes:
+- **Every** answer carries a tier (structural pin/grid/bijection answers included).
+- **Grounding earns VERIFIED:** a single-pass fact only reaches `>= 0.85` once it is grounded
+  against the real page text — grounding raises both extraction agreement and proof strength.
+  Ungrounded single-pass facts top out in REVIEW.
+- **`/query` enforces the threshold:** an answer scoring below the REVIEW threshold is converted
+  to a deterministic refusal rather than returned — the tier is a gate, not just a label.
+- A fact flagged by a consistency check (e.g. a Z3 contradiction at ingest) is capped below
+  VERIFIED so it surfaces for human review.
+
 ---
 
 ## Project Structure
@@ -263,7 +282,7 @@ akili/
 │   └── populate_corpus.py       # Seed public corpus with common chips
 ├── docs/                        # Documentation
 │   └── hackster-writeup.md      # Hackster.io project writeup
-├── tests/                       # 280+ backend tests
+├── tests/                       # 317 backend tests
 ├── Dockerfile                   # Production backend (gunicorn + uvicorn)
 ├── docker-compose.yml
 └── pyproject.toml
@@ -274,7 +293,7 @@ akili/
 ## Testing
 
 ```bash
-# Backend (280+ tests)
+# Backend (317 tests, 4 integration)
 pytest tests/ -v
 
 # Frontend (29 tests)

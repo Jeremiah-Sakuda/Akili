@@ -1,5 +1,10 @@
 # Akili — Full Repository Audit
 
+> **⚠️ Accuracy note.** Statements here about a working CI matrix and `gemini-3-pro-preview`
+> default predate the code. CI was added later (`.github/workflows/ci.yml`); the default model is
+> `gemini-2.0-flash` (`config.py`). For the current, verified state and remediation status, see
+> `docs/IMPROVEMENT-PLAN.md`.
+
 **Date:** February 2026 (updated)  
 **Scope:** README/goals alignment, architecture, security, CI/CD, docs, and gaps.
 

@@ -11,7 +11,14 @@ WORKDIR /app
 COPY pyproject.toml requirements.txt README.md ./
 COPY src/ ./src/
 
-RUN pip install --no-cache-dir -e ".[postgres,auth]" gunicorn
+# psycopg2-binary and slowapi are core deps in pyproject; [auth] adds firebase-admin.
+RUN pip install --no-cache-dir -e ".[auth]" gunicorn
+
+# Run as a non-root user; pre-create the writable docs dir it owns.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/data/docs \
+    && chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8080
 

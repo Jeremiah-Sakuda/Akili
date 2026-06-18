@@ -122,14 +122,15 @@ def compute_agreement(extraction_a: PageExtraction, extraction_b: PageExtraction
         grid_b = len(extraction_b.grids)
         total = bij_a + bij_b + grid_a + grid_b
         if total == 0:
-            return 1.0
+            # Both passes extracted nothing: no signal, not perfect agreement.
+            return 0.0
         matched_items = min(bij_a, bij_b) + min(grid_a, grid_b)
         return matched_items / max(max(bij_a, bij_b) + max(grid_a, grid_b), 1)
 
     matched, unmatched_a, unmatched_b = _match_units(units_a, units_b)
     total_facts = len(units_a) + len(units_b)
     if total_facts == 0:
-        return 1.0
+        return 0.0
 
     agreement_score = sum(sim for _, _, sim in matched)
     max_possible = max(len(units_a), len(units_b))

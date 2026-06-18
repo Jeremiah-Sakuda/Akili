@@ -73,6 +73,8 @@ export interface ProofPoint {
   bbox?: ProofPointBBox | null;
   source_id?: string | null;
   source_type?: string | null;
+  /** True if (x,y)/bbox were snapped to real PDF text geometry (vs. model estimate). */
+  grounded?: boolean;
 }
 
 /** Indicates whether the response text is the raw verified output or was rephrased by an LLM */

@@ -201,24 +201,52 @@ const PageWithOverlay: React.FC<PageWithOverlayProps> = ({
           style={{ width: pageSize.width, height: pageSize.height }}
         >
           {proofPoints.map((p, i) => {
-            // Full-width horizontal band: 18% of page height, centered on proof y (normalized 0–1, top-left origin).
-            const bandHeight = 0.18;
-            const half = bandHeight / 2;
-            const centerY = p.bbox
-              ? (p.bbox.y1 + p.bbox.y2) / 2
-              : p.y;
-            const top = Math.max(0, Math.min(1 - bandHeight, centerY - half));
+            // Coordinates are normalized 0–1, top-left origin. Draw a tight rectangle
+            // from the bbox (honoring x AND width) when available, else a small marker
+            // at the (x,y) point. Color/style indicates whether the location was
+            // grounded against the real page text or is only the model's estimate.
+            const grounded = p.grounded ?? false;
+            const cls = grounded
+              ? 'border-emerald-500 dark:border-emerald-400 bg-emerald-500/20 dark:bg-emerald-400/20'
+              : 'border-amber-500 dark:border-amber-400 bg-amber-500/15 dark:bg-amber-400/15 border-dashed';
+            const title = `Proof (${p.x.toFixed(3)}, ${p.y.toFixed(3)}) — ${grounded ? 'grounded' : 'estimated location'}`;
+
+            if (p.bbox) {
+              const left = Math.min(p.bbox.x1, p.bbox.x2);
+              const top = Math.min(p.bbox.y1, p.bbox.y2);
+              const width = Math.abs(p.bbox.x2 - p.bbox.x1);
+              const height = Math.abs(p.bbox.y2 - p.bbox.y1);
+              const padX = 0.004;
+              const padY = 0.006;
+              return (
+                <div
+                  key={i}
+                  className={`absolute border-2 rounded-sm ${cls}`}
+                  style={{
+                    left: `${Math.max(0, left - padX) * 100}%`,
+                    top: `${Math.max(0, top - padY) * 100}%`,
+                    width: `${Math.min(1, width + padX * 2) * 100}%`,
+                    height: `${Math.max(height + padY * 2, 0.012) * 100}%`,
+                  }}
+                  title={title}
+                />
+              );
+            }
+
+            // Only a point is known — draw a small (roughly square) marker at (x, y).
+            const markerW = 0.025;
+            const markerH = markerW * (pageSize.width / pageSize.height);
             return (
               <div
                 key={i}
-                className="absolute border-2 border-emerald-500 dark:border-emerald-400 bg-emerald-500/20 dark:bg-emerald-400/20"
+                className={`absolute border-2 rounded-full ${cls}`}
                 style={{
-                  left: 0,
-                  top: `${top * 100}%`,
-                  width: '100%',
-                  height: `${bandHeight * 100}%`,
+                  left: `${Math.max(0, Math.min(1 - markerW, p.x - markerW / 2)) * 100}%`,
+                  top: `${Math.max(0, Math.min(1 - markerH, p.y - markerH / 2)) * 100}%`,
+                  width: `${markerW * 100}%`,
+                  height: `${markerH * 100}%`,
                 }}
-                title={`Proof (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`}
+                title={title}
               />
             );
           })}

@@ -143,6 +143,49 @@ class TestContradictionDetection:
         assert len(issues) > 0
         assert issues[0].check_type == "contradiction"
 
+    def test_contradiction_between_non_first_elements(self):
+        """All pairs are compared: a conflict between the 2nd and 3rd unit is caught."""
+        from akili.verify.z3_checks import _check_contradictions
+
+        def vcc(uid, value, page):
+            return Unit(
+                id=uid,
+                label="VCC",
+                value=value,
+                unit_of_measure="V",
+                context="maximum voltage",
+                origin=Point(x=0.1, y=0.1),
+                doc_id="d1",
+                page=page,
+            )
+
+        # u1 == u2 (5.5), but u3 (5.0) contradicts both — the old first-element-only
+        # loop would still catch u1-vs-u3, so make u1 agree and the conflict be u2 vs u3.
+        units = [vcc("u1", 5.5, 0), vcc("u2", 5.5, 1), vcc("u3", 5.0, 2)]
+        issues = _check_contradictions(units)
+        flagged = {tuple(sorted(i.source_ids)) for i in issues}
+        assert ("u2", "u3") in flagged or ("u1", "u3") in flagged
+        assert all(i.severity == "error" for i in issues)  # qualifier present -> error
+
+    def test_distinct_rails_without_qualifier_are_warnings(self):
+        """Two different values sharing a label but no min/typ/max qualifier -> warning."""
+        from akili.verify.z3_checks import _check_contradictions
+
+        def rail(uid, value):
+            return Unit(
+                id=uid,
+                label="VCC",
+                value=value,
+                unit_of_measure="V",
+                context="supply rail",  # no max/min/typ qualifier
+                origin=Point(x=0.1, y=0.1),
+                doc_id="d1",
+                page=0,
+            )
+
+        issues = _check_contradictions([rail("a", 3.3), rail("b", 1.8)])
+        assert all(i.severity == "warning" for i in issues)
+
 
 class TestRunZ3Checks:
     def test_run_with_no_data(self):

@@ -8,6 +8,8 @@ import pytest
 
 from akili.learn.pattern_analyzer import (
     PatternAnalyzer,
+    _apply_scaling_correction,
+    _apply_unit_correction,
     _extract_number,
     _extract_unit,
 )
@@ -161,3 +163,21 @@ class TestTypeBias:
         patterns = analyzer.analyze_all()
         bias_patterns = [p for p in patterns if p.category == "type_bias"]
         assert any(p.original_pattern == "range" for p in bias_patterns)
+
+
+class TestApplyCorrectionsNumericallyCorrect:
+    """Auto-correction transforms must produce physically correct values."""
+
+    def test_unit_confusion_rescales_magnitude(self):
+        # mV -> V must divide by 1000, not just swap the suffix.
+        assert _apply_unit_correction("4500 mV", "V") == "4.5 V"
+        assert _apply_unit_correction("3300 mV", "V") == "3.3 V"
+        assert _apply_unit_correction("250 mA", "A") == "0.25 A"
+
+    def test_scaling_greater_than_one(self):
+        # 10x: original was 10x too big -> divide by 10.
+        assert _apply_scaling_correction("50 mA", "10x") == "5 mA"
+
+    def test_scaling_less_than_one_inverts_correctly(self):
+        # 0.1x: original was 10x too small -> multiply by 10 (i.e. /0.1).
+        assert _apply_scaling_correction("5 mA", "0.1x") == "50 mA"

@@ -10,13 +10,19 @@ export interface BenchmarkRow {
 interface BenchmarkTableProps {
   data: BenchmarkRow[];
   compact?: boolean;
+  /** When false, the table is clearly labeled as illustrative (not yet measured). */
+  measured?: boolean;
 }
 
 /**
  * Benchmark comparison table showing AKILI vs Gemini accuracy.
  * FR-ON-1, FR-ON-2: Display benchmark above the fold on landing page.
  */
-export const BenchmarkTable: React.FC<BenchmarkTableProps> = ({ data, compact = false }) => {
+export const BenchmarkTable: React.FC<BenchmarkTableProps> = ({
+  data,
+  compact = false,
+  measured = true,
+}) => {
   const overallAkili = Math.round(data.reduce((sum, r) => sum + r.akiliAccuracy, 0) / data.length);
   const overallGemini = Math.round(data.reduce((sum, r) => sum + r.geminiAccuracy, 0) / data.length);
   const overallDelta = overallAkili - overallGemini;
@@ -30,9 +36,20 @@ export const BenchmarkTable: React.FC<BenchmarkTableProps> = ({ data, compact = 
             <span className="material-symbols-outlined text-[16px] text-[#0066CC]">analytics</span>
             <span className="text-sm font-semibold text-white">Accuracy Benchmark</span>
           </div>
-          <span className="text-xs font-mono text-[#8b95a8]">50 questions across 5 chips</span>
+          <span className="text-xs font-mono text-[#8b95a8]">
+            {measured ? '50 questions across 5 chips' : 'Illustrative targets'}
+          </span>
         </div>
       </div>
+
+      {!measured && (
+        <div className="px-4 py-2 border-b border-amber-400/20 bg-amber-400/5">
+          <p className="text-[11px] text-amber-300/90 text-center">
+            Illustrative targets — not yet measured. Run{' '}
+            <code className="font-mono">benchmark/run_benchmark.py</code> to populate real numbers.
+          </p>
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto">

@@ -2,7 +2,11 @@ import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useScrollReveal } from '../hooks/useReveal';
 import { BenchmarkTable } from './BenchmarkTable';
-import { DEFAULT_BENCHMARK_DATA } from './benchmarkData';
+import {
+  ILLUSTRATIVE_BENCHMARK_DATA,
+  loadBenchmarkResults,
+  type BenchmarkResults,
+} from './benchmarkData';
 
 function RevealSection({ children, className = '', id, ariaLabel }: {
   children: React.ReactNode; className?: string; id?: string; ariaLabel?: string;
@@ -92,6 +96,20 @@ const MOCK_RESPONSE = {
 /* ─── Component ─── */
 const LandingPage: React.FC = () => {
   const { signInWithGoogle, authAvailable } = useAuth();
+  const [benchmark, setBenchmark] = React.useState<BenchmarkResults>({
+    rows: ILLUSTRATIVE_BENCHMARK_DATA,
+    measured: false,
+  });
+
+  React.useEffect(() => {
+    let active = true;
+    loadBenchmarkResults().then((r) => {
+      if (active) setBenchmark(r);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-[#f0f2f5] overflow-x-hidden">
@@ -158,7 +176,7 @@ const LandingPage: React.FC = () => {
 
           {/* Right: Benchmark Table (above the fold) */}
           <div className="lg:pl-4">
-            <BenchmarkTable data={DEFAULT_BENCHMARK_DATA} />
+            <BenchmarkTable data={benchmark.rows} measured={benchmark.measured} />
           </div>
         </div>
       </section>

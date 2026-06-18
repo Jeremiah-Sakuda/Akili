@@ -27,6 +27,11 @@ class ProofPoint(BaseModel):
     bbox: ProofPointBBox | None = Field(None, description="Optional bbox when fact has region")
     source_id: str | None = Field(None, description="Canonical object id (unit, bijection, grid)")
     source_type: str | None = Field(None, description="unit | bijection | grid")
+    grounded: bool = Field(
+        False,
+        description="True if this (x,y)/bbox was snapped to real PDF text geometry "
+        "(vs. the model's self-reported estimate).",
+    )
 
 
 # ---------------------------------------------------------------------------

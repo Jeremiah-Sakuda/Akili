@@ -104,3 +104,62 @@ class TestConfidenceInVerification:
     def test_refuse_has_no_confidence(self):
         result = verify_and_answer("What is the fluxgate impedance?", [], [], [])
         assert isinstance(result, Refuse)
+
+    def test_grounded_unit_reaches_verified(self):
+        """A grounded, well-formed fact should reach the VERIFIED tier; ungrounded should not."""
+        common = dict(
+            id="g1",
+            label="VCC",
+            value=5.0,
+            unit_of_measure="V",
+            context="supply voltage",
+            origin=Point(x=0.2, y=0.3),
+            doc_id="d",
+            page=0,
+            bbox=BBox(x1=0.2, y1=0.3, x2=0.3, y2=0.32),
+        )
+        grounded = Unit(**common, grounded=True, grounding_score=1.0)
+        ungrounded = Unit(**common)
+
+        gr = verify_and_answer("What is the maximum voltage?", [grounded], [], [])
+        ur = verify_and_answer("What is the maximum voltage?", [ungrounded], [], [])
+        assert isinstance(gr, AnswerWithProof) and gr.confidence.tier == "verified"
+        assert isinstance(ur, AnswerWithProof) and ur.confidence.tier != "verified"
+
+    def test_flagged_fact_cannot_be_verified(self):
+        """A fact flagged by a consistency check is capped below VERIFIED even if grounded."""
+        u = Unit(
+            id="f1",
+            label="VCC",
+            value=5.0,
+            unit_of_measure="V",
+            context="supply voltage",
+            origin=Point(x=0.2, y=0.3),
+            doc_id="d",
+            page=0,
+            bbox=BBox(x1=0.2, y1=0.3, x2=0.3, y2=0.32),
+            grounded=True,
+            grounding_score=1.0,
+            flagged_for_review=True,
+        )
+        result = verify_and_answer("What is the maximum voltage?", [u], [], [])
+        assert isinstance(result, AnswerWithProof)
+        assert result.confidence.tier != "verified"
+
+    def test_bijection_answer_carries_confidence(self):
+        """Structural (pin) answers must also carry a confidence score and tier."""
+        from akili.canonical import Bijection
+
+        b = Bijection(
+            id="b1",
+            left_set=["1"],
+            right_set=["VCC"],
+            mapping={"1": "VCC"},
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d",
+            page=0,
+        )
+        result = verify_and_answer("What is pin 1?", [], [b], [])
+        assert isinstance(result, AnswerWithProof)
+        assert result.confidence is not None
+        assert result.confidence.tier in ("verified", "review", "refused")
