@@ -17,7 +17,11 @@ class BaseStore(ABC):
 
     @abstractmethod
     def add_document(
-        self, doc_id: str, filename: str | None = None, page_count: int = 0
+        self,
+        doc_id: str,
+        filename: str | None = None,
+        page_count: int = 0,
+        uploaded_by: str | None = None,
     ) -> None: ...
 
     @abstractmethod
@@ -58,4 +62,11 @@ class BaseStore(ABC):
     def delete_document(self, doc_id: str) -> None: ...
 
     @abstractmethod
-    def list_documents(self) -> list[dict[str, Any]]: ...
+    def list_documents(self, uploaded_by: str | None = None) -> list[dict[str, Any]]:
+        """List documents; when uploaded_by is given, only that owner's documents."""
+        ...
+
+    @abstractmethod
+    def get_document_owner(self, doc_id: str) -> str | None:
+        """Return the uploaded_by (owner uid) for a document, or None if unknown."""
+        ...

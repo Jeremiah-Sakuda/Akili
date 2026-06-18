@@ -1,12 +1,21 @@
 """
-Z3-based quality checks for canonical data.
+Quality / consistency checks for canonical data.
 
-Three narrow checks:
-1. Unit normalization: 4.2V == 4200mV == 0.0042kV
-2. Contradiction detection: same parameter, different values across pages
-3. Range consistency: min <= typ <= max for all Range objects
+Two flavors:
 
-Requires z3-solver (pip install z3-solver). Degrades gracefully if not installed.
+Deterministic consistency checks (no solver needed):
+1. Unit normalization — flag numeric facts whose unit can't be dimensionally validated.
+2. Contradiction detection — same parameter, different values (all pairs within a group).
+3. Range consistency — min <= typ <= max for Range objects.
+
+Z3-backed constraint checks (genuinely combine multiple extracted values):
+4. Power: P_max >= V_max * I_max
+5. Thermal viability: T_j = T_ambient + P * theta_JA <= Tj_max
+6. Regulator dropout margin.
+
+The constraint checks use z3-solver when installed and degrade gracefully otherwise.
+run_z3_checks() is invoked during ingestion (see ingest/pipeline.py); error-severity
+issues lower the confidence of the facts involved so they surface for human REVIEW.
 """
 
 from __future__ import annotations
@@ -135,15 +144,18 @@ class Z3CheckResult:
 
 
 def _check_unit_normalization(units: list) -> list[Z3Issue]:
-    """Verify that extracted values are dimensionally consistent.
+    """Dimensional-validity check: flag numeric facts we cannot dimensionally validate.
 
-    For each unit with a numeric value and known unit_of_measure, convert to
-    base units and verify the conversion is consistent using Z3.
+    A numeric value whose unit_of_measure is non-finite or not in the conversion table
+    (e.g. a bare SI prefix like "k" extracted as a unit) can't be normalized to a base
+    unit, so no downstream consistency check can vouch for it. We surface that as a
+    warning. (This deliberately replaces a previous Z3 'check' that asserted x != x and
+    could therefore never fire — verification theater. The genuine constraint-solving
+    lives in the cross-parameter checks below.)
     """
-    issues: list[Z3Issue] = []
-    if not Z3_AVAILABLE:
-        return issues
+    import math
 
+    issues: list[Z3Issue] = []
     for u in units:
         val = u.value if hasattr(u, "value") else None
         uom = getattr(u, "unit_of_measure", None) or getattr(u, "unit", None)
@@ -154,34 +166,26 @@ def _check_unit_normalization(units: list) -> list[Z3Issue]:
         except (ValueError, TypeError):
             continue
 
-        result = _to_base(numeric_val, uom)
-        if result is None:
-            continue
-        base_val, base_unit = result
-
-        s = Solver()
-        s.set("timeout", 5000)
-        z_val = Real(f"val_{u.id}")
-        z_base = Real(f"base_{u.id}")
-        norm = _normalize_unit(uom)
-        conv = _UNIT_CONVERSIONS.get(norm)
-        if conv is None:
-            continue
-        _, mult = conv
-
-        s.add(z_val == numeric_val)
-        s.add(z_base == z_val * mult)
-        s.add(z_base != base_val)
-
-        if s.check() == sat:
+        if not math.isfinite(numeric_val):
             issues.append(
                 Z3Issue(
                     check_type="unit_normalization",
                     severity="error",
+                    message=f"Non-finite numeric value for {u.id}: {numeric_val} {uom}",
+                    source_ids=[u.id],
+                    page=getattr(u, "page", None),
+                )
+            )
+            continue
+
+        if _to_base(numeric_val, uom) is None:
+            issues.append(
+                Z3Issue(
+                    check_type="unit_normalization",
+                    severity="warning",
                     message=(
-                        f"Unit normalization inconsistency for {u.id}: "
-                        f"{numeric_val} {uom} should be {base_val} {base_unit} "
-                        f"but Z3 found a model where it differs"
+                        f"Cannot dimensionally validate {u.id}: unrecognized unit {uom!r} "
+                        f"(value {numeric_val}). It will not participate in consistency checks."
                     ),
                     source_ids=[u.id],
                     page=getattr(u, "page", None),
@@ -196,27 +200,34 @@ def _check_unit_normalization(units: list) -> list[Z3Issue]:
 # ---------------------------------------------------------------------------
 
 
+def _qualifier_of(unit) -> str:
+    """The min/typ/max qualifier mentioned in a unit's context, if any."""
+    context = (getattr(unit, "context", "") or "").strip().lower()
+    for kw in ("minimum", "min", "typical", "typ", "maximum", "max"):
+        if kw in context:
+            return kw[:3]
+    return ""
+
+
 def _extract_param_key(unit) -> str | None:
     """Build a grouping key from label + context to identify the same parameter."""
     label = (getattr(unit, "label", "") or "").strip().lower()
     context = (getattr(unit, "context", "") or "").strip().lower()
     if not label and not context:
         return None
-
-    qualifier = ""
-    for kw in ("minimum", "min", "typical", "typ", "maximum", "max"):
-        if kw in context:
-            qualifier = kw[:3]
-            break
-
+    qualifier = _qualifier_of(unit)
     return f"{label}|{qualifier}" if label else f"ctx:{context[:40]}|{qualifier}"
 
 
 def _check_contradictions(units: list) -> list[Z3Issue]:
-    """Detect contradictions: same parameter extracted with different values across pages."""
+    """Detect contradictions: same parameter, different values (all pairs within a group).
+
+    Compares every pair within a group (not just against the first element), so a 3-way
+    group with a disagreement between elements 1 and 2 is not missed. When the group has
+    an explicit min/typ/max qualifier the conflict is an error; without one the two values
+    may legitimately be distinct rails sharing a label, so it is reported as a warning.
+    """
     issues: list[Z3Issue] = []
-    if not Z3_AVAILABLE:
-        return issues
 
     groups: dict[str, list] = {}
     for u in units:
@@ -233,9 +244,6 @@ def _check_contradictions(units: list) -> list[Z3Issue]:
         groups.setdefault(key, []).append(u)
 
     for key, group in groups.items():
-        if len(group) < 2:
-            continue
-
         base_vals: list[tuple[float, str, object]] = []
         for u in group:
             uom = getattr(u, "unit_of_measure", None) or getattr(u, "unit", None) or ""
@@ -246,37 +254,36 @@ def _check_contradictions(units: list) -> list[Z3Issue]:
         if len(base_vals) < 2:
             continue
 
-        ref_val, ref_base, ref_unit = base_vals[0]
-        for bv, bu, u in base_vals[1:]:
-            if bu != ref_base:
-                continue
-            if abs(ref_val - bv) < 1e-9:
-                continue
+        # A qualifier (max/min/typ) means these really are the same spec; disagreement
+        # is then a hard error. Without a qualifier, treat as a softer warning.
+        has_qualifier = bool(_qualifier_of(base_vals[0][2]))
+        severity = "error" if has_qualifier else "warning"
 
-            s = Solver()
-            s.set("timeout", 5000)
-            a = Real("a")
-            b = Real("b")
-            s.add(a == ref_val)
-            s.add(b == bv)
-            s.add(a == b)
-
-            if s.check() != sat:
-                ref_uom = getattr(ref_unit, "unit_of_measure", "")
-                ref_page = getattr(ref_unit, "page", "?")
-                u_uom = getattr(u, "unit_of_measure", "")
-                u_page = getattr(u, "page", "?")
+        seen_pairs: set[tuple[str, str]] = set()
+        for i in range(len(base_vals)):
+            ai, abase, au = base_vals[i]
+            for j in range(i + 1, len(base_vals)):
+                bj, bbase, bu = base_vals[j]
+                if abase != bbase or abs(ai - bj) < 1e-9:
+                    continue
+                pair = tuple(sorted((au.id, bu.id)))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
                 msg = (
-                    f"Contradiction: {key!r} has value {ref_unit.value} {ref_uom} "
-                    f"on page {ref_page} but {u.value} {u_uom} on page {u_page}"
+                    f"Contradiction: {key!r} has value "
+                    f"{au.value} {getattr(au, 'unit_of_measure', '')} on page "
+                    f"{getattr(au, 'page', '?')} but "
+                    f"{bu.value} {getattr(bu, 'unit_of_measure', '')} on page "
+                    f"{getattr(bu, 'page', '?')}"
                 )
                 issues.append(
                     Z3Issue(
                         check_type="contradiction",
-                        severity="error",
+                        severity=severity,
                         message=msg,
-                        source_ids=[ref_unit.id, u.id],
-                        page=getattr(u, "page", None),
+                        source_ids=[au.id, bu.id],
+                        page=getattr(bu, "page", None),
                     )
                 )
 

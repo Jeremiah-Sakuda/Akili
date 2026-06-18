@@ -22,7 +22,13 @@ export const ShareButton: React.FC<ShareButtonProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const shareUrl = `https://akili.app/q/${questionId}`;
+  // Build the permalink from the current deployment origin rather than a hardcoded host,
+  // so links from preview/staging/local builds point at the right place.
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://akili.app';
+  const shareUrl = `${origin}/q/${questionId}`;
   const shareText = `${question}\n\nAnswer: ${answer} (${status})\n\nVerified with AKILI`;
 
   const copyLink = async () => {

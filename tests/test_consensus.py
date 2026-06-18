@@ -87,8 +87,10 @@ class TestComputeAgreement:
         assert compute_agreement(ext, ext) > 0.9
 
     def test_empty_extractions(self):
+        # Both passes extracted nothing: no signal, scored 0.0 (not perfect agreement),
+        # so a double-failure page is never treated as maximally trustworthy.
         ext = PageExtraction(units=[], bijections=[], grids=[])
-        assert compute_agreement(ext, ext) == 1.0
+        assert compute_agreement(ext, ext) == 0.0
 
     def test_one_empty_one_populated(self):
         ext_a = PageExtraction(units=[_unit("u1", "VCC", 3.3, "V")], bijections=[], grids=[])

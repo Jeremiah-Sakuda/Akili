@@ -81,23 +81,30 @@ class TestMaxPages:
 
 
 class TestCoordinateClamping:
-    """Verify _normalize_origin clamps to [0, 1]."""
+    """_normalize_origin rejects clearly out-of-range coords and clamps minor noise.
 
-    def test_clamps_above_1(self):
-        result = _normalize_origin({"x": 1.5, "y": 2.0})
-        assert result == {"x": 1.0, "y": 1.0}
+    Wildly out-of-range coordinates are a hallucination signal — silently clamping
+    them to the page corner would make a bogus point look plausible — so they are
+    rejected (None). Only small overshoots within tolerance are clamped to [0, 1].
+    """
 
-    def test_clamps_below_0(self):
-        result = _normalize_origin({"x": -0.5, "y": -1.0})
-        assert result == {"x": 0.0, "y": 0.0}
+    def test_rejects_well_above_1(self):
+        assert _normalize_origin({"x": 1.5, "y": 2.0}) is None
+
+    def test_rejects_well_below_0(self):
+        assert _normalize_origin({"x": -0.5, "y": -1.0}) is None
 
     def test_normal_range_unchanged(self):
         result = _normalize_origin({"x": 0.5, "y": 0.75})
         assert result == {"x": 0.5, "y": 0.75}
 
-    def test_list_input_clamped(self):
-        result = _normalize_origin([1.5, -0.1])
+    def test_minor_overshoot_clamped(self):
+        # Within the tolerance band (0.05) — clamped rather than rejected.
+        result = _normalize_origin({"x": 1.02, "y": -0.03})
         assert result == {"x": 1.0, "y": 0.0}
+
+    def test_list_input_out_of_range_rejected(self):
+        assert _normalize_origin([1.5, -0.1]) is None
 
     def test_invalid_returns_none(self):
         assert _normalize_origin("bad") is None

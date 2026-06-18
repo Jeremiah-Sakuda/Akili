@@ -33,6 +33,7 @@ def migrate_sqlite_to_postgres(sqlite_path: str, pg_url: str, org_id: str = "def
         "grids": 0,
         "ranges": 0,
         "conditional_units": 0,
+        "corpus_entries": 0,
     }
 
     for doc_info in docs:
@@ -42,6 +43,9 @@ def migrate_sqlite_to_postgres(sqlite_path: str, pg_url: str, org_id: str = "def
         grids = src.get_grids_by_doc(doc_id)
         ranges = src.get_ranges_by_doc(doc_id)
         cunits = src.get_conditional_units_by_doc(doc_id)
+        # Preserve document ownership (uploaded_by) so per-user access checks survive
+        # the migration; previously this was dropped.
+        owner = src.get_document_owner(doc_id)
 
         dst.store_canonical(
             doc_id=doc_id,
@@ -52,6 +56,7 @@ def migrate_sqlite_to_postgres(sqlite_path: str, pg_url: str, org_id: str = "def
             grids=grids,
             ranges=ranges,
             conditional_units=cunits,
+            uploaded_by=owner,
         )
 
         summary["documents"] += 1
@@ -70,6 +75,21 @@ def migrate_sqlite_to_postgres(sqlite_path: str, pg_url: str, org_id: str = "def
             len(ranges),
             len(cunits),
         )
+
+    # Copy the public corpus too (both stores implement these methods now).
+    if hasattr(src, "list_corpus") and hasattr(dst, "store_corpus_entry"):
+        for meta in src.list_corpus():
+            entry = src.get_corpus_entry(meta["content_hash"])
+            if not entry:
+                continue
+            dst.store_corpus_entry(
+                content_hash=entry["content_hash"],
+                mpn=entry["mpn"],
+                chip_name=entry["chip_name"],
+                datasheet_url=entry.get("datasheet_url"),
+                canonical_data=entry.get("canonical_data") or {},
+            )
+            summary["corpus_entries"] += 1
 
     return summary
 

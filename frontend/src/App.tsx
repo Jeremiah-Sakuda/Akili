@@ -6,6 +6,7 @@ import DocumentViewer from './components/DocumentViewer';
 import FileUploader from './components/FileUploader';
 import IngestSummary from './components/IngestSummary';
 import ToastContainer from './components/Toast';
+import UsageLimitModal from './components/UsageLimitModal';
 
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
 const Onboarding = React.lazy(() => import('./components/Onboarding'));
@@ -36,6 +37,21 @@ const App: React.FC = () => {
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [queryLoading, setQueryLoading] = useState(false);
   const [lastIngestResult, setLastIngestResult] = useState<IngestResponse | null>(null);
+  const [usageLimit, setUsageLimit] = useState<
+    { type: 'documents' | 'queries'; used: number; limit: number } | null
+  >(null);
+
+  // Surface the built-in UsageLimitModal when the backend returns a free-tier 403.
+  const maybeShowUsageLimit = useCallback((message: string): boolean => {
+    const m = message.match(/Free tier limit reached:\s*(\d+)\/(\d+)\s*(documents|queries)/i);
+    if (!m) return false;
+    setUsageLimit({
+      type: m[3].toLowerCase() === 'documents' ? 'documents' : 'queries',
+      used: Number(m[1]),
+      limit: Number(m[2]),
+    });
+    return true;
+  }, []);
 
   const refreshDocuments = useCallback(async () => {
     setLoadingDocs(true);
@@ -111,16 +127,21 @@ const App: React.FC = () => {
         // A5: Log error for dev visibility and show user-facing message
         console.error('Query failed:', err);
         const errorMsg = err instanceof Error ? err.message : 'Query failed. Is the API running?';
-        addToast(errorMsg);
-        setMessages((m) => [
-          ...m,
-          { role: 'assistant', text: errorMsg, response: { status: 'refuse', reason: 'Query failed.' } },
-        ]);
+        // Free-tier limit → show the dedicated modal instead of a generic toast.
+        if (maybeShowUsageLimit(errorMsg)) {
+          setMessages((m) => m.slice(0, -1)); // drop the optimistic user message
+        } else {
+          addToast(errorMsg);
+          setMessages((m) => [
+            ...m,
+            { role: 'assistant', text: errorMsg, response: { status: 'refuse', reason: 'Query failed.' } },
+          ]);
+        }
       } finally {
         setQueryLoading(false);
       }
     },
-    [selectedDocId, addToast]
+    [selectedDocId, addToast, maybeShowUsageLimit]
   );
 
   const displayState =
@@ -210,6 +231,14 @@ const App: React.FC = () => {
           queryLoading={queryLoading}
         />
       </div>
+
+      <UsageLimitModal
+        isOpen={usageLimit !== null}
+        onClose={() => setUsageLimit(null)}
+        limitType={usageLimit?.type ?? 'queries'}
+        currentUsage={usageLimit?.used ?? 0}
+        limit={usageLimit?.limit ?? 0}
+      />
     </div>
   );
 };

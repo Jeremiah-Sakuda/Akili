@@ -109,6 +109,22 @@ def validate_doc_id(doc_id: str) -> None:
     raise HTTPException(status_code=400, detail="Invalid doc_id")
 
 
+def client_identity(user: dict | None, request) -> str:
+    """Stable identity for usage / free-tier accounting.
+
+    Prefers the authenticated uid. For anonymous requests (auth disabled) it falls back to
+    a best-effort client IP, using the first X-Forwarded-For hop so that distinct users
+    behind a proxy are not collapsed into one shared bucket. The anonymous path is
+    best-effort only — real per-user limits require authentication.
+    """
+    if user and user.get("uid"):
+        return str(user["uid"])
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip() or "anonymous"
+    return request.client.host if request.client else "anonymous"
+
+
 def is_debug() -> bool:
     """Return True if full error messages should be included in API responses."""
     return config.DEBUG

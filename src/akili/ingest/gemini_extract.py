@@ -261,11 +261,22 @@ def _simplified_extraction_schema() -> dict:
     }
 
 
-def _normalize_origin(origin: object) -> dict | None:
-    """Return {x, y} dict with numeric x,y; accept dict or [x,y] list.
+# Coordinates are normalized 0–1. Values slightly outside (rounding noise) are clamped;
+# values well outside this band are a hallucination signal and are REJECTED, not clamped
+# (silently clamping a bogus point to the page corner makes it look plausible).
+_COORD_TOL = 0.05
 
-    MEDIUM-8: Coordinates are clamped to [0.0, 1.0] range.
-    """
+
+def _in_range(v: float) -> bool:
+    return -_COORD_TOL <= v <= 1.0 + _COORD_TOL
+
+
+def _clamp01(v: float) -> float:
+    return max(0.0, min(1.0, v))
+
+
+def _normalize_origin(origin: object) -> dict | None:
+    """Return {x, y} dict with numeric x,y in [0,1]; reject out-of-range estimates."""
     x_val: float | None = None
     y_val: float | None = None
     if isinstance(origin, dict):
@@ -284,37 +295,36 @@ def _normalize_origin(origin: object) -> dict | None:
             pass
     if x_val is None or y_val is None:
         return None
-    # Clamp to [0.0, 1.0]
-    x_val = max(0.0, min(1.0, x_val))
-    y_val = max(0.0, min(1.0, y_val))
-    return {"x": x_val, "y": y_val}
+    if not (_in_range(x_val) and _in_range(y_val)):
+        # Clearly outside the normalized page — treat as a bad coordinate, drop the fact.
+        return None
+    return {"x": _clamp01(x_val), "y": _clamp01(y_val)}
 
 
 def _normalize_bbox(bbox: object) -> dict | None:
-    """Return {x1, y1, x2, y2} dict; accept dict or [x1,y1,x2,y2] list."""
+    """Return {x1, y1, x2, y2} dict in [0,1] with x1<=x2, y1<=y2; reject out-of-range."""
+    vals: tuple[float, float, float, float] | None = None
     if isinstance(bbox, dict):
         x1, y1 = bbox.get("x1"), bbox.get("y1")
         x2, y2 = bbox.get("x2"), bbox.get("y2")
-        if (
-            x1 is not None
-            and y1 is not None
-            and x2 is not None
-            and y2 is not None
-            and all(isinstance(v, (int, float)) for v in (x1, y1, x2, y2))
-        ):
-            return {"x1": float(x1), "y1": float(y1), "x2": float(x2), "y2": float(y2)}
-        return None
-    if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+        if all(isinstance(v, (int, float)) for v in (x1, y1, x2, y2)):
+            vals = (float(x1), float(y1), float(x2), float(y2))
+    elif isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
         try:
-            return {
-                "x1": float(bbox[0]),
-                "y1": float(bbox[1]),
-                "x2": float(bbox[2]),
-                "y2": float(bbox[3]),
-            }
+            vals = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
         except (TypeError, ValueError):
-            return None
-    return None
+            vals = None
+    if vals is None:
+        return None
+    if not all(_in_range(v) for v in vals):
+        return None
+    x1, y1, x2, y2 = (_clamp01(v) for v in vals)
+    # Normalize ordering so x1<=x2, y1<=y2.
+    if x1 > x2:
+        x1, x2 = x2, x1
+    if y1 > y2:
+        y1, y2 = y2, y1
+    return {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
 
 
 def _normalize_bijection_item(item: dict, page_prefix: str, index: int) -> dict | None:

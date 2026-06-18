@@ -11,6 +11,8 @@ services:
       - .env
     environment:
       - AKILI_DB_PATH=/data/akili.db
+      # Bind the app to the port compose maps/health-checks below.
+      - PORT=8000
     volumes:
       - akili-data:/data
     healthcheck:
@@ -24,12 +26,13 @@ services:
     build: ./frontend
     ports:
       - "3001:3000"
-    env_file:
-      - .env
     environment:
       - VITE_PROXY_TARGET=http://api:8000
     volumes:
-      # Mount .env at container root so Vite (envDir = projectRoot = /) can load VITE_* vars
+      # Mount .env read-only so Vite (envDir = projectRoot = /) can load VITE_* vars.
+      # NOTE: we intentionally do NOT use `env_file: .env` here — that would inject
+      # backend secrets (GOOGLE_API_KEY, DATABASE_URL, ...) into the frontend process.
+      # Vite only ever exposes VITE_*-prefixed vars to the client.
       - ./.env:/.env:ro
     depends_on:
       api:

@@ -15,7 +15,13 @@ from pydantic import BaseModel, Field
 
 from akili import config
 from akili.api.auth import get_current_user
-from akili.api.deps import get_store, get_usage_store, require_doc_access, validate_doc_id
+from akili.api.deps import (
+    client_identity,
+    get_store,
+    get_usage_store,
+    require_doc_access,
+    validate_doc_id,
+)
 from akili.ingest.gemini_format import format_answer, format_refusal
 from akili.verify import AnswerWithProof, Refuse, verify_and_answer
 
@@ -71,7 +77,7 @@ async def query(
     validate_doc_id(req.doc_id)  # A4: strict UUID validation
     require_doc_access(req.doc_id, _user)  # A2: ownership check
 
-    user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
+    user_id = client_identity(_user, request)
     usage = get_usage_store()
     allowed, used, limit = usage.check_limit(user_id, "query")
     if not allowed:
@@ -86,6 +92,22 @@ async def query(
     grids = store.get_grids_by_doc(req.doc_id)
     result = verify_and_answer(req.question, units, bijections, grids)
     usage.record(user_id, "query")
+
+    # Confidence-gated refusal: rather than return a value we cannot stand behind,
+    # refuse when overall confidence falls below the REVIEW threshold. This makes the
+    # "deterministic refusal" guarantee real instead of a decorative tier label.
+    if (
+        isinstance(result, AnswerWithProof)
+        and result.confidence is not None
+        and result.confidence.overall < config.REVIEW_THRESHOLD
+    ):
+        result = Refuse(
+            reason=(
+                f"Answer confidence {result.confidence.overall:.2f} is below the "
+                f"{config.REVIEW_THRESHOLD:.2f} review threshold; refusing rather than "
+                "returning an unverified value."
+            )
+        )
 
     if isinstance(result, Refuse):
         content: dict[str, Any] = result.model_dump()
@@ -139,7 +161,7 @@ async def get_usage(
     _user: dict[str, Any] | None = Depends(get_current_user),
 ) -> JSONResponse:
     """Get usage summary for the current user (free tier limits)."""
-    user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
+    user_id = client_identity(_user, request)
     usage = get_usage_store()
     summary = usage.get_usage_summary(user_id)
     return JSONResponse(content=summary)

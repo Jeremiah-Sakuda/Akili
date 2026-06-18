@@ -31,15 +31,16 @@ RUN npm run build
 # Stage 2: Serve with nginx
 FROM nginx:alpine
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy nginx config template; ${PORT} is substituted at container start so the
+# container genuinely honors whatever port Cloud Run injects (not a fixed 8080).
+COPY nginx.conf.template /etc/nginx/nginx.conf.template
 
 # Copy built assets from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Cloud Run uses PORT env var
+# Cloud Run uses PORT env var (defaults to 8080 if unset)
 ENV PORT=8080
 EXPOSE 8080
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Substitute ${PORT} into the config, then exec nginx in the foreground.
+CMD ["/bin/sh", "-c", "envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'"]

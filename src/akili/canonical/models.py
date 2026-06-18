@@ -52,6 +52,22 @@ class Unit(BaseModel):
         le=1.0,
         description="Consensus agreement score (1.0=full consensus, 0.5=single-pass default)",
     )
+    grounded: bool = Field(
+        default=False,
+        description="True if origin/bbox were snapped to real PDF text geometry (not just "
+        "the model's self-reported estimate).",
+    )
+    grounding_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="How well the value matched the text at the grounded location (0=ungrounded).",
+    )
+    flagged_for_review: bool = Field(
+        default=False,
+        description="Set when a consistency check (e.g. Z3 contradiction) found a problem "
+        "involving this fact; caps its confidence so it surfaces for human review.",
+    )
 
 
 class Bijection(BaseModel):

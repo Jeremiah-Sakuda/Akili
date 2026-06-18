@@ -335,7 +335,58 @@ def _is_unit_confusion_match(value: str, orig_unit: str) -> bool:
     return extracted == orig_unit.lower() if extracted else False
 
 
+# SI prefix scale factors (longer prefixes first so "meg" beats "m").
+_SI_PREFIXES: list[tuple[str, float]] = [
+    ("meg", 1e6),
+    ("µ", 1e-6),
+    ("u", 1e-6),
+    ("m", 1e-3),
+    ("n", 1e-9),
+    ("p", 1e-12),
+    ("f", 1e-15),
+    ("k", 1e3),
+    ("g", 1e9),
+    ("t", 1e12),
+]
+
+
+def _unit_scale(unit: str) -> tuple[str, float]:
+    """Split a unit into (base, scale), e.g. 'mv' -> ('v', 1e-3), 'v' -> ('v', 1.0)."""
+    u = unit.strip().lower()
+    for pfx, scale in _SI_PREFIXES:
+        if len(u) > len(pfx) and u.startswith(pfx):
+            return u[len(pfx) :], scale
+    return u, 1.0
+
+
+def _convert_value(num: float, from_unit: str, to_unit: str) -> float | None:
+    """Express ``num from_unit`` in ``to_unit``; None if their base units differ."""
+    from_base, from_scale = _unit_scale(from_unit)
+    to_base, to_scale = _unit_scale(to_unit)
+    if from_base != to_base or to_scale == 0:
+        return None
+    return num * from_scale / to_scale
+
+
+def _format_qty(num: float, unit: str) -> str:
+    if num == int(num):
+        return f"{int(num)} {unit}".strip()
+    return f"{num:.6g} {unit}".strip()
+
+
 def _apply_unit_correction(value: str, correct_unit: str) -> str:
+    """Re-express the value in the corrected unit, RESCALING the magnitude.
+
+    A mV->V correction must divide by 1000 (4500 mV == 4.5 V), not merely swap the
+    suffix (which would have produced the physically wrong "4500 V").
+    """
+    orig_unit = _extract_unit(value)
+    num = _extract_number(value)
+    if orig_unit is not None and num is not None:
+        converted = _convert_value(num, orig_unit, correct_unit)
+        if converted is not None:
+            return _format_qty(converted, correct_unit)
+    # Fallback: only the unit label was wrong (no convertible magnitude change).
     m = _UNIT_RE.search(value.strip())
     if m:
         return value[: m.start()] + correct_unit + value[m.end() :]
@@ -346,27 +397,29 @@ def _is_scaling_match(value: str, factor_label: str) -> bool:
     return _extract_number(value) is not None
 
 
-def _apply_scaling_correction(value: str, orig_factor: str, correction_desc: str) -> str:
+def _apply_scaling_correction(value: str, orig_factor: str, correction_desc: str = "") -> str:
+    """Undo a detected scaling error.
+
+    ``orig_factor`` is the observed original/corrected ratio bucket, so the corrected
+    value is always ``original / factor`` — for BOTH >1 ratios (10x: orig was 10x too big)
+    and <1 ratios (0.1x: orig was 10x too small -> /0.1 == *10). The previous code
+    multiplied by the factor for the <1 cases, inverting the correction.
+    """
     num = _extract_number(value)
     if num is None:
         return value
 
     factor_map = {
-        "10x": 10,
-        "100x": 100,
-        "1000x": 1000,
+        "10x": 10.0,
+        "100x": 100.0,
+        "1000x": 1000.0,
         "0.1x": 0.1,
         "0.01x": 0.01,
         "0.001x": 0.001,
     }
-    factor = factor_map.get(orig_factor, 1)
-
-    if "divide" in correction_desc:
-        corrected = num / factor
-    else:
-        corrected = num * factor
-
-    unit = _extract_unit(value) or ""
-    if corrected == int(corrected):
-        return f"{int(corrected)} {unit}".strip()
-    return f"{corrected:.6g} {unit}".strip()
+    factor = factor_map.get(orig_factor, 1.0)
+    corrected = num / factor if factor else num
+    # Preserve the original unit's case (a scaling error doesn't change the unit).
+    m = _UNIT_RE.search(value.strip())
+    unit = m.group(0) if m else ""
+    return _format_qty(corrected, unit)

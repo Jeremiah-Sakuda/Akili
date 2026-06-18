@@ -71,9 +71,11 @@ def classify_page(image_png_bytes: bytes) -> PageType:
     """Classify a page image into a PageType category.
 
     Returns "other" on any error or when classification is disabled.
-    When AKILI_PAGE_CLASSIFY_ENABLED=0 (default), skips the API call.
+    Runs when page classification OR consensus is enabled — consensus selects which
+    pages to double-extract by page type, so it would be a silent no-op without
+    classification. Skips the API call only when both are off (the default).
     """
-    if not config.PAGE_CLASSIFY_ENABLED:
+    if not config.PAGE_CLASSIFY_ENABLED and not config.CONSENSUS_ENABLED:
         return "other"
 
     api_key = os.environ.get("GOOGLE_API_KEY")

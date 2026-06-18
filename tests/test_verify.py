@@ -2,7 +2,7 @@
 
 from akili.canonical import Grid, Point, Unit
 from akili.canonical.models import GridCell
-from akili.verify import Refuse, verify_and_answer
+from akili.verify import AnswerWithProof, Refuse, verify_and_answer
 
 
 # ===================================================================
@@ -397,3 +397,30 @@ class TestEdgeCases:
         result = verify_and_answer("What is the propagation delay?", sample_units, [], [])
         assert not isinstance(result, Refuse)
         assert result.proof[0].page == 1
+
+
+class TestUnitMagnitudeComparison:
+    """Max/min comparisons must normalize unit magnitude (mA vs A, mV vs V)."""
+
+    def _u(self, uid, value, uom, ctx):
+        return Unit(
+            id=uid,
+            label=ctx,
+            value=value,
+            unit_of_measure=uom,
+            context=ctx,
+            origin=Point(x=0.1, y=0.1),
+            doc_id="d",
+            page=0,
+        )
+
+    def test_max_current_prefers_amps_over_milliamps(self):
+        # 2 A is larger than 500 mA, despite 500 > 2 as raw numbers.
+        units = [
+            self._u("i1", 500, "mA", "maximum current"),
+            self._u("i2", 2, "A", "maximum current"),
+        ]
+        result = verify_and_answer("What is the maximum current?", units, [], [])
+        assert isinstance(result, AnswerWithProof)
+        assert "2" in result.answer and "A" in result.answer
+        assert result.source_id == "i2"

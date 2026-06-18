@@ -19,7 +19,14 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from akili import config
 from akili.api.auth import get_current_user
-from akili.api.deps import docs_dir, get_store, get_usage_store, is_debug, validate_doc_id
+from akili.api.deps import (
+    client_identity,
+    docs_dir,
+    get_store,
+    get_usage_store,
+    is_debug,
+    validate_doc_id,
+)
 from akili.canonical import Bijection, Grid, Unit
 from akili.ingest.pipeline import ingest_document
 from akili.store import Store
@@ -36,6 +43,32 @@ def _get_limiter():
     return limiter
 
 
+async def _read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
+    """Read an upload in bounded chunks, rejecting at the limit BEFORE buffering it all.
+
+    Avoids loading an arbitrarily large body into memory just to measure its size.
+    """
+    if max_bytes <= 0:
+        return await file.read()
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(256 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"File too large (max {max_bytes} bytes). "
+                    "Set AKILI_MAX_UPLOAD_BYTES to override."
+                ),
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @router.post("/ingest")
 async def ingest(
     request: Request,
@@ -46,7 +79,7 @@ async def ingest(
     Upload a PDF; run ingestion pipeline; persist canonical objects.
     Returns doc_id and counts of units, bijections, grids.
     """
-    user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
+    user_id = client_identity(_user, request)
     usage = get_usage_store()
     allowed, used, limit = usage.check_limit(user_id, "ingest")
     if not allowed:
@@ -57,19 +90,11 @@ async def ingest(
 
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="File must be a PDF")
-    content = await file.read()
+    content = await _read_upload_limited(file, config.MAX_UPLOAD_BYTES)
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
     if not content[:5].startswith(b"%PDF-"):
         raise HTTPException(status_code=400, detail="File is not a valid PDF (bad magic bytes)")
-    max_bytes = config.MAX_UPLOAD_BYTES
-    if max_bytes > 0 and len(content) > max_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override."
-            ),
-        )
     store = get_store()
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(content)
@@ -177,7 +202,7 @@ async def ingest_stream(
     """
     Upload a PDF and run ingestion with server-sent progress.
     """
-    user_id = (_user or {}).get("uid", request.client.host if request.client else "anonymous")
+    user_id = client_identity(_user, request)
     usage = get_usage_store()
     allowed, used, limit = usage.check_limit(user_id, "ingest")
     if not allowed:
@@ -188,19 +213,11 @@ async def ingest_stream(
 
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="File must be a PDF")
-    content = await file.read()
+    content = await _read_upload_limited(file, config.MAX_UPLOAD_BYTES)
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
     if not content[:5].startswith(b"%PDF-"):
         raise HTTPException(status_code=400, detail="File is not a valid PDF (bad magic bytes)")
-    max_bytes = config.MAX_UPLOAD_BYTES
-    if max_bytes > 0 and len(content) > max_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"File too large (max {max_bytes} bytes). Set AKILI_MAX_UPLOAD_BYTES to override."
-            ),
-        )
     store = get_store()
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(content)

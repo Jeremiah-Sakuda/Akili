@@ -29,11 +29,10 @@ async def list_corpus() -> JSONResponse:
     """
     store = get_store()
 
-    # Check if store has corpus methods (PostgresStore)
+    # Both SQLite and Postgres stores implement the corpus methods.
     if hasattr(store, "list_corpus"):
         corpus_entries = store.list_corpus()
     else:
-        # SQLite fallback - return empty list
         corpus_entries = []
 
     # Add available chips from COMMON_CHIPS that might not be in corpus yet

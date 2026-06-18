@@ -177,8 +177,14 @@ class TestPipelineIntegration:
         assert vcc_max.doc_id == doc_id
         assert vcc_max.page == 0
         assert vcc_max.origin is not None
-        assert vcc_max.origin.x == pytest.approx(0.15)
-        assert vcc_max.origin.y == pytest.approx(0.19)
+        # Coordinate grounding replaces Gemini's estimate (0.15, 0.19) with the real
+        # location of the "5.5V" token in the page text layer. Assert it was grounded
+        # and the origin is a valid normalized point (the rigorous geometry check that
+        # the origin lands inside the true text box lives in tests/test_grounding.py).
+        assert vcc_max.grounded is True
+        assert vcc_max.grounding_score > 0
+        assert 0.0 <= vcc_max.origin.x <= 1.0
+        assert 0.0 <= vcc_max.origin.y <= 1.0
 
     @patch("akili.ingest.pipeline.classify_page", return_value="other")
     @patch("akili.ingest.pipeline.get_extraction_hint", return_value="")

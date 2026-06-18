@@ -58,6 +58,15 @@ def is_auth_required() -> bool:
     return _auth_active
 
 
+def auth_misconfigured() -> bool:
+    """True if auth was intended (AKILI_REQUIRE_AUTH=1) but could not be initialized.
+
+    This happens when FIREBASE_PROJECT_ID is unset or firebase-admin is not installed.
+    In that state the app would otherwise fail OPEN (serve unauthenticated).
+    """
+    return bool(config.REQUIRE_AUTH) and not is_auth_required()
+
+
 def verify_firebase_token(token: str) -> dict:
     """Verify Firebase ID token and return decoded claims. Raises HTTPException on failure."""
     try:
@@ -90,6 +99,17 @@ def get_current_user(
     In production (DATABASE_URL set), logs ERROR when auth is disabled.
     """
     if not is_auth_required():
+        # Fail CLOSED when auth was intended but couldn't initialize in a production-like
+        # environment — don't silently serve protected routes unauthenticated. The
+        # AKILI_ALLOW_OPEN_PROD escape hatch matches the startup guard in app.py.
+        if auth_misconfigured() and _is_production_environment() and not config.ALLOW_OPEN_PROD:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Authentication is required but not configured. Set FIREBASE_PROJECT_ID "
+                    "and install firebase-admin, or set AKILI_ALLOW_OPEN_PROD=1 to override."
+                ),
+            )
         if _is_production_environment():
             logger.error(
                 "AUTH DISABLED IN PRODUCTION — request served without authentication. "

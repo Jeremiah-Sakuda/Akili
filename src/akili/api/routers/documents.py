@@ -22,9 +22,18 @@ router = APIRouter(tags=["documents"])
 async def list_documents(
     _user: dict[str, Any] | None = Depends(get_current_user),
 ) -> JSONResponse:
-    """List ingested documents with canonical object counts."""
+    """List ingested documents with canonical object counts.
+
+    When auth is enabled, the list is scoped to the requesting user's own documents —
+    one user must not be able to enumerate another user's documents (IDOR).
+    """
+    from akili.api.auth import is_auth_required
+
     store = get_store()
-    docs = store.list_documents()
+    if is_auth_required() and _user is not None:
+        docs = store.list_documents(uploaded_by=_user.get("uid"))
+    else:
+        docs = store.list_documents()
     return JSONResponse(content={"documents": docs})
 
 

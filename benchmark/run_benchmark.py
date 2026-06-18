@@ -23,12 +23,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Put src/ on the path so `akili` imports as a top-level package (matching the
+# package's own internal `from akili...` imports).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import google.generativeai as genai  # noqa: E402
 
-from src.akili.config import GOOGLE_API_KEY, GEMINI_MODEL  # noqa: E402
+from akili.config import GOOGLE_API_KEY, GEMINI_MODEL  # noqa: E402
+
+# Datasheet PDFs named "<chip>.pdf" live here; absent by default (see README).
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +187,15 @@ def normalize_answer(answer: str) -> str:
 
 
 def answers_match(expected: str, actual: str) -> bool:
-    """Check if actual answer matches expected answer (fuzzy matching)."""
+    """Check if actual answer matches expected answer (fuzzy but unit-aware).
+
+    Stricter than a bare substring/number check: when the expected answer carries a
+    unit token (V, mA, KB, MHz, ...), the actual answer must contain BOTH every
+    expected number AND that unit token. This avoids crediting an incidental number
+    match (e.g. expected "20 MHz" against an actual that merely mentions "20 pins").
+    """
+    import re
+
     expected_norm = normalize_answer(expected)
     actual_norm = normalize_answer(actual)
 
@@ -191,20 +203,24 @@ def answers_match(expected: str, actual: str) -> bool:
     if expected_norm == actual_norm:
         return True
 
-    # Check if expected is contained in actual
+    # Check if the full expected phrase is contained in actual
     if expected_norm in actual_norm:
         return True
 
-    # Check key numeric values match
-    import re
-
     expected_nums = set(re.findall(r"[\d.]+", expected_norm))
     actual_nums = set(re.findall(r"[\d.]+", actual_norm))
+    if not expected_nums or not expected_nums.issubset(actual_nums):
+        return False
 
-    if expected_nums and expected_nums.issubset(actual_nums):
+    # All expected numbers are present. If the expected answer names a unit, require
+    # that unit to be present too; otherwise the number match alone is sufficient.
+    expected_units = {tok for tok in re.findall(r"[a-z]+", expected_norm) if tok}
+    # Ignore filler words so we only gate on genuine unit tokens.
+    filler = {"to", "and", "or", "at", "the", "of", "vcc", "v"}
+    unit_tokens = expected_units - filler
+    if not unit_tokens:
         return True
-
-    return False
+    return any(tok in actual_norm for tok in unit_tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -282,39 +298,97 @@ async def run_gemini_baseline(dataset: dict) -> BenchmarkResults:
 
 
 # ---------------------------------------------------------------------------
-# AKILI runner (stub - to be implemented with actual AKILI API)
+# AKILI runner (real pipeline — no fabrication)
 # ---------------------------------------------------------------------------
+
+_TIER_TO_STATUS = {"verified": "VERIFIED", "review": "REVIEW", "refused": "REFUSED"}
 
 
 async def run_akili_benchmark(dataset: dict) -> BenchmarkResults:
-    """Run AKILI on all questions.
+    """Run the REAL Akili verification pipeline over the dataset.
 
-    Note: This requires the AKILI backend to be running and accessible.
-    For CI, we use cached/mocked results from previous runs.
+    For each chip we ingest its datasheet PDF (``benchmark/fixtures/<chip>.pdf``)
+    with the real ingestion pipeline, then run every question through
+    ``verify_and_answer`` and classify the result by its confidence tier.
+
+    There is **no fabrication**: a missing fixture, a missing API key, or a failed
+    ingest is reported as an ``ERROR`` (counted incorrect), so the reported numbers
+    always reflect what the system actually did. If you see lots of ERRORs, you are
+    missing ``benchmark/fixtures/<chip>.pdf`` and/or ``GOOGLE_API_KEY``.
     """
-    # TODO: Implement actual AKILI API calls when backend is running
-    # For now, return simulated results based on expected performance
+    from akili.canonical import Bijection, Grid, Unit
+    from akili.ingest.pipeline import ingest_document
+    from akili.verify import Refuse, verify_and_answer
 
     results = BenchmarkResults()
 
     for chip_data in dataset["chips"]:
         chip_name = chip_data["chip"]
         chip_results = ChipResults(chip=chip_name)
-
         print(f"  Running AKILI for {chip_name}...")
 
+        pdf_path = FIXTURES_DIR / f"{chip_name}.pdf"
+        units: list = []
+        bijections: list = []
+        grids: list = []
+        ingest_error: str | None = None
+
+        if not pdf_path.exists():
+            ingest_error = f"fixture PDF not found: {pdf_path.name}"
+            print(f"    SKIP -- {ingest_error}")
+        elif not GOOGLE_API_KEY:
+            ingest_error = "GOOGLE_API_KEY not set"
+            print(f"    SKIP -- {ingest_error}")
+        else:
+            try:
+                _doc_id, canonical, _total, _failed = await asyncio.to_thread(
+                    ingest_document, pdf_path
+                )
+                units = [o for o in canonical if isinstance(o, Unit)]
+                bijections = [o for o in canonical if isinstance(o, Bijection)]
+                grids = [o for o in canonical if isinstance(o, Grid)]
+                print(f"    ingested {len(units)} units, {len(bijections)} bij, {len(grids)} grids")
+            except Exception as e:  # noqa: BLE001 - benchmark should never crash on one chip
+                ingest_error = f"ingest failed: {type(e).__name__}: {e}"
+                print(f"    ERROR -- {ingest_error}")
+
         for q in chip_data["questions"]:
-            # Simulate AKILI performance (to be replaced with real API calls)
-            # Expected: ~85-95% accuracy with verification
+            if ingest_error is not None:
+                chip_results.questions.append(
+                    QuestionResult(
+                        question_id=q["id"],
+                        question=q["question"],
+                        expected_answer=q["expected_answer"],
+                        actual_answer="",
+                        status="ERROR",
+                        correct=False,
+                        error_message=ingest_error,
+                    )
+                )
+                continue
+
+            result = verify_and_answer(q["question"], units, bijections, grids)
+            if isinstance(result, Refuse):
+                status: str = "REFUSED"
+                actual = ""
+                correct = False
+                confidence = 0.0
+            else:
+                actual = result.answer
+                correct = answers_match(q["expected_answer"], actual)
+                confidence = result.confidence.overall if result.confidence else 0.0
+                tier = result.confidence.tier if result.confidence else "review"
+                status = _TIER_TO_STATUS.get(tier, "REVIEW")
+
             chip_results.questions.append(
                 QuestionResult(
                     question_id=q["id"],
                     question=q["question"],
                     expected_answer=q["expected_answer"],
-                    actual_answer=q["expected_answer"],  # Placeholder
-                    status="VERIFIED",
-                    correct=True,  # Placeholder
-                    confidence=0.90,
+                    actual_answer=actual,
+                    status=status,
+                    correct=correct,
+                    confidence=confidence,
                 )
             )
 
@@ -382,6 +456,31 @@ def generate_comparison_table(
     lines.append(overall_line)
 
     return "\n".join(lines)
+
+
+def generate_frontend_results(
+    akili: BenchmarkResults,
+    baseline: BenchmarkResults,
+) -> dict:
+    """Generate the row shape the landing-page BenchmarkTable consumes.
+
+    Written to frontend/public/benchmark-results.json. The frontend treats the
+    presence of this file (measured=true) as the signal to show real numbers
+    instead of the illustrative placeholders.
+    """
+    return {
+        "generated_at": __import__("datetime").datetime.now().isoformat(),
+        "measured": True,
+        "rows": [
+            {
+                "chip": a.chip,
+                "akiliAccuracy": round(a.accuracy * 100),
+                "geminiAccuracy": round(b.accuracy * 100),
+                "hallucinationDelta": round((a.accuracy - b.accuracy) * 100),
+            }
+            for a, b in zip(akili.chips, baseline.chips)
+        ],
+    }
 
 
 def generate_json_results(
@@ -504,6 +603,25 @@ async def main():
         with open(output_path, "w") as f:
             json.dump(json_results, f, indent=2)
         print(f"Results saved to: {output_path}")
+
+        # Also publish measured rows for the landing page (only when a full run
+        # produced real data — never overwrite with an all-ERROR placeholder set).
+        if akili_results.total_questions > 0 and akili_results.total_correct > 0:
+            frontend_path = (
+                Path(__file__).resolve().parent.parent
+                / "frontend"
+                / "public"
+                / "benchmark-results.json"
+            )
+            frontend_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(frontend_path, "w") as f:
+                json.dump(generate_frontend_results(akili_results, baseline_results), f, indent=2)
+            print(f"Frontend results saved to: {frontend_path}")
+        else:
+            print(
+                "Skipped writing frontend results: no correct AKILI answers "
+                "(missing fixtures/API key?) — landing page keeps illustrative data."
+            )
         print()
 
         # Check regression thresholds

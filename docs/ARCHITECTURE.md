@@ -1,5 +1,19 @@
 # Akili Architecture (Detailed)
 
+> **Accuracy note (kept current).** Some details below were written ahead of the code. As of the
+> `improvement-plan` work:
+> - **Coordinate grounding is real**: extracted `(x, y)` are now snapped to the PDF text layer
+>   (`ingest/grounding.py`); ungrounded facts are flagged, not presented as proven.
+> - **Z3 / consistency checks now run during ingestion** and feed back into confidence
+>   (contradictions cap a fact below VERIFIED). The "mathematical guarantees" framing is
+>   overstated — these are deterministic consistency checks plus Z3-backed cross-parameter
+>   checks (power/thermal/dropout).
+> - **`ReviewPanel.tsx` and `CompareView.tsx` are NOT implemented.** The backend `/corrections`
+>   and `/compare` endpoints exist; the corresponding UIs do not yet.
+> - **`Range` / `ConditionalUnit`** are produced by the corpus loader, not yet by live extraction.
+> - Test counts here are stale; actual is ~317 backend + 29 frontend. The confidence worked
+>   example rounds to 0.77 (not 0.78), and proof coordinates are normalized 0–1 (not pixels).
+
 ## Design Principles
 
 1. **Canonical-first**: Only typed, coordinate-grounded facts exist in the truth store. No free-form "beliefs."

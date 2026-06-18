@@ -153,3 +153,26 @@ class TestAuditSignature:
         """Invalid base64 should return 400."""
         r = client.get("/audit/verify?signature=abc&data=not-valid-base64!!!")
         assert r.status_code == 400
+
+
+class TestAuditLogAppendOnly:
+    """The audit log must reject UPDATE/DELETE at the DB level (append-only)."""
+
+    def test_update_and_delete_are_blocked(self, tmp_store):
+        import sqlite3
+
+        import pytest
+
+        from akili.canonical import Point, Unit
+
+        u = Unit(
+            id="u1", value=5.0, unit_of_measure="V", origin=Point(x=0.1, y=0.1), doc_id="d1", page=0
+        )
+        tmp_store.store_canonical("d1", "f.pdf", 1, [u], [], [])  # writes an audit row
+
+        with tmp_store._mgr.connection() as c:
+            assert c.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0] >= 1
+            with pytest.raises(sqlite3.IntegrityError):
+                c.execute("UPDATE audit_log SET action = 'tampered'")
+            with pytest.raises(sqlite3.IntegrityError):
+                c.execute("DELETE FROM audit_log")

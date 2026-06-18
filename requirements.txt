@@ -1,18 +1,20 @@
-# Akili — core runtime
-pydantic>=2.0
-fastapi>=0.100
-uvicorn[standard]>=0.22
-python-multipart>=0.0.6
-google-generativeai>=0.3
-pymupdf>=1.23
-pdf2image>=1.16
-# Optional: pip install firebase-admin (or pip install -e ".[auth]") for API auth
-# firebase-admin>=6.0
+# Akili — core runtime dependencies.
+# Kept in sync with [project].dependencies in pyproject.toml.
+# Preferred install path is `pip install -e ".[dev]"` (see pyproject.toml);
+# this file exists for environments that install from a flat requirements list.
 
-# Optional: deterministic verification
-# z3-solver>=4.12
+pydantic>=2.0,<3.0
+fastapi>=0.100,<1.0
+uvicorn[standard]>=0.22,<1.0
+python-multipart>=0.0.6,<1.0
+google-generativeai>=0.3,<2.0
+pymupdf>=1.23,<2.0
+pdf2image>=1.16,<2.0
+slowapi>=0.1.9,<1.0
+psycopg2-binary>=2.9,<3.0
 
-# Dev
-# pytest>=7
-# pytest-cov
-# ruff
+# Optional auth (or: pip install -e ".[auth]")
+# firebase-admin>=6.0,<7.0
+
+# Optional deterministic verification (or: pip install -e ".[verify]")
+# z3-solver>=4.12,<5.0

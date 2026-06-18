@@ -21,6 +21,7 @@ from akili.ingest.canonicalize import canonicalize_page
 from akili.ingest.consensus import consensus_extract_page, should_use_consensus
 from akili.ingest.errors import is_rate_limit_error as _is_rate_limit_error
 from akili.ingest.gemini_extract import extract_page as gemini_extract_page
+from akili.ingest.grounding import ground_objects, load_page_words
 from akili.ingest.multipage import merge_multipage_tables
 from akili.ingest.page_classifier import classify_page, get_extraction_hint
 from akili.ingest.pdf_loader import load_pdf_pages
@@ -105,9 +106,11 @@ def ingest_document(
     doc_id = doc_id or str(uuid.uuid4())
     pdf_path = Path(pdf_path).resolve()
 
-    # CRITICAL-1: Validate path is within allowed directory to prevent traversal
+    # CRITICAL-1: Validate path is within allowed directory to prevent traversal.
+    # Use pathlib containment, not string startswith (which would accept a sibling
+    # directory sharing the prefix, e.g. /data/docs-evil vs /data/docs).
     allowed_base = Path(os.environ.get("AKILI_DOCS_DIR", config.DOCS_DIR)).resolve()
-    if not str(pdf_path).startswith(str(allowed_base)):
+    if pdf_path != allowed_base and allowed_base not in pdf_path.parents:
         raise ValueError(
             f"Path outside allowed directory: {pdf_path} (allowed base: {allowed_base})"
         )
@@ -220,6 +223,24 @@ def ingest_document(
                 time.sleep(config.GEMINI_429_COOLDOWN)
             continue
 
+    # Coordinate grounding: snap each fact's (x,y)/bbox to the real PDF text geometry
+    # so "proof" points at where the value actually appears, not where Gemini guessed.
+    # Best-effort: scanned/vector pages with no text layer leave facts grounded=False.
+    _progress({"phase": "grounding", "total_pages": total_pages})
+    try:
+        words_by_page = load_page_words(pdf_path)
+        stats = ground_objects(all_canonical, words_by_page)
+        logger.info(
+            "Grounding: %d/%d facts snapped to real text geometry "
+            "(%d page(s) had no text layer) (doc_id=%s).",
+            stats["grounded"],
+            stats["total"],
+            stats["pages_without_text"],
+            doc_id,
+        )
+    except Exception as e:  # noqa: BLE001 - grounding must never fail ingestion
+        logger.warning("Coordinate grounding failed (doc_id=%s): %s", doc_id, e)
+
     all_canonical, merge_candidates = merge_multipage_tables(all_canonical)
     if merge_candidates:
         logger.info(
@@ -227,6 +248,39 @@ def ingest_document(
             len(merge_candidates),
             doc_id,
         )
+
+    # Consistency / Z3 checks. Error-severity issues (contradictions, constraint
+    # violations) flag the facts involved so their confidence is capped and they surface
+    # for human REVIEW instead of being served as verified answers.
+    z3_issue_count = 0
+    try:
+        from akili.verify.z3_checks import run_z3_checks
+
+        z3_result = run_z3_checks(
+            units=[o for o in all_canonical if isinstance(o, Unit)],
+            ranges=[o for o in all_canonical if isinstance(o, Range)],
+            conditional_units=[o for o in all_canonical if isinstance(o, ConditionalUnit)],
+        )
+        z3_issue_count = len(z3_result.issues)
+        flagged_ids = {
+            sid
+            for issue in z3_result.issues
+            if issue.severity == "error"
+            for sid in issue.source_ids
+        }
+        if flagged_ids:
+            for obj in all_canonical:
+                if getattr(obj, "id", None) in flagged_ids and hasattr(obj, "flagged_for_review"):
+                    obj.flagged_for_review = True
+        if z3_issue_count:
+            logger.info(
+                "Consistency checks (doc_id=%s): %d issue(s); %d fact(s) flagged for review.",
+                doc_id,
+                z3_issue_count,
+                len(flagged_ids),
+            )
+    except Exception as e:  # noqa: BLE001 - consistency checks must never fail ingestion
+        logger.warning("Consistency checks failed (doc_id=%s): %s", doc_id, e)
 
     if total_pages > 0 and len(all_canonical) == 0:
         logger.warning(
@@ -261,6 +315,7 @@ def ingest_document(
         "units_count": len([o for o in all_canonical if isinstance(o, Unit)]),
         "bijections_count": len([o for o in all_canonical if isinstance(o, Bijection)]),
         "grids_count": len([o for o in all_canonical if isinstance(o, Grid)]),
+        "z3_issues": z3_issue_count,
     }
     if (
         result["units_count"] == 0
