@@ -580,10 +580,30 @@ async def main():
         print(f"  Refuse precision: {akili_results.refuse_precision * 100:.1f}%")
         print()
 
-    print("Running Gemini baseline...")
-    baseline_results = await run_gemini_baseline(dataset)
-    print(f"  Overall accuracy: {baseline_results.overall_accuracy * 100:.1f}%")
-    print()
+        # With no fixtures and/or no API key, every AKILI question is an ERROR — there is
+        # nothing to measure, so a regression gate has nothing to enforce. Skip cleanly
+        # (exit 0) instead of failing on a vacuous 0% or crashing the run. This is what
+        # lets CI stay green until real datasheet fixtures + GOOGLE_API_KEY are provided.
+        akili_has_data = any(q.status != "ERROR" for c in akili_results.chips for q in c.questions)
+        if args.check_regression and not akili_has_data:
+            print(
+                "Regression Check: SKIPPED — no benchmark fixtures and/or GOOGLE_API_KEY "
+                "available, so there is nothing to measure. Add benchmark/fixtures/<chip>.pdf "
+                "and set GOOGLE_API_KEY to run the real benchmark and enforce the gate."
+            )
+            return
+
+    # The raw-Gemini baseline needs an API key; skip it gracefully when unavailable
+    # rather than raising and crashing the whole run.
+    if GOOGLE_API_KEY:
+        print("Running Gemini baseline...")
+        baseline_results = await run_gemini_baseline(dataset)
+        print(f"  Overall accuracy: {baseline_results.overall_accuracy * 100:.1f}%")
+        print()
+    else:
+        print("Skipping Gemini baseline: GOOGLE_API_KEY not set.")
+        print()
+        baseline_results = BenchmarkResults()
 
     if not args.baseline_only:
         # Generate comparison
